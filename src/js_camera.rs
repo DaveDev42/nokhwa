@@ -2602,7 +2602,7 @@ impl JSCamera {
             dimension: TextureDimension::D2,
             format: TextureFormat::Rgba8UnormSrgb,
             usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
-            view_formats: &[TextureFormat::Rgba8UnormSrgb]
+            view_formats: &[TextureFormat::Rgba8UnormSrgb],
         });
 
         queue.write_texture(
