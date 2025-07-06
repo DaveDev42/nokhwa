@@ -37,7 +37,7 @@ version = "23"
 optional = true
 
 [dependencies.opencv]
-version = "0.94"
+version = "0.95"
 optional = true
 
 [dependencies.bytemuck]

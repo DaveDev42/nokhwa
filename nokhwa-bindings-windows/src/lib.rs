@@ -175,7 +175,7 @@ pub mod wmf {
     pub fn initialize_mf() -> Result<(), NokhwaError> {
         if !(INITIALIZED.load(Ordering::SeqCst)) {
             if let Err(why) = unsafe {
-                CoInitializeEx(None, CO_INIT_APARTMENT_THREADED | CO_INIT_DISABLE_OLE1DDE)
+                CoInitializeEx(None, CO_INIT_APARTMENT_THREADED | CO_INIT_DISABLE_OLE1DDE).ok()
             } {
                 return Err(NokhwaError::InitializeError {
                     backend: ApiBackend::MediaFoundation,
