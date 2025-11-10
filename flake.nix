@@ -5,50 +5,60 @@
     rust-overlay.url = "github:oxalica/rust-overlay";
   };
 
-  outputs = { self, nixpkgs, rust-overlay, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        overlays = [ (import rust-overlay) ];
+  outputs = {
+    self,
+    nixpkgs,
+    rust-overlay,
+    flake-utils,
+    ...
+  }:
+    flake-utils.lib.eachDefaultSystem (
+      system: let
         pkgs = import nixpkgs {
-          inherit system overlays;
+          inherit system;
+          overlays = [rust-overlay.overlays.default];
         };
         rustbin = pkgs.rust-bin.selectLatestNightlyWith (toolchain:
           toolchain.default.override {
-            extensions = ["rust-src" "clippy" "rustfmt" "miri"];
-          });
-      in
-      {
-        devShells.default = pkgs.mkShell {
-          #LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
-          #BINDGEN_EXTRA_CLANG_ARGS = "-isystem ${pkgs.libclang.lib}/lib/clang/${flake-utils.lib.getVersion pkgs.clang}/include";
-
-          nativeBuildInputs = [
-              pkgs.pkg-config
-              pkgs.cmake
-              pkgs.vcpkg
-          ];
-            packages = with pkgs; [
-                rust-analyzer
-                pkg-config
-                opencv
-                alsa-lib
-                systemdLibs
-                cmake
-                fontconfig
-                linuxHeaders
-                rustPlatform.bindgenHook
-                llvmPackages.libclang.lib
-                llvmPackages.clang
-                libv4l
-                v4l-utils
-                rustbin
+            extensions = [
+              "rust-src"
+              "clippy"
+              "rustfmt"
+              "miri"
+              "rust-analyzer"
             ];
-            LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
-            shellHook = ''
-              export LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
-              cargo version
-            '';
+          });
+      in {
+        formatter = pkgs.alejandra;
 
+        devShells.default = pkgs.mkShell {
+          packages =
+            [
+              rustbin
+            ]
+            ++ (with pkgs; [
+              rust-analyzer
+              pkg-config
+              opencv
+              alsa-lib
+              systemdLibs
+              cmake
+              fontconfig
+              linuxHeaders
+              rustPlatform.bindgenHook
+              llvmPackages.libclang.lib
+              llvmPackages.clang
+              libv4l
+              v4l-utils
+              rustbin
+            ]);
+
+          env.RUST_SRC_PATH = "${rustbin}/lib/rustlib/src/rust/library";
+          env.LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+
+          shellHook = ''
+            echo "WONDERHOOOOOY!!!!"
+          '';
         };
       }
     );

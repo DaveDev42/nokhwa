@@ -23,13 +23,14 @@ use nokhwa_bindings_macos::{
 use nokhwa_core::{
     buffer::Buffer,
     error::NokhwaError,
-    pixel_format::RgbFormat,
     traits::CaptureBackendTrait,
     types::{
         ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo, ControlValueSetter,
-        FrameFormat, KnownCameraControl, RequestedFormat, RequestedFormatType, Resolution,
+        FrameFormat, KnownCameraControl, RequestedFormat, Resolution,
     },
 };
+#[cfg(target_os = "macos")]
+use nokhwa_core::{pixel_format::RgbFormat, types::RequestedFormatType};
 #[cfg(target_os = "macos")]
 use std::{ffi::CString, sync::Arc};
 
@@ -287,7 +288,7 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
         Ok(buffer)
     }
 
-    fn frame_raw(&mut self) -> Result<Cow<[u8]>, NokhwaError> {
+    fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
         let result = match self.frame_buffer_receiver.recv() {
             Ok(recv) => Ok(Cow::from(recv.0)),
             Err(why) => Err(NokhwaError::ReadFrameError(why.to_string())),
@@ -480,7 +481,7 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
         todo!()
     }
 
-    fn frame_raw(&mut self) -> Result<Cow<[u8]>, NokhwaError> {
+    fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
         todo!()
     }
 

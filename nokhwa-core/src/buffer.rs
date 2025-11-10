@@ -117,7 +117,9 @@ impl Buffer {
     /// Most notably, the `data` **must** stay in scope for the duration of the [`Mat`](https://docs.rs/opencv/latest/opencv/core/struct.Mat.html) or bad, ***bad*** things happen.
     #[cfg(feature = "opencv-mat")]
     #[cfg_attr(feature = "docs-features", doc(cfg(feature = "opencv-mat")))]
-    pub fn decode_opencv_mat<F: FormatDecoder>(&mut self) -> Result<BoxedRef<Mat>, NokhwaError> {
+    pub fn decode_opencv_mat<F: FormatDecoder>(
+        &mut self,
+    ) -> Result<BoxedRef<'_, Mat>, NokhwaError> {
         use crate::buffer::channel_defs::make_mat;
 
         make_mat::<F>(self.resolution, self.buffer())
@@ -230,7 +232,7 @@ pub mod channel_defs {
     pub(crate) fn make_mat<F>(
         resolution: Resolution,
         data: &[u8],
-    ) -> Result<opencv::boxed_ref::BoxedRef<opencv::core::Mat>, NokhwaError>
+    ) -> Result<opencv::boxed_ref::BoxedRef<'_, opencv::core::Mat>, NokhwaError>
     where
         F: FormatDecoder,
     {

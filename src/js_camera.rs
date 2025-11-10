@@ -32,7 +32,7 @@ use std::{
     fmt::{Debug, Display, Formatter},
     ops::Deref,
 };
-use wasm_bindgen::{JsCast, JsValue};
+use wasm_bindgen::{prelude::wasm_bindgen, JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
     console::log_1, CanvasRenderingContext2d, Document, Element, HtmlCanvasElement,
@@ -41,8 +41,9 @@ use web_sys::{
 };
 #[cfg(feature = "output-wgpu")]
 use wgpu::{
-    Device, Extent3d, ImageCopyTexture, ImageDataLayout, Queue, Texture, TextureAspect,
-    TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
+    Device as WgpuDevice, Extent3d, Queue as WgpuQueue, TexelCopyBufferLayout,
+    Texture as WgpuTexture, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
+    TextureUsages,
 };
 
 // why no code completion
@@ -203,8 +204,8 @@ pub async fn request_permission() -> Result<(), NokhwaError> {
 
     match media_devices.get_user_media_with_constraints(
         MediaStreamConstraints::new()
-            .video(&JsValue::from_bool(true))
-            .audio(&JsValue::from_bool(false)),
+            .set_video(&JsValue::from_bool(true))
+            .set_audio(&JsValue::from_bool(false)),
     ) {
         Ok(promise) => {
             let js_future = JsFuture::from(promise);
@@ -266,8 +267,8 @@ pub async fn query_js_cameras() -> Result<Vec<CameraInfo>, NokhwaError> {
                             if media_device_info.kind() == MediaDeviceKind::Videoinput {
                                 match media_devices.get_user_media_with_constraints(
                                     MediaStreamConstraints::new()
-                                        .audio(&jsv!(false))
-                                        .video(&jsv!(obj!((
+                                        .set_audio(&jsv!(false))
+                                        .set_video(&jsv!(obj!((
                                             "deviceId",
                                             media_device_info.device_id()
                                         )))),
@@ -603,8 +604,8 @@ impl JSCameraConstraintsBuilder {
         feature = "output-wasm",
         wasm_bindgen(js_name = MinResolution)
     )]
-    pub fn min_resolution(mut self, min_resolution: Resolution) -> JSCameraConstraintsBuilder {
-        self.min_resolution = Some(min_resolution);
+    pub fn min_resolution(mut self, min_resolution: &Resolution) -> JSCameraConstraintsBuilder {
+        self.min_resolution = Some(*min_resolution);
         self
     }
 
@@ -618,8 +619,8 @@ impl JSCameraConstraintsBuilder {
         feature = "output-wasm",
         wasm_bindgen(js_name = Resolution)
     )]
-    pub fn resolution(mut self, new_resolution: Resolution) -> JSCameraConstraintsBuilder {
-        self.preferred_resolution = new_resolution;
+    pub fn resolution(mut self, new_resolution: &Resolution) -> JSCameraConstraintsBuilder {
+        self.preferred_resolution = *new_resolution;
         self
     }
 
@@ -633,8 +634,8 @@ impl JSCameraConstraintsBuilder {
         feature = "output-wasm",
         wasm_bindgen(js_name = MaxResolution)
     )]
-    pub fn max_resolution(mut self, max_resolution: Resolution) -> JSCameraConstraintsBuilder {
-        self.min_resolution = Some(max_resolution);
+    pub fn max_resolution(mut self, max_resolution: &Resolution) -> JSCameraConstraintsBuilder {
+        self.min_resolution = Some(*max_resolution);
         self
     }
 
@@ -1038,8 +1039,8 @@ impl JSCameraConstraintsBuilder {
         }
 
         let media_stream_constraints = MediaStreamConstraints::new()
-            .audio(&jsv!(false))
-            .video(&jsv!(video_object))
+            .set_audio(&jsv!(false))
+            .set_video(&jsv!(video_object))
             .clone();
 
         JSCameraConstraints {
@@ -2577,20 +2578,20 @@ impl JSCamera {
     #[cfg(feature = "output-wgpu")]
     /// Directly copies a frame to a Wgpu texture. This will automatically convert the frame into a RGBA frame.
     /// # Errors
-    /// If the frame cannot be captured or the resolution is 0 on any axis, this will error.
-    pub fn frame_texture<'a>(
+    fn frame_texture(
         &mut self,
-        device: &Device,
-        queue: &Queue,
-        label: Option<&'a str>,
-    ) -> Result<Texture, NokhwaError> {
-        use std::num::NonZeroU32;
-        let resolution = self.resolution();
-        let frame = self.frame_raw()?;
+        device: &WgpuDevice,
+        queue: &WgpuQueue,
+        label: Option<&str>,
+    ) -> Result<WgpuTexture, NokhwaError> {
+        use wgpu::{Origin3d, TexelCopyTextureInfoBase};
+
+        use crate::pixel_format::RgbAFormat;
+        let frame = self.frame()?.decode_image::<RgbAFormat>()?;
 
         let texture_size = Extent3d {
-            width: resolution.width(),
-            height: resolution.height(),
+            width: frame.width(),
+            height: frame.height(),
             depth_or_array_layers: 1,
         };
 
@@ -2602,28 +2603,31 @@ impl JSCamera {
             dimension: TextureDimension::D2,
             format: TextureFormat::Rgba8UnormSrgb,
             usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
-            view_formats: &[TextureFormat::Rgba8UnormSrgb],
+            view_formats: &[],
         });
 
+        let width_nonzero = 4 * frame.width();
+
+        let height_nonzero = frame.height();
+
         queue.write_texture(
-            ImageCopyTexture {
+            TexelCopyTextureInfoBase {
                 texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
+                mip_level: 1,
+                origin: Origin3d { x: 0, y: 0, z: 0 },
                 aspect: TextureAspect::All,
             },
-            frame.borrow(),
-            ImageDataLayout {
+            &frame,
+            TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(4 * resolution.width()),
-                rows_per_image: Some(resolution.height()),
+                bytes_per_row: Some(width_nonzero),
+                rows_per_image: Some(height_nonzero),
             },
             texture_size,
         );
 
         Ok(texture)
     }
-
     /// Checks if the stream is open.
     pub fn is_open(&self) -> bool {
         let stream = self

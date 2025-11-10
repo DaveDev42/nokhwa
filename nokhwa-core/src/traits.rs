@@ -25,7 +25,7 @@ use crate::{
 use std::{borrow::Cow, collections::HashMap};
 #[cfg(feature = "wgpu-types")]
 use wgpu::{
-    Device as WgpuDevice, Extent3d, ImageCopyTexture, ImageDataLayout, Queue as WgpuQueue,
+    Device as WgpuDevice, Extent3d, Queue as WgpuQueue, TexelCopyBufferLayout,
     Texture as WgpuTexture, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
     TextureUsages,
 };
@@ -163,7 +163,7 @@ pub trait CaptureBackendTrait {
     /// Will get a frame from the camera **without** any processing applied, meaning you will usually get a frame you need to decode yourself.
     /// # Errors
     /// If the backend fails to get the frame (e.g. already taken, busy, doesn't exist anymore), or [`open_stream()`](CaptureBackendTrait::open_stream()) has not been called yet, this will error.
-    fn frame_raw(&mut self) -> Result<Cow<[u8]>, NokhwaError>;
+    fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError>;
 
     /// The minimum buffer size needed to write the current frame. If `alpha` is true, it will instead return the minimum size of the buffer with an alpha channel as well.
     /// This assumes that you are decoding to RGB/RGBA for [`FrameFormat::MJPEG`] or [`FrameFormat::YUYV`] and Luma8/LumaA8 for [`FrameFormat::GRAY`]
@@ -190,12 +190,14 @@ pub trait CaptureBackendTrait {
     /// Directly copies a frame to a Wgpu texture. This will automatically convert the frame into a RGBA frame.
     /// # Errors
     /// If the frame cannot be captured or the resolution is 0 on any axis, this will error.
-    fn frame_texture<'a>(
+    fn frame_texture(
         &mut self,
         device: &WgpuDevice,
         queue: &WgpuQueue,
-        label: Option<&'a str>,
+        label: Option<&str>,
     ) -> Result<WgpuTexture, NokhwaError> {
+        use wgpu::{Origin3d, TexelCopyTextureInfoBase};
+
         use crate::pixel_format::RgbAFormat;
         let frame = self.frame()?.decode_image::<RgbAFormat>()?;
 
@@ -221,14 +223,14 @@ pub trait CaptureBackendTrait {
         let height_nonzero = frame.height();
 
         queue.write_texture(
-            ImageCopyTexture {
+            TexelCopyTextureInfoBase {
                 texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
+                mip_level: 1,
+                origin: Origin3d { x: 0, y: 0, z: 0 },
                 aspect: TextureAspect::All,
             },
             &frame,
-            ImageDataLayout {
+            TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(width_nonzero),
                 rows_per_image: Some(height_nonzero),

@@ -41,7 +41,7 @@ mod internal {
         control::{Control, Flags, Type, Value},
         frameinterval::FrameIntervalEnum,
         framesize::FrameSizeEnum,
-        io::traits::CaptureStream,
+        io::traits::{CaptureStream, Stream},
         prelude::MmapStream,
         video::{capture::Parameters, Capture},
         Device, Format, FourCC,
@@ -885,7 +885,7 @@ mod internal {
             ))
         }
 
-        fn frame_raw(&mut self) -> Result<Cow<[u8]>, NokhwaError> {
+        fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
             match &mut self.stream_handle {
                 Some(sh) => match sh.next() {
                     Ok((data, _)) => Ok(Cow::Borrowed(data)),
@@ -1090,7 +1090,7 @@ mod internal {
             todo!()
         }
 
-        fn frame_raw(&mut self) -> Result<Cow<[u8]>, NokhwaError> {
+        fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
             todo!()
         }
 

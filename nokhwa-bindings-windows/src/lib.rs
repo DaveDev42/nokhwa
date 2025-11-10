@@ -1129,7 +1129,7 @@ pub mod wmf {
             Ok(())
         }
 
-        pub fn raw_bytes(&mut self) -> Result<Cow<[u8]>, NokhwaError> {
+        pub fn raw_bytes(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
             let mut imf_sample: Option<IMFSample> = match unsafe { MFCreateSample() } {
                 Ok(sample) => Some(sample),
                 Err(why) => {
@@ -1333,7 +1333,7 @@ pub mod wmf {
             ))
         }
 
-        pub fn raw_bytes(&mut self) -> Result<Cow<[u8]>, NokhwaError> {
+        pub fn raw_bytes(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
             Err(NokhwaError::NotImplementedError(
                 "Only on Windows".to_string(),
             ))

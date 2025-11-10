@@ -169,7 +169,7 @@ impl OpenCvCaptureDevice {
     /// # Errors
     /// If the frame is failed to be read, this will error.
     #[allow(clippy::cast_sign_loss)]
-    pub fn raw_frame_vec(&mut self) -> Result<Cow<[u8]>, NokhwaError> {
+    pub fn raw_frame_vec(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
         if !self.is_stream_open() {
             return Err(NokhwaError::ReadFrameError(
                 "Stream is not open!".to_string(),
@@ -541,7 +541,7 @@ impl CaptureBackendTrait for OpenCvCaptureDevice {
         ))
     }
 
-    fn frame_raw(&mut self) -> Result<Cow<[u8]>, NokhwaError> {
+    fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
         let cow = self.raw_frame_vec()?;
         Ok(cow)
     }

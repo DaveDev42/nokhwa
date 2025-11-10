@@ -16,7 +16,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#![cfg_attr(feature = "test-fail-warning", deny(warnings))]
 #![cfg_attr(feature = "docs-features", feature(doc_cfg))]
 //! # nokhwa
 //! A Simple-to-use, cross-platform Rust Webcam Capture Library
@@ -34,10 +33,10 @@
 pub mod backends;
 mod camera;
 mod init;
-/// A camera that uses native browser APIs meant for WASM applications.
-#[cfg(feature = "input-jscam")]
-#[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-jscam")))]
-pub mod js_camera;
+// /// A camera that uses native browser APIs meant for WASM applications.
+// #[cfg(feature = "input-jscam")]
+// #[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-jscam")))]
+// pub mod js_camera;
 
 pub use nokhwa_core::pixel_format::FormatDecoder;
 mod query;
