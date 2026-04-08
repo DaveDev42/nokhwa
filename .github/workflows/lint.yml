@@ -29,4 +29,6 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --features docs-only,docs-nolink -- -D warnings
+      # Exclude input-opencv from docs-only to avoid OpenCV system dep in CI.
+      # input-native + output features cover all platform code via cfg guards.
+      - run: cargo clippy --features input-native,output-wgpu,output-threaded,serialize,docs-nolink -- -D warnings
