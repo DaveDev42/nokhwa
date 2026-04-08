@@ -21,6 +21,8 @@
 // <some change so we can call this 0.10.4>
 
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(unexpected_cfgs)]
+#![allow(deprecated)] // cocoa_foundation is deprecated in favor of objc2-foundation; migration tracked separately
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 #[macro_use]
@@ -107,13 +109,11 @@ pub use callback::AVCaptureVideoCallback;
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use device::{
-    AVAuthorizationStatus, AVCaptureDevice, AVCaptureDeviceDiscoverySession,
-    AVCaptureDeviceFormat, AVCaptureDevicePosition, AVCaptureDeviceType, AVFrameRateRange,
-    AVMediaType, CompressionData, DataPipe, current_authorization_status, get_raw_device_info,
-    query_avfoundation, request_permission_with_callback,
+    current_authorization_status, get_raw_device_info, query_avfoundation,
+    request_permission_with_callback, AVAuthorizationStatus, AVCaptureDevice,
+    AVCaptureDeviceDiscoverySession, AVCaptureDeviceFormat, AVCaptureDevicePosition,
+    AVCaptureDeviceType, AVFrameRateRange, AVMediaType, CompressionData, DataPipe,
 };
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-pub use session::{
-    AVCaptureDeviceInput, AVCaptureSession, AVCaptureVideoDataOutput,
-};
+pub use session::{AVCaptureDeviceInput, AVCaptureSession, AVCaptureVideoDataOutput};

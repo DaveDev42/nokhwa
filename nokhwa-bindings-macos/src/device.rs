@@ -10,9 +10,8 @@ use flume::{Receiver, Sender};
 use nokhwa_core::{
     error::NokhwaError,
     types::{
-        ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo,
-        ControlValueDescription, ControlValueSetter, FrameFormat, KnownCameraControl,
-        KnownCameraControlFlag, Resolution,
+        ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo, ControlValueDescription,
+        ControlValueSetter, FrameFormat, KnownCameraControl, KnownCameraControlFlag, Resolution,
     },
 };
 use objc::runtime::{Object, BOOL, NO, YES};
@@ -26,7 +25,6 @@ use std::{
 use crate::ffi::{
     AVCaptureExposureDurationCurrent, AVCaptureExposureTargetBiasCurrent, AVCaptureISOCurrent,
     AVCaptureWhiteBalanceGains, AVMediaTypeVideo, CGPoint, CMVideoFormatDescriptionGetDimensions,
-    OSType,
 };
 use crate::format::{
     compare_ns_string, ns_arr_to_vec, nsstr_to_str, raw_fcc_to_frameformat, str_to_nsstr,
@@ -54,9 +52,8 @@ pub fn request_permission_with_callback(callback: impl Fn(bool) + Send + Sync + 
 
 pub fn current_authorization_status() -> AVAuthorizationStatus {
     let cls = class!(AVCaptureDevice);
-    let status: AVAuthorizationStatus = unsafe {
-        msg_send![cls, authorizationStatusForMediaType:AVMediaType::Video.into_ns_str()]
-    };
+    let status: AVAuthorizationStatus =
+        unsafe { msg_send![cls, authorizationStatusForMediaType:AVMediaType::Video.into_ns_str()] };
     status
 }
 
@@ -107,9 +104,7 @@ impl From<AVCaptureDeviceType> for *mut Object {
             AVCaptureDeviceType::DualWide => {
                 str_to_nsstr("AVCaptureDeviceTypeBuiltInDualWideCamera")
             }
-            AVCaptureDeviceType::Triple => {
-                str_to_nsstr("AVCaptureDeviceTypeBuiltInTripleCamera")
-            }
+            AVCaptureDeviceType::Triple => str_to_nsstr("AVCaptureDeviceTypeBuiltInTripleCamera"),
             AVCaptureDeviceType::WideAngle => {
                 str_to_nsstr("AVCaptureDeviceTypeBuiltInWideAngleCamera")
             }
@@ -275,8 +270,7 @@ impl TryFrom<*mut Object> for AVCaptureDeviceFormat {
         let description_obj: *mut Object = unsafe { msg_send![value, formatDescription] };
         let resolution =
             unsafe { CMVideoFormatDescriptionGetDimensions(description_obj as *mut c_void) };
-        let fcc_raw =
-            unsafe { CMFormatDescriptionGetMediaSubType(description_obj as *mut c_void) };
+        let fcc_raw = unsafe { CMFormatDescriptionGetMediaSubType(description_obj as *mut c_void) };
         #[allow(non_upper_case_globals)]
         let fourcc = match raw_fcc_to_frameformat(fcc_raw) {
             Some(fcc) => fcc,
@@ -314,6 +308,7 @@ impl AVCaptureDeviceDiscoverySession {
         })
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn default() -> Result<Self, NokhwaError> {
         AVCaptureDeviceDiscoverySession::new(vec![
             AVCaptureDeviceType::UltraWide,
@@ -459,7 +454,7 @@ impl AVCaptureDevice {
             });
         }
         // Space these out for debug purposes
-        if !accepted == YES {
+        if accepted != YES {
             return Err(NokhwaError::SetPropertyError {
                 property: "lockForConfiguration".to_string(),
                 value: "Locked".to_string(),
@@ -521,8 +516,7 @@ impl AVCaptureDevice {
         let min_frame_duration = str_to_nsstr("minFrameDuration");
         let active_video_min_frame_duration = str_to_nsstr("activeVideoMinFrameDuration");
         let active_video_max_frame_duration = str_to_nsstr("activeVideoMaxFrameDuration");
-        let _: () =
-            unsafe { msg_send![self.inner, setValue:selected_format forKey:activefmtkey] };
+        let _: () = unsafe { msg_send![self.inner, setValue:selected_format forKey:activefmtkey] };
         let min_frame_duration: *mut Object =
             unsafe { msg_send![selected_range, valueForKey: min_frame_duration] };
         let _: () = unsafe {
@@ -803,8 +797,7 @@ impl AVCaptureDevice {
         ));
 
         // get whiteblaance
-        let white_balance_current: NSInteger =
-            unsafe { msg_send![self.inner, whiteBalanceMode] };
+        let white_balance_current: NSInteger = unsafe { msg_send![self.inner, whiteBalanceMode] };
         let white_balance_manual: BOOL =
             unsafe { msg_send![self.inner, isWhiteBalanceModeSupported:NSInteger::from(0)] };
         let white_balance_auto: BOOL =
@@ -1018,9 +1011,8 @@ impl AVCaptureDevice {
                     return Err(NokhwaError::SetPropertyError {
                         property: id.to_string(),
                         value: value.to_string(),
-                        error:
-                            "Exposure is in improper state to set ISO (Please set to `custom`!)"
-                                .to_string(),
+                        error: "Exposure is in improper state to set ISO (Please set to `custom`!)"
+                            .to_string(),
                     });
                 }
 
@@ -1082,8 +1074,7 @@ impl AVCaptureDevice {
                         error: "Disabled".to_string(),
                     });
                 }
-                let current_duration: CMTime =
-                    unsafe { msg_send![self.inner, exposureDuration] };
+                let current_duration: CMTime = unsafe { msg_send![self.inner, exposureDuration] };
 
                 let current_iso = unsafe { AVCaptureISOCurrent };
                 let new_duration = CMTime {
@@ -1223,13 +1214,12 @@ impl AVCaptureDevice {
                     });
                 }
 
-                let setter = NSInteger::from(*value.as_boolean().ok_or(
-                    NokhwaError::SetPropertyError {
+                let setter =
+                    NSInteger::from(*value.as_boolean().ok_or(NokhwaError::SetPropertyError {
                         property: id.to_string(),
                         value: value.to_string(),
                         error: "Expected Boolean".to_string(),
-                    },
-                )? as i32);
+                    })? as i32);
 
                 if !ctrlvalue.description().verify_setter(&value) {
                     return Err(NokhwaError::SetPropertyError {
@@ -1509,8 +1499,7 @@ impl AVCaptureDevice {
                         });
                     }
 
-                    let _: () =
-                        unsafe { msg_send![self.inner, exposurePointOfInterest: setter] };
+                    let _: () = unsafe { msg_send![self.inner, exposurePointOfInterest: setter] };
 
                     Ok(())
                 }
@@ -1537,16 +1526,15 @@ impl AVCaptureDevice {
                         });
                     }
 
-                    let setter =
-                        if *value.as_boolean().ok_or(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Expected Boolean".to_string(),
-                        })? {
-                            YES
-                        } else {
-                            NO
-                        };
+                    let setter = if *value.as_boolean().ok_or(NokhwaError::SetPropertyError {
+                        property: id.to_string(),
+                        value: value.to_string(),
+                        error: "Expected Boolean".to_string(),
+                    })? {
+                        YES
+                    } else {
+                        NO
+                    };
 
                     if !ctrlvalue.description().verify_setter(&value) {
                         return Err(NokhwaError::SetPropertyError {
@@ -1631,13 +1619,12 @@ impl AVCaptureDevice {
                         });
                     }
 
-                    let setter = NSInteger::from(*value.as_enum().ok_or(
-                        NokhwaError::SetPropertyError {
+                    let setter =
+                        NSInteger::from(*value.as_enum().ok_or(NokhwaError::SetPropertyError {
                             property: id.to_string(),
                             value: value.to_string(),
                             error: "Expected Enum".to_string(),
-                        },
-                    )? as i32);
+                        })? as i32);
 
                     if !ctrlvalue.description().verify_setter(&value) {
                         return Err(NokhwaError::SetPropertyError {
@@ -1674,16 +1661,15 @@ impl AVCaptureDevice {
                         });
                     }
 
-                    let setter =
-                        if *value.as_boolean().ok_or(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Expected Boolean".to_string(),
-                        })? {
-                            YES
-                        } else {
-                            NO
-                        };
+                    let setter = if *value.as_boolean().ok_or(NokhwaError::SetPropertyError {
+                        property: id.to_string(),
+                        value: value.to_string(),
+                        error: "Expected Boolean".to_string(),
+                    })? {
+                        YES
+                    } else {
+                        NO
+                    };
 
                     if !ctrlvalue.description().verify_setter(&value) {
                         return Err(NokhwaError::SetPropertyError {
@@ -1724,14 +1710,13 @@ impl AVCaptureDevice {
             .map(move |fps_f64| {
                 let fps = fps_f64 as u32;
 
-                let resolution =
-                    Resolution::new(resolution.width as u32, resolution.height as u32); // FIXME: what the fuck?
+                let resolution = Resolution::new(resolution.width as u32, resolution.height as u32); // FIXME: what the fuck?
                 CameraFormat::new(resolution, fourcc, fps)
             })
             .collect::<Vec<_>>();
-        a.sort_by(|a, b| a.frame_rate().cmp(&b.frame_rate()));
+        a.sort_by_key(|a| a.frame_rate());
 
-        if a.len() != 0 {
+        if !a.is_empty() {
             Ok(a[a.len() - 1])
         } else {
             Err(NokhwaError::GetPropertyError {

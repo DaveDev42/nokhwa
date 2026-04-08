@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -e
+
+echo "==> Running cargo fmt --check..."
+cargo fmt --all -- --check
+
+echo "==> Running cargo clippy..."
+case "$(uname -s)" in
+    Darwin)       FEATURE="input-avfoundation" ;;
+    Linux)        FEATURE="input-v4l" ;;
+    MINGW*|MSYS*) FEATURE="input-msmf" ;;
+    *)            FEATURE="" ;;
+esac
+
+if [ -n "$FEATURE" ]; then
+    cargo clippy --features "$FEATURE" -- -D warnings
+else
+    echo "Unknown platform, skipping clippy"
+fi

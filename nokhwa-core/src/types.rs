@@ -29,6 +29,7 @@ pub enum RequestedFormatType {
 }
 
 impl Default for RequestedFormatType {
+    #[allow(clippy::derivable_impls)]
     fn default() -> Self {
         RequestedFormatType::None
     }
@@ -239,7 +240,7 @@ impl CameraIndex {
     pub fn as_string(&self) -> String {
         match self {
             CameraIndex::Index(i) => i.to_string(),
-            CameraIndex::String(s) => s.to_string(),
+            CameraIndex::String(s) => s.clone(),
         }
     }
 
@@ -675,7 +676,7 @@ pub enum KnownCameraControl {
     Iris,
     Focus,
     /// Other camera control. Listed is the ID.
-    /// Wasteful, however is needed for a unified API across Windows, Linux, and MacOSX due to Microsoft's usage of GUIDs.
+    /// Wasteful, however is needed for a unified API across Windows, Linux, and `MacOSX` due to Microsoft's usage of `GUIDs`.
     ///
     /// THIS SHOULD ONLY BE USED WHEN YOU KNOW THE PLATFORM THAT YOU ARE RUNNING ON.
     Other(u128),
@@ -1134,8 +1135,8 @@ impl ControlValueSetter {
             None
         }
     }
-    #[must_use]
 
+    #[must_use]
     pub fn as_integer(&self) -> Option<&i64> {
         if let ControlValueSetter::Integer(i) = self {
             Some(i)
@@ -1143,8 +1144,8 @@ impl ControlValueSetter {
             None
         }
     }
-    #[must_use]
 
+    #[must_use]
     pub fn as_float(&self) -> Option<&f64> {
         if let ControlValueSetter::Float(f) = self {
             Some(f)
@@ -1152,8 +1153,8 @@ impl ControlValueSetter {
             None
         }
     }
-    #[must_use]
 
+    #[must_use]
     pub fn as_boolean(&self) -> Option<&bool> {
         if let ControlValueSetter::Boolean(f) = self {
             Some(f)
@@ -1161,8 +1162,8 @@ impl ControlValueSetter {
             None
         }
     }
-    #[must_use]
 
+    #[must_use]
     pub fn as_str(&self) -> Option<&str> {
         if let ControlValueSetter::String(s) = self {
             Some(s)
@@ -1170,8 +1171,8 @@ impl ControlValueSetter {
             None
         }
     }
-    #[must_use]
 
+    #[must_use]
     pub fn as_bytes(&self) -> Option<&[u8]> {
         if let ControlValueSetter::Bytes(b) = self {
             Some(b)
@@ -1179,8 +1180,8 @@ impl ControlValueSetter {
             None
         }
     }
-    #[must_use]
 
+    #[must_use]
     pub fn as_key_value(&self) -> Option<(&i128, &i128)> {
         if let ControlValueSetter::KeyValue(k, v) = self {
             Some((k, v))
@@ -1188,8 +1189,8 @@ impl ControlValueSetter {
             None
         }
     }
-    #[must_use]
 
+    #[must_use]
     pub fn as_point(&self) -> Option<(&f64, &f64)> {
         if let ControlValueSetter::Point(x, y) = self {
             Some((x, y))
@@ -1197,8 +1198,8 @@ impl ControlValueSetter {
             None
         }
     }
-    #[must_use]
 
+    #[must_use]
     pub fn as_enum(&self) -> Option<&i64> {
         if let ControlValueSetter::EnumValue(e) = self {
             Some(e)
@@ -1206,8 +1207,8 @@ impl ControlValueSetter {
             None
         }
     }
-    #[must_use]
 
+    #[must_use]
     pub fn as_rgb(&self) -> Option<(&f64, &f64, &f64)> {
         if let ControlValueSetter::RGB(r, g, b) = self {
             Some((r, g, b))
@@ -1345,6 +1346,9 @@ pub fn mjpeg_to_rgb(data: &[u8], rgba: bool) -> Result<Vec<u8>, NokhwaError> {
     Ok(scanlines_res)
 }
 
+/// Converts MJPEG to RGB (stub for non-MJPEG/WASM builds).
+/// # Errors
+/// Always returns `NokhwaError::NotImplementedError` on unsupported platforms.
 #[cfg(not(all(feature = "mjpeg", not(target_arch = "wasm32"))))]
 pub fn mjpeg_to_rgb(_data: &[u8], _rgba: bool) -> Result<Vec<u8>, NokhwaError> {
     Err(NokhwaError::NotImplementedError(
@@ -1415,6 +1419,9 @@ pub fn buf_mjpeg_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<(), 
     Ok(())
 }
 
+/// Converts MJPEG to RGB into a destination buffer (stub for non-MJPEG/WASM builds).
+/// # Errors
+/// Always returns `NokhwaError::NotImplementedError` on unsupported platforms.
 #[cfg(not(all(feature = "mjpeg", not(target_arch = "wasm32"))))]
 pub fn buf_mjpeg_to_rgb(_data: &[u8], _dest: &mut [u8], _rgba: bool) -> Result<(), NokhwaError> {
     Err(NokhwaError::NotImplementedError(
@@ -1423,6 +1430,7 @@ pub fn buf_mjpeg_to_rgb(_data: &[u8], _dest: &mut [u8], _rgba: bool) -> Result<(
 }
 
 /// Returns the predicted size of the destination YUYV422 buffer.
+#[must_use]
 #[inline]
 pub fn yuyv422_predicted_size(size: usize, rgba: bool) -> usize {
     let pixel_size = if rgba { 4 } else { 3 };
@@ -1456,7 +1464,7 @@ pub fn yuyv422_to_rgb(data: &[u8], rgba: bool) -> Result<Vec<u8>, NokhwaError> {
 /// If the stream is invalid YUYV, or the destination buffer is not large enough, this will error.
 #[inline]
 pub fn buf_yuyv422_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<(), NokhwaError> {
-    if data.len() % 4 != 0 {
+    if !data.len().is_multiple_of(4) {
         return Err(NokhwaError::ProcessFrameError {
             src: FrameFormat::YUYV,
             destination: "RGB888".to_string(),
@@ -1591,7 +1599,7 @@ pub fn buf_nv12_to_rgb(
     out: &mut [u8],
     rgba: bool,
 ) -> Result<(), NokhwaError> {
-    if resolution.width() % 2 != 0 || resolution.height() % 2 != 0 {
+    if !resolution.width().is_multiple_of(2) || !resolution.height().is_multiple_of(2) {
         return Err(NokhwaError::ProcessFrameError {
             src: FrameFormat::NV12,
             destination: "RGB".to_string(),
@@ -1633,8 +1641,8 @@ pub fn buf_nv12_to_rgb(
             let base_index = (hidx * width_usize * rgba_size) + cidx * rgba_size * 2;
 
             if rgba {
-                let px0 = yuyv444_to_rgba(y0 as i32, u as i32, v as i32);
-                let px1 = yuyv444_to_rgba(y1 as i32, u as i32, v as i32);
+                let px0 = yuyv444_to_rgba(i32::from(y0), i32::from(u), i32::from(v));
+                let px1 = yuyv444_to_rgba(i32::from(y1), i32::from(u), i32::from(v));
 
                 out[base_index] = px0[0];
                 out[base_index + 1] = px0[1];
@@ -1645,8 +1653,8 @@ pub fn buf_nv12_to_rgb(
                 out[base_index + 6] = px1[2];
                 out[base_index + 7] = px1[3];
             } else {
-                let px0 = yuyv444_to_rgb(y0 as i32, u as i32, v as i32);
-                let px1 = yuyv444_to_rgb(y1 as i32, u as i32, v as i32);
+                let px0 = yuyv444_to_rgb(i32::from(y0), i32::from(u), i32::from(v));
+                let px1 = yuyv444_to_rgb(i32::from(y1), i32::from(u), i32::from(v));
 
                 out[base_index] = px0[0];
                 out[base_index + 1] = px0[1];
@@ -1661,6 +1669,9 @@ pub fn buf_nv12_to_rgb(
     Ok(())
 }
 
+/// Converts a BGR datastream to RGB, writing into the provided output buffer.
+/// # Errors
+/// Returns `NokhwaError::ProcessFrameError` if the resolution or data size is invalid.
 #[allow(clippy::similar_names)]
 #[inline]
 pub fn buf_bgr_to_rgb(
@@ -1671,7 +1682,7 @@ pub fn buf_bgr_to_rgb(
     let width = resolution.width();
     let height = resolution.height();
 
-    if width % 2 != 0 || height % 2 != 0 {
+    if !width.is_multiple_of(2) || !height.is_multiple_of(2) {
         return Err(NokhwaError::ProcessFrameError {
             src: FrameFormat::RAWBGR,
             destination: "RGB".to_string(),

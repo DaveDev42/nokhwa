@@ -77,8 +77,7 @@ pub(crate) static CALLBACK_CLASS: Lazy<&'static Class> = Lazy::new(|| {
             };
 
             let pixel_format = unsafe { CVPixelBufferGetPixelFormatType(image_buffer) };
-            let frame_format =
-                raw_fcc_to_frameformat(pixel_format).unwrap_or(FrameFormat::YUYV);
+            let frame_format = raw_fcc_to_frameformat(pixel_format).unwrap_or(FrameFormat::YUYV);
 
             unsafe { CVPixelBufferUnlockBaseAddress(image_buffer, 0) };
 
@@ -113,13 +112,7 @@ pub(crate) static CALLBACK_CLASS: Lazy<&'static Class> = Lazy::new(|| {
             decl.add_method(
                 sel!(captureOutput:didOutputSampleBuffer:fromConnection:),
                 capture_out_callback
-                    as extern "C" fn(
-                        &mut Object,
-                        Sel,
-                        *mut Object,
-                        CMSampleBufferRef,
-                        *mut Object,
-                    ),
+                    as extern "C" fn(&mut Object, Sel, *mut Object, CMSampleBufferRef, *mut Object),
             );
             decl.add_method(
                 sel!(captureOutput:didDropSampleBuffer:fromConnection:),

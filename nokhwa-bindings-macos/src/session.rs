@@ -1,14 +1,11 @@
 //! AVCaptureDeviceInput, AVCaptureVideoDataOutput, and AVCaptureSession.
 
-use cocoa_foundation::{
-    base::nil,
-    foundation::{NSDictionary, NSInteger},
-};
+use cocoa_foundation::{base::nil, foundation::NSDictionary};
 use core_foundation::base::TCFType;
 use core_foundation::number::CFNumber;
 use core_media_sys::{
-    kCMPixelFormat_422YpCbCr8_yuvs, kCMPixelFormat_24RGB,
-    kCMPixelFormat_8IndexedGray_WhiteIsZero, kCMVideoCodecType_JPEG,
+    kCMPixelFormat_24RGB, kCMPixelFormat_422YpCbCr8_yuvs, kCMPixelFormat_8IndexedGray_WhiteIsZero,
+    kCMVideoCodecType_JPEG,
 };
 use core_video_sys::{
     kCVPixelBufferPixelFormatTypeKey, kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,

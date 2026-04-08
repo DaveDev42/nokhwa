@@ -78,7 +78,7 @@ impl AVFoundationCaptureDevice {
 
         let device_descriptor = device.info().clone();
         let buffername =
-            CString::new(format!("{}_INDEX{}_", device_descriptor, index)).map_err(|why| {
+            CString::new(format!("{device_descriptor}_INDEX{index}_")).map_err(|why| {
                 NokhwaError::StructureError {
                     structure: "CString Buffername".to_string(),
                     error: why.to_string(),
@@ -289,11 +289,10 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
     }
 
     fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
-        let result = match self.frame_buffer_receiver.recv() {
+        match self.frame_buffer_receiver.recv() {
             Ok(recv) => Ok(Cow::from(recv.0)),
             Err(why) => Err(NokhwaError::ReadFrameError(why.to_string())),
-        };
-        result
+        }
     }
 
     fn stop_stream(&mut self) -> Result<(), NokhwaError> {
@@ -301,34 +300,25 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
             return Ok(());
         }
 
-        let session = match &self.session {
-            Some(session) => session,
-            None => {
-                return Err(NokhwaError::GetPropertyError {
-                    property: "AVCaptureSession".to_string(),
-                    error: "Doesnt Exist".to_string(),
-                })
-            }
+        let Some(session) = &self.session else {
+            return Err(NokhwaError::GetPropertyError {
+                property: "AVCaptureSession".to_string(),
+                error: "Doesnt Exist".to_string(),
+            });
         };
 
-        let output = match &self.data_out {
-            Some(output) => output,
-            None => {
-                return Err(NokhwaError::GetPropertyError {
-                    property: "AVCaptureVideoDataOutput".to_string(),
-                    error: "Doesnt Exist".to_string(),
-                })
-            }
+        let Some(output) = &self.data_out else {
+            return Err(NokhwaError::GetPropertyError {
+                property: "AVCaptureVideoDataOutput".to_string(),
+                error: "Doesnt Exist".to_string(),
+            });
         };
 
-        let input = match &self.dev_input {
-            Some(input) => input,
-            None => {
-                return Err(NokhwaError::GetPropertyError {
-                    property: "AVCaptureDeviceInput".to_string(),
-                    error: "Doesnt Exist".to_string(),
-                })
-            }
+        let Some(input) = &self.dev_input else {
+            return Err(NokhwaError::GetPropertyError {
+                property: "AVCaptureDeviceInput".to_string(),
+                error: "Doesnt Exist".to_string(),
+            });
         };
 
         session.remove_output(output);
@@ -348,7 +338,7 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
 #[cfg(target_os = "macos")]
 impl Drop for AVFoundationCaptureDevice {
     fn drop(&mut self) {
-        if self.stop_stream().is_err() {}
+        let _ = self.stop_stream();
         self.device.unlock();
     }
 }

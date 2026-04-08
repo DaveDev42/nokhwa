@@ -28,6 +28,7 @@ use opencv::{boxed_ref::BoxedRef, core::Mat};
 ///
 /// Note that decoding on the main thread **will** decrease your performance and lead to dropped frames.
 #[derive(Clone, Debug, Hash, PartialOrd, PartialEq, Eq)]
+#[allow(clippy::struct_field_names)]
 pub struct Buffer {
     resolution: Resolution,
     buffer: Bytes,
