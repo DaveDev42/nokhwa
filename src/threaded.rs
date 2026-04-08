@@ -396,8 +396,13 @@ impl CallbackCamera {
 
 impl Drop for CallbackCamera {
     fn drop(&mut self) {
+        self.die_bool.store(true, Ordering::Release);
         let _stop_stream_err = self.stop_stream();
-        self.die_bool.store(true, Ordering::Relaxed);
+        if let Ok(mut handle) = self.handle.lock() {
+            if let Some(h) = handle.take() {
+                let _ = h.join();
+            }
+        }
     }
 }
 
@@ -408,7 +413,7 @@ fn camera_frame_thread_loop(
     die_bool: Arc<AtomicBool>,
 ) {
     loop {
-        if die_bool.load(Ordering::Relaxed) {
+        if die_bool.load(Ordering::Acquire) {
             break;
         }
 
@@ -419,11 +424,11 @@ fn camera_frame_thread_loop(
 
         match frame {
             Ok(frame) => {
-                if let Ok(mut last_frame) = last_frame_captured.lock() {
-                    *last_frame = frame.clone();
-                }
                 if let Ok(mut cb) = frame_callback.lock() {
-                    cb(frame);
+                    cb(frame.clone());
+                }
+                if let Ok(mut last_frame) = last_frame_captured.lock() {
+                    *last_frame = frame;
                 }
             }
             Err(_) => {
