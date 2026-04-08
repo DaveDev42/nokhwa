@@ -641,24 +641,6 @@ impl CameraInfo {
     pub fn set_index(&mut self, index: CameraIndex) {
         self.index = index;
     }
-
-    // /// Gets the device info's index as an `u32`.
-    // /// # Errors
-    // /// If the index is not parsable as a `u32`, this will error.
-    // /// # JS-WASM
-    // /// This is exported as `get_Index_Int`
-    // pub fn index_num(&self) -> Result<u32, NokhwaError> {
-    //     match &self.index {
-    //         CameraIndex::Index(i) => Ok(*i),
-    //         CameraIndex::String(s) => match s.parse::<u32>() {
-    //             Ok(p) => Ok(p),
-    //             Err(why) => Err(NokhwaError::GetPropertyError {
-    //                 property: "index-int".to_string(),
-    //                 error: why.to_string(),
-    //             }),
-    //         },
-    //     }
-    // }
 }
 
 impl Display for CameraInfo {
@@ -1037,16 +1019,6 @@ impl Display for ControlValueDescription {
     }
 }
 
-// fn step_chk(val: i64, default: i64, step: i64) -> Result<(), NokhwaError> {
-//     if (val - default) % step != 0 {
-//         return Err(NokhwaError::StructureError {
-//             structure: "Value".to_string(),
-//             error: "Doesnt fit step".to_string(),
-//         });
-//     }
-//     Ok(())
-// }
-
 /// This struct tells you everything about a particular [`KnownCameraControl`].
 ///
 /// However, you should never need to instantiate this struct, since its usually generated for you by `nokhwa`.
@@ -1311,71 +1283,6 @@ impl Display for ApiBackend {
         write!(f, "{self:?}")
     }
 }
-
-// /// A webcam index that supports both strings and integers. Most backends take an int, but `IPCamera`s take a URL (string).
-// #[derive(Clone, Debug, Hash, PartialEq, PartialOrd)]
-// pub enum CameraIndex {
-//     Index(u32),
-//     String(String),
-// }
-
-// impl CameraIndex {
-//     /// Gets the device info's index as an `u32`.
-//     /// # Errors
-//     /// If the index is not parsable as a `u32`, this will error.
-//     pub fn as_index(&self) -> Result<u32, NokhwaError> {
-//         match self {
-//             CameraIndex::Index(i) => Ok(*i),
-//             CameraIndex::String(s) => match s.parse::<u32>() {
-//                 Ok(p) => Ok(p),
-//                 Err(why) => Err(NokhwaError::GetPropertyError {
-//                     property: "index-int".to_string(),
-//                     error: why.to_string(),
-//                 }),
-//             },
-//         }
-//     }
-// }
-
-// impl Display for CameraIndex {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         match self {
-//             CameraIndex::Index(idx) => {
-//                 write!(f, "{}", idx)
-//             }
-//             CameraIndex::String(ip) => {
-//                 write!(f, "{}", ip)
-//             }
-//         }
-//     }
-// }
-
-// impl From<u32> for CameraIndex {
-//     fn from(v: u32) -> Self {
-//         CameraIndex::Index(v)
-//     }
-// }
-
-// /// Trait for strings that can be converted to [`CameraIndex`]es.
-// pub trait ValidString: AsRef<str> {}
-//
-// impl ValidString for String {}
-// impl<'a> ValidString for &'a String {}
-// impl<'a> ValidString for &'a mut String {}
-// impl<'a> ValidString for Cow<'a, str> {}
-// impl<'a> ValidString for &'a Cow<'a, str> {}
-// impl<'a> ValidString for &'a mut Cow<'a, str> {}
-// impl<'a> ValidString for &'a str {}
-// impl<'a> ValidString for &'a mut str {}
-
-// impl<T> From<T> for CameraIndex
-// where
-//     T: ValidString,
-// {
-//     fn from(v: T) -> Self {
-//         CameraIndex::String(v.as_ref().to_string())
-//     }
-// }
 
 /// Converts a MJPEG stream of `&[u8]` into a `Vec<u8>` of RGB888. (R,G,B,R,G,B,...)
 /// # Errors
@@ -1715,7 +1622,6 @@ pub fn buf_nv12_to_rgb(
     let y_section = (resolution.width() * resolution.height()) as usize;
 
     let width_usize = resolution.width() as usize;
-    // let height_usize = resolution.height() as usize;
 
     for (hidx, horizontal_row) in data[0..y_section].chunks_exact(width_usize).enumerate() {
         for (cidx, column) in horizontal_row.chunks_exact(2).enumerate() {
