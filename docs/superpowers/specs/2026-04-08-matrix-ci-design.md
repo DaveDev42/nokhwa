@@ -112,6 +112,6 @@ Option 1 is recommended — simpler and only needs to be done once per machine.
 
 ```bash
 # Download and configure the runner (follow GitHub's instructions for the repo)
-./config.sh --url https://github.com/<owner>/nokhwa --token <TOKEN> --labels macos-camera
+./config.sh --url https://github.com/DaveDev42/nokhwa --token <TOKEN> --labels macos-camera
 ./run.sh  # or install as a service with ./svc.sh install
 ```
