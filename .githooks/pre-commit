@@ -8,7 +8,7 @@ echo "==> Running cargo clippy..."
 case "$(uname -s)" in
     Darwin)       FEATURE="input-avfoundation" ;;
     Linux)        FEATURE="input-v4l" ;;
-    MINGW*|MSYS*) FEATURE="input-msmf" ;;
+    MINGW*|MSYS*|CYGWIN*) FEATURE="input-msmf" ;;
     *)            FEATURE="" ;;
 esac
 
