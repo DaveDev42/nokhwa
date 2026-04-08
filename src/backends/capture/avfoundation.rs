@@ -301,25 +301,25 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
         }
 
         let Some(session) = &self.session else {
-                return Err(NokhwaError::GetPropertyError {
-                    property: "AVCaptureSession".to_string(),
-                    error: "Doesnt Exist".to_string(),
-                })
-            };
+            return Err(NokhwaError::GetPropertyError {
+                property: "AVCaptureSession".to_string(),
+                error: "Doesnt Exist".to_string(),
+            });
+        };
 
         let Some(output) = &self.data_out else {
-                return Err(NokhwaError::GetPropertyError {
-                    property: "AVCaptureVideoDataOutput".to_string(),
-                    error: "Doesnt Exist".to_string(),
-                })
-            };
+            return Err(NokhwaError::GetPropertyError {
+                property: "AVCaptureVideoDataOutput".to_string(),
+                error: "Doesnt Exist".to_string(),
+            });
+        };
 
         let Some(input) = &self.dev_input else {
-                return Err(NokhwaError::GetPropertyError {
-                    property: "AVCaptureDeviceInput".to_string(),
-                    error: "Doesnt Exist".to_string(),
-                })
-            };
+            return Err(NokhwaError::GetPropertyError {
+                property: "AVCaptureDeviceInput".to_string(),
+                error: "Doesnt Exist".to_string(),
+            });
+        };
 
         session.remove_output(output);
         session.remove_input(input);

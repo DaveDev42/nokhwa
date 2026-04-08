@@ -108,7 +108,7 @@ impl CallbackCamera {
 
     /// Gets the current Camera's backend
     /// # Errors
-    /// This should not error under normal circumstances.
+    /// This wraps an infallible call and should not return an error.
     pub fn backend(&self) -> Result<ApiBackend, NokhwaError> {
         Ok(self.camera.lock().backend())
     }
@@ -128,7 +128,7 @@ impl CallbackCamera {
 
     /// Gets the current [`CameraFormat`].
     /// # Errors
-    /// This should not error under normal circumstances.
+    /// This wraps an infallible call and should not return an error.
     pub fn camera_format(&self) -> Result<CameraFormat, NokhwaError> {
         Ok(self.camera.lock().camera_format())
     }
@@ -190,7 +190,7 @@ impl CallbackCamera {
 
     /// Gets the current camera resolution (See: [`Resolution`], [`CameraFormat`]).
     /// # Errors
-    /// This should not error under normal circumstances.
+    /// This wraps an infallible call and should not return an error.
     pub fn resolution(&self) -> Result<Resolution, NokhwaError> {
         Ok(self.camera.lock().resolution())
     }
@@ -210,7 +210,7 @@ impl CallbackCamera {
 
     /// Gets the current camera framerate (See: [`CameraFormat`]).
     /// # Errors
-    /// This should not error under normal circumstances.
+    /// This wraps an infallible call and should not return an error.
     pub fn frame_rate(&self) -> Result<u32, NokhwaError> {
         Ok(self.camera.lock().frame_rate())
     }
@@ -225,7 +225,7 @@ impl CallbackCamera {
 
     /// Gets the current camera's frame format (See: [`FrameFormat`], [`CameraFormat`]).
     /// # Errors
-    /// This should not error under normal circumstances.
+    /// This wraps an infallible call and should not return an error.
     pub fn frame_format(&self) -> Result<FrameFormat, NokhwaError> {
         Ok(self.camera.lock().frame_format())
     }
@@ -397,7 +397,7 @@ impl CallbackCamera {
 
     /// Checks if stream if open. If it is, it will return true.
     /// # Errors
-    /// This should not error under normal circumstances.
+    /// This wraps an infallible call and should not return an error.
     pub fn is_stream_open(&self) -> Result<bool, NokhwaError> {
         Ok(self.camera.lock().is_stream_open())
     }

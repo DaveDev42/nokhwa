@@ -22,6 +22,7 @@
 
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 #![allow(unexpected_cfgs)]
+// cocoa/cocoa-foundation APIs are deprecated in favor of objc2; suppress until migration
 #![allow(deprecated)]
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -819,6 +820,7 @@ mod internal {
             })
         }
 
+        // Fallible constructor; cannot implement `Default` trait
         #[allow(clippy::should_implement_trait)]
         pub fn default() -> Result<Self, NokhwaError> {
             AVCaptureDeviceDiscoverySession::new(vec![
