@@ -64,6 +64,7 @@ docs-only = [
 ]
 docs-nolink = [ "nokhwa-core/docs-features" ]
 docs-features = [  ]
+device-test = [  ]
 
 [dependencies]
 thiserror = "2.0"
