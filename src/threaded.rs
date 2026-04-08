@@ -397,7 +397,7 @@ impl CallbackCamera {
 impl Drop for CallbackCamera {
     fn drop(&mut self) {
         self.die_bool.store(true, Ordering::Release);
-        let _stop_stream_err = self.stop_stream();
+        let _ = self.stop_stream();
         if let Ok(mut handle) = self.handle.lock() {
             if let Some(h) = handle.take() {
                 let _ = h.join();
@@ -430,6 +430,7 @@ fn camera_frame_thread_loop(
                 if let Ok(mut last_frame) = last_frame_captured.lock() {
                     *last_frame = frame;
                 }
+                std::thread::yield_now();
             }
             Err(_) => {
                 std::thread::yield_now();
