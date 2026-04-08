@@ -52,26 +52,18 @@ impl Buffer {
         self.resolution
     }
 
-    /// Get the data of this buffer.
+    /// Get the data of this buffer as a byte slice reference without copying.
+    ///
+    /// For an owned [`Bytes`], see [`buffer_bytes`](Self::buffer_bytes).
     #[must_use]
     pub fn buffer(&self) -> &[u8] {
         &self.buffer
     }
 
-    /// Get a owned version of this buffer.
+    /// Get an owned version of this buffer.
     #[must_use]
     pub fn buffer_bytes(&self) -> Bytes {
         self.buffer.clone()
-    }
-
-    /// Get a reference to the raw buffer bytes without copying.
-    ///
-    /// This is a zero-copy alternative to [`buffer_bytes`](Self::buffer_bytes) for
-    /// callers that only need to read the data.
-    #[must_use]
-    #[inline]
-    pub fn buffer_bytes_ref(&self) -> &[u8] {
-        &self.buffer
     }
 
     /// Get the [`FrameFormat`] of this buffer.
