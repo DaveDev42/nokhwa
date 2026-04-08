@@ -82,7 +82,7 @@ pub struct CGPoint {
     pub y: CGFloat,
 }
 
-// SAFETY: CGPoint is repr(C) with two f32 fields, matching {ff} encoding.
+// SAFETY: CGPoint is repr(C) with two CGFloat (f64) fields, matching {dd} encoding.
 unsafe impl Encode for CGPoint {
     const ENCODING: Encoding = Encoding::Struct("CGPoint", &[Encoding::Double, Encoding::Double]);
 }

@@ -377,7 +377,7 @@ impl AVCaptureDevice {
             KnownCameraControl::Other(0),
             "FocusPointOfInterest".to_string(),
             ControlValueDescription::Point {
-                value: (focus_poi.x as f64, focus_poi.y as f64),
+                value: (focus_poi.x, focus_poi.y),
                 default: (0.5, 0.5),
             },
             if !focus_poi_supported {
@@ -465,7 +465,7 @@ impl AVCaptureDevice {
             KnownCameraControl::Other(2),
             "ExposurePointOfInterest".to_string(),
             ControlValueDescription::Point {
-                value: (exposure_poi.x as f64, exposure_poi.y as f64),
+                value: (exposure_poi.x, exposure_poi.y),
                 default: (0.5, 0.5),
             },
             if !exposure_poi_supported {
@@ -754,9 +754,9 @@ impl AVCaptureDevice {
             KnownCameraControl::Zoom,
             "Zoom".to_string(),
             ControlValueDescription::FloatRange {
-                min: zoom_min as f64,
-                max: zoom_max as f64,
-                value: zoom_current as f64,
+                min: zoom_min,
+                max: zoom_max,
+                value: zoom_current,
                 step: f32::MIN_POSITIVE as f64,
                 default: 1.0,
             },
