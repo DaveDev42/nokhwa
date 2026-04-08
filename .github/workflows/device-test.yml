@@ -7,6 +7,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
 jobs:
   device-test:
     name: Camera integration (macOS)
@@ -16,6 +19,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
 
       - name: Run device tests
         run: cargo test --features device-test,input-avfoundation,output-threaded -- --test-threads=1

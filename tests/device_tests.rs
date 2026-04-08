@@ -18,6 +18,8 @@ fn require_camera() -> Option<CameraIndex> {
     }
 }
 
+/// Intentionally hard-fails if no camera is found — verifying device discovery
+/// is the most basic requirement for the self-hosted runner.
 #[test]
 fn query_devices_returns_cameras() {
     let backend = native_api_backend().expect("no native backend");
