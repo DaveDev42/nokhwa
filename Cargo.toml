@@ -36,8 +36,6 @@ input-v4l          = [ "nokhwa-bindings-linux" ]
 # You shouldn't enable this unless you have to.
 input-v4l-no-arena-buffer = [ "nokhwa-bindings-linux/no-arena-buffer" ]
 input-native              = [ "input-avfoundation", "input-v4l", "input-msmf" ]
-# Re-enable it once soundness has been proven + mozjpeg is updated to 0.9.x
-# input-uvc = ["uvc", "uvc/vendor", "usb_enumeration", "lazy_static"]
 input-opencv = [
     "opencv",
     "opencv/videoio",
@@ -84,10 +82,6 @@ optional = true
 version          = "0.25"
 default-features = false
 
-[dependencies.usb_enumeration]
-version  = "0.2"
-optional = true
-
 [dependencies.wgpu]
 version  = "27"
 optional = true
@@ -114,10 +108,6 @@ optional = true
 [dependencies.nokhwa-bindings-linux]
 version  = "0.1"
 path     = "nokhwa-bindings-linux"
-optional = true
-
-[dependencies.regex]
-version  = "1.12"
 optional = true
 
 [dependencies.parking_lot]

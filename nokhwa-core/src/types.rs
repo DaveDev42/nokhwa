@@ -85,64 +85,66 @@ impl RequestedFormat<'_> {
     pub fn fulfill(&self, all_formats: &[CameraFormat]) -> Option<CameraFormat> {
         match self.requested_format {
             RequestedFormatType::AbsoluteHighestResolution => {
-                let mut formats = all_formats.to_vec();
-                formats.sort_by_key(CameraFormat::resolution);
-                let resolution = *formats.iter().last()?;
-                let mut format_resolutions = formats
-                    .into_iter()
+                let max_resolution = all_formats
+                    .iter()
+                    .filter(|fmt| self.wanted_decoder.contains(&fmt.format()))
+                    .max_by_key(|fmt| fmt.resolution())?
+                    .resolution();
+                all_formats
+                    .iter()
                     .filter(|fmt| {
-                        fmt.resolution() == resolution.resolution()
+                        fmt.resolution() == max_resolution
                             && self.wanted_decoder.contains(&fmt.format())
                     })
-                    .collect::<Vec<CameraFormat>>();
-                format_resolutions.sort_by_key(CameraFormat::frame_rate);
-                format_resolutions.last().copied()
+                    .max_by_key(|fmt| fmt.frame_rate())
+                    .copied()
             }
             RequestedFormatType::AbsoluteHighestFrameRate => {
-                let mut formats = all_formats.to_vec();
-                formats.sort_by_key(CameraFormat::frame_rate);
-                let frame_rate = *formats.iter().last()?;
-                let mut format_framerates = formats
-                    .into_iter()
+                let max_frame_rate = all_formats
+                    .iter()
+                    .filter(|fmt| self.wanted_decoder.contains(&fmt.format()))
+                    .max_by_key(|fmt| fmt.frame_rate())?
+                    .frame_rate();
+                all_formats
+                    .iter()
                     .filter(|fmt| {
-                        fmt.frame_rate() == frame_rate.frame_rate()
+                        fmt.frame_rate() == max_frame_rate
                             && self.wanted_decoder.contains(&fmt.format())
                     })
-                    .collect::<Vec<CameraFormat>>();
-                format_framerates.sort_by_key(CameraFormat::resolution);
-                format_framerates.last().copied()
+                    .max_by_key(|fmt| fmt.resolution())
+                    .copied()
             }
             RequestedFormatType::HighestResolution(res) => {
-                let mut formats = all_formats
+                let highest_fps = all_formats
                     .iter()
-                    .filter(|x| x.resolution == res)
+                    .filter(|x| x.resolution == res && self.wanted_decoder.contains(&x.format()))
+                    .max_by_key(|x| x.frame_rate)?
+                    .frame_rate;
+                all_formats
+                    .iter()
+                    .filter(|x| {
+                        x.resolution == res
+                            && x.frame_rate == highest_fps
+                            && self.wanted_decoder.contains(&x.format())
+                    })
+                    .max_by_key(|x| x.format())
                     .copied()
-                    .collect::<Vec<CameraFormat>>();
-                formats.sort_by(|a, b| a.frame_rate.cmp(&b.frame_rate));
-                let highest_fps = match formats.last() {
-                    Some(cf) => cf.frame_rate,
-                    None => return None,
-                };
-                formats
-                    .into_iter()
-                    .filter(|x| x.frame_rate == highest_fps)
-                    .last()
             }
             RequestedFormatType::HighestFrameRate(fps) => {
-                let mut formats = all_formats
+                let highest_res = all_formats
                     .iter()
-                    .filter(|x| x.frame_rate == fps)
+                    .filter(|x| x.frame_rate == fps && self.wanted_decoder.contains(&x.format()))
+                    .max_by_key(|x| x.resolution)?
+                    .resolution;
+                all_formats
+                    .iter()
+                    .filter(|x| {
+                        x.frame_rate == fps
+                            && x.resolution() == highest_res
+                            && self.wanted_decoder.contains(&x.format())
+                    })
+                    .max_by_key(|x| x.format())
                     .copied()
-                    .collect::<Vec<CameraFormat>>();
-                formats.sort_by(|a, b| a.resolution.cmp(&b.resolution));
-                let highest_res = match formats.last() {
-                    Some(cf) => cf.resolution,
-                    None => return None,
-                };
-                formats
-                    .into_iter()
-                    .filter(|x| x.resolution() == highest_res)
-                    .last()
             }
             RequestedFormatType::Exact(fmt) => {
                 if self.wanted_decoder.contains(&fmt.format()) {
@@ -936,75 +938,6 @@ impl ControlValueDescription {
                 None => false,
             },
         }
-
-        // match setter {
-        //     ControlValueSetter::None => {
-        //         matches!(self, ControlValueDescription::None)
-        //     }
-        //     ControlValueSetter::Integer(i) => match self {
-        //         ControlValueDescription::Integer {
-        //             value,
-        //             default,
-        //             step,
-        //         } => (i - default).abs() % step == 0 || (i - value) % step == 0,
-        //         ControlValueDescription::IntegerRange {
-        //             min,
-        //             max,
-        //             value,
-        //             step,
-        //             default,
-        //         } => {
-        //             if value > max || value < min {
-        //                 return false;
-        //             }
-        //
-        //             (i - default) % step == 0 || (i - value) % step == 0
-        //         }
-        //         _ => false,
-        //     },
-        //     ControlValueSetter::Float(f) => match self {
-        //         ControlValueDescription::Float {
-        //             value,
-        //             default,
-        //             step,
-        //         } => (f - default).abs() % step == 0_f64 || (f - value) % step == 0_f64,
-        //         ControlValueDescription::FloatRange {
-        //             min,
-        //             max,
-        //             value,
-        //             step,
-        //             default,
-        //         } => {
-        //             if value > max || value < min {
-        //                 return false;
-        //             }
-        //
-        //             (f - default) % step == 0_f64 || (f - value) % step == 0_f64
-        //         }
-        //         _ => false,
-        //     },
-        //     ControlValueSetter::Boolean(b) => {
-        //
-        //     }
-        //     ControlValueSetter::String(_) => {
-        //         matches!(self, ControlValueDescription::String { .. })
-        //     }
-        //     ControlValueSetter::Bytes(_) => {
-        //         matches!(self, ControlValueDescription::Bytes { .. })
-        //     }
-        //     ControlValueSetter::KeyValue(_, _) => {
-        //         matches!(self, ControlValueDescription::KeyValuePair { .. })
-        //     }
-        //     ControlValueSetter::Point(_, _) => {
-        //         matches!(self, ControlValueDescription::Point { .. })
-        //     }
-        //     ControlValueSetter::EnumValue(_) => {
-        //         matches!(self, ControlValueDescription::Enum { .. })
-        //     }
-        //     ControlValueSetter::RGB(_, _, _) => {
-        //         matches!(self, ControlValueDescription::RGB { .. })
-        //     }
-        // }
     }
 }
 
