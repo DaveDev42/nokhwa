@@ -255,5 +255,3 @@ where
         Box::new(capbackend)
     }
 }
-
-pub trait VirtualBackendTrait {}
