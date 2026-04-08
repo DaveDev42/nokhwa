@@ -115,25 +115,33 @@ impl RequestedFormat<'_> {
             RequestedFormatType::HighestResolution(res) => {
                 let highest_fps = all_formats
                     .iter()
-                    .filter(|x| x.resolution == res)
+                    .filter(|x| x.resolution == res && self.wanted_decoder.contains(&x.format()))
                     .max_by_key(|x| x.frame_rate)?
                     .frame_rate;
                 all_formats
                     .iter()
-                    .filter(|x| x.resolution == res && x.frame_rate == highest_fps)
-                    .last()
+                    .filter(|x| {
+                        x.resolution == res
+                            && x.frame_rate == highest_fps
+                            && self.wanted_decoder.contains(&x.format())
+                    })
+                    .max_by_key(|x| x.format())
                     .copied()
             }
             RequestedFormatType::HighestFrameRate(fps) => {
                 let highest_res = all_formats
                     .iter()
-                    .filter(|x| x.frame_rate == fps)
+                    .filter(|x| x.frame_rate == fps && self.wanted_decoder.contains(&x.format()))
                     .max_by_key(|x| x.resolution)?
                     .resolution;
                 all_formats
                     .iter()
-                    .filter(|x| x.frame_rate == fps && x.resolution() == highest_res)
-                    .last()
+                    .filter(|x| {
+                        x.frame_rate == fps
+                            && x.resolution() == highest_res
+                            && self.wanted_decoder.contains(&x.format())
+                    })
+                    .max_by_key(|x| x.format())
                     .copied()
             }
             RequestedFormatType::Exact(fmt) => {
