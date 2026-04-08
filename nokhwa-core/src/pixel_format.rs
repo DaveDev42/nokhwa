@@ -455,11 +455,17 @@ impl FormatDecoder for LumaAFormat {
     }
 }
 
-/// A Zero-Size-Type that contains the definition to convert a given YUYV image stream to RGB in the [`Buffer`](crate::buffer::Buffer)'s [`.decode_image()`](crate::buffer::Buffer::decode_image)
+/// A Zero-Size-Type that contains the definition to convert a given YUYV image
+/// stream to RGB in the [`Buffer`](crate::buffer::Buffer)'s
+/// [`.decode_image()`](crate::buffer::Buffer::decode_image) method.
 ///
-/// ```.ignore
+/// ```no_run
 /// use image::{ImageBuffer, Rgb};
+/// # use nokhwa_core::{buffer::Buffer, pixel_format::YuyvFormat};
+/// # fn example(buffer: &Buffer) -> Result<(), nokhwa_core::error::NokhwaError> {
 /// let image: ImageBuffer<Rgb<u8>, Vec<u8>> = buffer.decode_image::<YuyvFormat>()?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Copy, Clone, Debug, Default, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub struct YuyvFormat;

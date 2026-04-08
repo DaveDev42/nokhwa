@@ -124,7 +124,7 @@ impl Buffer {
     ) -> Result<BoxedRef<'_, Mat>, NokhwaError> {
         use crate::buffer::channel_defs::make_mat;
 
-        make_mat::<F>(self.resolution, self.data())
+        make_mat::<F>(self.resolution, self.buffer())
     }
 
     /// Decodes an image with allocation using the provided [`FormatDecoder`] into a [`Mat`](https://docs.rs/opencv/latest/opencv/core/struct.Mat.html).

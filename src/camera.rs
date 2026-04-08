@@ -283,12 +283,12 @@ impl Camera {
     /// If the list cannot be collected, this will error. This can be treated as a "nothing supported".
     pub fn camera_controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
         let known_controls = self.supported_camera_controls()?;
-        let maybe_camera_controls = known_controls
+        let controls = known_controls
             .iter()
             .flat_map(|x| self.camera_control(*x))
             .collect::<Vec<CameraControl>>();
 
-        Ok(maybe_camera_controls)
+        Ok(controls)
     }
 
     /// Gets the current supported list of [`CameraControl`]s keyed by its name as a `String`.

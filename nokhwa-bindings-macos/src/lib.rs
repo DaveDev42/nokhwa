@@ -21,8 +21,8 @@
 // <some change so we can call this 0.10.4>
 
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
-#![allow(unexpected_cfgs)]
-#![allow(deprecated)] // cocoa_foundation is deprecated in favor of objc2-foundation; migration tracked separately
+#![allow(unexpected_cfgs)] // objc crate macros (msg_send!, class!) emit cfg(feature = "cargo-clippy") checks
+#![allow(deprecated)] // TODO: migrate cocoa_foundation -> objc2-foundation (see #10)
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 #[macro_use]
