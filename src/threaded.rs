@@ -424,13 +424,24 @@ fn camera_frame_thread_loop(
 
         match frame {
             Ok(frame) => {
-                if let Ok(mut cb) = frame_callback.lock() {
-                    cb(frame.clone());
+                let mut cb = match frame_callback.lock() {
+                    Ok(cb) => cb,
+                    Err(e) => {
+                        eprintln!("nokhwa: frame_callback mutex poisoned: {e}");
+                        continue;
+                    }
+                };
+                cb(frame.clone());
+                drop(cb);
+
+                match last_frame_captured.lock() {
+                    Ok(mut last_frame) => {
+                        *last_frame = frame;
+                    }
+                    Err(e) => {
+                        eprintln!("nokhwa: last_frame mutex poisoned: {e}");
+                    }
                 }
-                if let Ok(mut last_frame) = last_frame_captured.lock() {
-                    *last_frame = frame;
-                }
-                std::thread::yield_now();
             }
             Err(_) => {
                 std::thread::yield_now();
