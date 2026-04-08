@@ -2,9 +2,8 @@
 
 use cocoa_foundation::foundation::{NSArray, NSString};
 use core_media_sys::{
-    kCMPixelFormat_24RGB, kCMPixelFormat_422YpCbCr8_yuvs,
-    kCMPixelFormat_8IndexedGray_WhiteIsZero, kCMVideoCodecType_422YpCbCr8,
-    kCMVideoCodecType_JPEG, kCMVideoCodecType_JPEG_OpenDML,
+    kCMPixelFormat_24RGB, kCMPixelFormat_422YpCbCr8_yuvs, kCMPixelFormat_8IndexedGray_WhiteIsZero,
+    kCMVideoCodecType_422YpCbCr8, kCMVideoCodecType_JPEG, kCMVideoCodecType_JPEG_OpenDML,
 };
 use core_video_sys::{
     kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
@@ -91,9 +90,7 @@ pub(crate) fn compare_ns_string(this: *mut Object, other: ffi::NSString) -> bool
 #[allow(non_upper_case_globals)]
 pub(crate) fn raw_fcc_to_frameformat(raw: OSType) -> Option<FrameFormat> {
     match raw {
-        kCMVideoCodecType_422YpCbCr8 | kCMPixelFormat_422YpCbCr8_yuvs => {
-            Some(FrameFormat::YUYV)
-        }
+        kCMVideoCodecType_422YpCbCr8 | kCMPixelFormat_422YpCbCr8_yuvs => Some(FrameFormat::YUYV),
         kCMVideoCodecType_JPEG | kCMVideoCodecType_JPEG_OpenDML => Some(FrameFormat::MJPEG),
         kCMPixelFormat_8IndexedGray_WhiteIsZero => Some(FrameFormat::GRAY),
         kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange

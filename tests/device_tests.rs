@@ -6,7 +6,7 @@
 
 use nokhwa::pixel_format::RgbFormat;
 use nokhwa::utils::*;
-use nokhwa::{query, native_api_backend, Buffer, Camera};
+use nokhwa::{native_api_backend, query, Buffer, Camera};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -27,7 +27,11 @@ fn query_devices_returns_cameras() {
     let cameras = query(backend).expect("query failed");
     assert!(!cameras.is_empty(), "expected at least one camera");
     for cam in &cameras {
-        println!("Found camera: {} (index: {})", cam.human_name(), cam.index());
+        println!(
+            "Found camera: {} (index: {})",
+            cam.human_name(),
+            cam.index()
+        );
     }
 }
 
@@ -57,7 +61,10 @@ fn query_compatible_formats() {
     let formats = camera
         .compatible_camera_formats()
         .expect("failed to get formats");
-    assert!(!formats.is_empty(), "expected at least one compatible format");
+    assert!(
+        !formats.is_empty(),
+        "expected at least one compatible format"
+    );
 
     let fourccs = camera.compatible_fourcc().expect("failed to get fourccs");
     assert!(!fourccs.is_empty(), "expected at least one fourcc");

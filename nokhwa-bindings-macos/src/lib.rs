@@ -107,13 +107,11 @@ pub use callback::AVCaptureVideoCallback;
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use device::{
-    AVAuthorizationStatus, AVCaptureDevice, AVCaptureDeviceDiscoverySession,
-    AVCaptureDeviceFormat, AVCaptureDevicePosition, AVCaptureDeviceType, AVFrameRateRange,
-    AVMediaType, CompressionData, DataPipe, current_authorization_status, get_raw_device_info,
-    query_avfoundation, request_permission_with_callback,
+    current_authorization_status, get_raw_device_info, query_avfoundation,
+    request_permission_with_callback, AVAuthorizationStatus, AVCaptureDevice,
+    AVCaptureDeviceDiscoverySession, AVCaptureDeviceFormat, AVCaptureDevicePosition,
+    AVCaptureDeviceType, AVFrameRateRange, AVMediaType, CompressionData, DataPipe,
 };
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-pub use session::{
-    AVCaptureDeviceInput, AVCaptureSession, AVCaptureVideoDataOutput,
-};
+pub use session::{AVCaptureDeviceInput, AVCaptureSession, AVCaptureVideoDataOutput};
