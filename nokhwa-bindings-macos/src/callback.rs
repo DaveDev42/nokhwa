@@ -6,38 +6,37 @@ use crate::ffi::{
 };
 use crate::types::{AVAuthorizationStatus, AVMediaType};
 use crate::util::raw_fcc_to_frameformat;
-use block::ConcreteBlock;
+use block2::RcBlock;
 use core_media_sys::CMSampleBufferRef;
 use flume::Sender;
 use nokhwa_core::{error::NokhwaError, types::FrameFormat};
-use objc::{
-    declare::ClassDecl,
-    runtime::{Class, Object, Protocol, Sel, BOOL, YES},
-};
-use once_cell::sync::Lazy;
+use objc2::runtime::{AnyClass, AnyObject, AnyProtocol, Bool, ClassBuilder, Sel};
 use std::{
     ffi::{c_void, CStr},
-    sync::Arc,
+    sync::{Arc, LazyLock},
 };
 
-static CALLBACK_CLASS: Lazy<&'static Class> = Lazy::new(|| {
+static CALLBACK_CLASS: LazyLock<&'static AnyClass> = LazyLock::new(|| {
     {
-        let mut decl = ClassDecl::new("MyCaptureCallback", class!(NSObject)).unwrap();
+        let superclass = objc2::class!(NSObject);
+        let mut builder = ClassBuilder::new(c"MyCaptureCallback", superclass).unwrap();
 
         // frame stack
         // oooh scary provenannce-breaking BULLSHIT AAAAAA I LOVE TYPE ERASURE
-        decl.add_ivar::<*const c_void>("_arcmutptr"); // ArkMutex, the not-arknights totally not gacha totally not ripoff new vidya game from l-pleasestop-npengtul
+        builder.add_ivar::<*const c_void>(c"_arcmutptr"); // ArkMutex, the not-arknights totally not gacha totally not ripoff new vidya game from l-pleasestop-npengtul
 
-        extern "C" fn my_callback_get_arcmutptr(this: &Object, _: Sel) -> *const c_void {
-            unsafe { *this.get_ivar("_arcmutptr") }
+        #[allow(deprecated)]
+        extern "C" fn my_callback_get_arcmutptr(this: *mut AnyObject, _: Sel) -> *const c_void {
+            unsafe { *(*this).get_ivar("_arcmutptr") }
         }
+        #[allow(deprecated)]
         extern "C" fn my_callback_set_arcmutptr(
-            this: &mut Object,
+            this: *mut AnyObject,
             _: Sel,
             new_arcmutptr: *const c_void,
         ) {
             unsafe {
-                this.set_ivar("_arcmutptr", new_arcmutptr);
+                *(*this).get_mut_ivar("_arcmutptr") = new_arcmutptr;
             }
         }
 
@@ -46,11 +45,11 @@ static CALLBACK_CLASS: Lazy<&'static Class> = Lazy::new(|| {
         #[allow(non_snake_case)]
         #[allow(non_upper_case_globals)]
         extern "C" fn capture_out_callback(
-            this: &mut Object,
+            this: *mut AnyObject,
             _: Sel,
-            _: *mut Object,
+            _: *mut AnyObject,
             didOutputSampleBuffer: CMSampleBufferRef,
-            _: *mut Object,
+            _: *mut AnyObject,
         ) {
             let image_buffer: CVImageBufferRef =
                 unsafe { CMSampleBufferGetImageBuffer(didOutputSampleBuffer) };
@@ -81,7 +80,7 @@ static CALLBACK_CLASS: Lazy<&'static Class> = Lazy::new(|| {
 
             unsafe { CVPixelBufferUnlockBaseAddress(image_buffer, 0) };
 
-            let bufferlck_cv: *const c_void = unsafe { msg_send![this, bufferPtr] };
+            let bufferlck_cv: *const c_void = unsafe { objc2::msg_send![this, bufferPtr] };
             let buffer_sndr = unsafe {
                 let ptr = bufferlck_cv.cast::<Sender<(Vec<u8>, FrameFormat)>>();
                 Arc::from_raw(ptr)
@@ -92,67 +91,79 @@ static CALLBACK_CLASS: Lazy<&'static Class> = Lazy::new(|| {
 
         #[allow(non_snake_case)]
         extern "C" fn capture_drop_callback(
-            _: &mut Object,
+            _: *mut AnyObject,
             _: Sel,
-            _: *mut Object,
-            _: *mut Object,
-            _: *mut Object,
+            _: *mut AnyObject,
+            _: *mut AnyObject,
+            _: *mut AnyObject,
         ) {
         }
 
         unsafe {
-            decl.add_method(
-                sel!(bufferPtr),
-                my_callback_get_arcmutptr as extern "C" fn(&Object, Sel) -> *const c_void,
+            builder.add_method(
+                objc2::sel!(bufferPtr),
+                my_callback_get_arcmutptr as extern "C" fn(*mut AnyObject, Sel) -> *const c_void,
             );
-            decl.add_method(
-                sel!(SetBufferPtr:),
-                my_callback_set_arcmutptr as extern "C" fn(&mut Object, Sel, *const c_void),
+            builder.add_method(
+                objc2::sel!(SetBufferPtr:),
+                my_callback_set_arcmutptr as extern "C" fn(*mut AnyObject, Sel, *const c_void),
             );
-            decl.add_method(
-                sel!(captureOutput:didOutputSampleBuffer:fromConnection:),
+            builder.add_method(
+                objc2::sel!(captureOutput:didOutputSampleBuffer:fromConnection:),
                 capture_out_callback
-                    as extern "C" fn(&mut Object, Sel, *mut Object, CMSampleBufferRef, *mut Object),
+                    as extern "C" fn(
+                        *mut AnyObject,
+                        Sel,
+                        *mut AnyObject,
+                        CMSampleBufferRef,
+                        *mut AnyObject,
+                    ),
             );
-            decl.add_method(
-                sel!(captureOutput:didDropSampleBuffer:fromConnection:),
+            builder.add_method(
+                objc2::sel!(captureOutput:didDropSampleBuffer:fromConnection:),
                 capture_drop_callback
-                    as extern "C" fn(&mut Object, Sel, *mut Object, *mut Object, *mut Object),
+                    as extern "C" fn(
+                        *mut AnyObject,
+                        Sel,
+                        *mut AnyObject,
+                        *mut AnyObject,
+                        *mut AnyObject,
+                    ),
             );
 
-            decl.add_protocol(
-                Protocol::get("AVCaptureVideoDataOutputSampleBufferDelegate").unwrap(),
+            builder.add_protocol(
+                AnyProtocol::get(c"AVCaptureVideoDataOutputSampleBufferDelegate").unwrap(),
             );
         }
 
-        decl.register()
+        builder.register()
     }
 });
 
 pub fn request_permission_with_callback(callback: impl Fn(bool) + Send + Sync + 'static) {
-    let cls = class!(AVCaptureDevice);
+    let cls = objc2::class!(AVCaptureDevice);
 
-    let wrapper = move |bool: BOOL| {
-        callback(bool == YES);
+    let wrapper = move |b: Bool| {
+        callback(b.as_bool());
     };
 
-    let objc_fn_block: ConcreteBlock<(BOOL,), (), _> = ConcreteBlock::new(wrapper);
-    let objc_fn_pass = objc_fn_block.copy();
+    let objc_fn_pass = RcBlock::new(wrapper);
 
     unsafe {
-        let _: () = msg_send![cls, requestAccessForMediaType:(AVMediaTypeVideo.clone()) completionHandler:objc_fn_pass];
+        let _: () = objc2::msg_send![cls, requestAccessForMediaType: (AVMediaTypeVideo.clone()), completionHandler: &*objc_fn_pass];
     }
 }
 
 pub fn current_authorization_status() -> AVAuthorizationStatus {
-    let cls = class!(AVCaptureDevice);
-    let status: AVAuthorizationStatus =
-        unsafe { msg_send![cls, authorizationStatusForMediaType:AVMediaType::Video.into_ns_str()] };
+    let cls = objc2::class!(AVCaptureDevice);
+    let status: AVAuthorizationStatus = unsafe {
+        objc2::msg_send![cls, authorizationStatusForMediaType:AVMediaType::Video.into_ns_str()]
+    };
     status
 }
 
 pub struct AVCaptureVideoCallback {
-    pub(crate) delegate: *mut Object,
+    pub(crate) delegate: *mut AnyObject,
     pub(crate) queue: NSObject,
 }
 
@@ -161,15 +172,15 @@ impl AVCaptureVideoCallback {
         device_spec: &CStr,
         buffer: &Arc<Sender<(Vec<u8>, FrameFormat)>>,
     ) -> Result<Self, NokhwaError> {
-        let cls = &CALLBACK_CLASS as &Class;
-        let delegate: *mut Object = unsafe { msg_send![cls, alloc] };
-        let delegate: *mut Object = unsafe { msg_send![delegate, init] };
+        let cls = &CALLBACK_CLASS as &AnyClass;
+        let delegate: *mut AnyObject = unsafe { objc2::msg_send![cls, alloc] };
+        let delegate: *mut AnyObject = unsafe { objc2::msg_send![delegate, init] };
         let buffer_as_ptr = {
             let arc_raw = Arc::as_ptr(buffer);
             arc_raw.cast::<c_void>()
         };
         unsafe {
-            let _: () = msg_send![delegate, SetBufferPtr: buffer_as_ptr];
+            let _: () = objc2::msg_send![delegate, SetBufferPtr: buffer_as_ptr];
         }
 
         let queue =
@@ -179,10 +190,10 @@ impl AVCaptureVideoCallback {
     }
 
     pub fn data_len(&self) -> usize {
-        unsafe { msg_send![self.delegate, dataLength] }
+        unsafe { objc2::msg_send![self.delegate, dataLength] }
     }
 
-    pub fn inner(&self) -> *mut Object {
+    pub fn inner(&self) -> *mut AnyObject {
         self.delegate
     }
 

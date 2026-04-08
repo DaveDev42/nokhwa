@@ -4,43 +4,29 @@ use core_media_sys::{
     CMBlockBufferRef, CMFormatDescriptionRef, CMSampleBufferRef, CMTime, CMVideoDimensions,
     FourCharCode,
 };
-use objc::{runtime::Object, Message};
-use std::ops::Deref;
+use objc2::encode::{Encode, Encoding};
+use objc2::runtime::AnyObject;
 
 pub type CGFloat = std::ffi::c_float;
 
-pub type Id = *mut Object;
+pub type Id = *mut AnyObject;
 
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct NSObject(pub Id);
-impl Deref for NSObject {
-    type Target = Object;
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.0 }
-    }
-}
-unsafe impl Message for NSObject {}
-impl NSObject {
-    pub fn alloc() -> Self {
-        Self(unsafe { msg_send!(objc::class!(NSObject), alloc) })
-    }
+
+// SAFETY: NSObject is repr(transparent) over *mut AnyObject, which is a pointer.
+unsafe impl Encode for NSObject {
+    const ENCODING: Encoding = Encoding::Object;
 }
 
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct NSString(pub Id);
-impl Deref for NSString {
-    type Target = Object;
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.0 }
-    }
-}
-unsafe impl Message for NSString {}
-impl NSString {
-    pub fn alloc() -> Self {
-        Self(unsafe { msg_send!(objc::class!(NSString), alloc) })
-    }
+
+// SAFETY: NSString is repr(transparent) over *mut AnyObject, which is a pointer.
+unsafe impl Encode for NSString {
+    const ENCODING: Encoding = Encoding::Object;
 }
 
 pub type AVMediaType = NSString;
@@ -95,6 +81,11 @@ pub struct CGPoint {
     pub y: CGFloat,
 }
 
+// SAFETY: CGPoint is repr(C) with two f32 fields, matching {ff} encoding.
+unsafe impl Encode for CGPoint {
+    const ENCODING: Encoding = Encoding::Struct("CGPoint", &[Encoding::Float, Encoding::Float]);
+}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct __CVBuffer {
@@ -108,6 +99,45 @@ pub struct AVCaptureWhiteBalanceGains {
     pub blueGain: f32,
     pub greenGain: f32,
     pub redGain: f32,
+}
+
+// SAFETY: AVCaptureWhiteBalanceGains is repr(C) with three f32 fields.
+unsafe impl Encode for AVCaptureWhiteBalanceGains {
+    const ENCODING: Encoding = Encoding::Struct(
+        "AVCaptureWhiteBalanceGains",
+        &[Encoding::Float, Encoding::Float, Encoding::Float],
+    );
+}
+
+/// A local newtype wrapper around `CMTime` to implement `Encode`.
+/// This is needed because both `CMTime` and `Encode` are from external crates.
+#[repr(transparent)]
+#[derive(Debug, Copy, Clone)]
+pub struct EncodableCMTime(pub CMTime);
+
+// SAFETY: EncodableCMTime is repr(transparent) over CMTime which is repr(C) with fields {i64, i32, u32, i64}.
+unsafe impl Encode for EncodableCMTime {
+    const ENCODING: Encoding = Encoding::Struct(
+        "CMTime",
+        &[
+            Encoding::LongLong,
+            Encoding::Int,
+            Encoding::UInt,
+            Encoding::LongLong,
+        ],
+    );
+}
+
+impl From<EncodableCMTime> for CMTime {
+    fn from(e: EncodableCMTime) -> CMTime {
+        e.0
+    }
+}
+
+impl From<CMTime> for EncodableCMTime {
+    fn from(t: CMTime) -> EncodableCMTime {
+        EncodableCMTime(t)
+    }
 }
 
 pub type CVBufferRef = *mut __CVBuffer;

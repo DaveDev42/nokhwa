@@ -5,7 +5,8 @@ use crate::ffi::{
 };
 use crate::util::{compare_ns_string, nsstr_to_str, str_to_nsstr};
 use nokhwa_core::error::NokhwaError;
-use objc::runtime::{Object, BOOL, YES};
+use objc2::encode::{Encode, Encoding};
+use objc2::runtime::AnyObject;
 use std::convert::TryFrom;
 
 #[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
@@ -20,7 +21,7 @@ pub enum AVCaptureDeviceType {
     External,
 }
 
-impl From<AVCaptureDeviceType> for *mut Object {
+impl From<AVCaptureDeviceType> for *mut AnyObject {
     fn from(device_type: AVCaptureDeviceType) -> Self {
         match device_type {
             AVCaptureDeviceType::Dual => str_to_nsstr("AVCaptureDeviceTypeBuiltInDualCamera"),
@@ -46,8 +47,8 @@ impl From<AVCaptureDeviceType> for *mut Object {
 }
 
 impl AVCaptureDeviceType {
-    pub fn into_ns_str(self) -> *mut Object {
-        <*mut Object>::from(self)
+    pub fn into_ns_str(self) -> *mut AnyObject {
+        <*mut AnyObject>::from(self)
     }
 }
 
@@ -65,7 +66,7 @@ pub enum AVMediaType {
     Video,
 }
 
-impl From<AVMediaType> for *mut Object {
+impl From<AVMediaType> for *mut AnyObject {
     fn from(media_type: AVMediaType) -> Self {
         match media_type {
             AVMediaType::Audio => unsafe { AVMediaTypeAudio.0 },
@@ -82,10 +83,10 @@ impl From<AVMediaType> for *mut Object {
     }
 }
 
-impl TryFrom<*mut Object> for AVMediaType {
+impl TryFrom<*mut AnyObject> for AVMediaType {
     type Error = NokhwaError;
 
-    fn try_from(value: *mut Object) -> Result<Self, Self::Error> {
+    fn try_from(value: *mut AnyObject) -> Result<Self, Self::Error> {
         unsafe {
             if compare_ns_string(value, (AVMediaTypeAudio).clone()) {
                 Ok(AVMediaType::Audio)
@@ -119,8 +120,8 @@ impl TryFrom<*mut Object> for AVMediaType {
 }
 
 impl AVMediaType {
-    pub fn into_ns_str(self) -> *mut Object {
-        <*mut Object>::from(self)
+    pub fn into_ns_str(self) -> *mut AnyObject {
+        <*mut AnyObject>::from(self)
     }
 }
 
@@ -132,6 +133,11 @@ pub enum AVCaptureDevicePosition {
     Front = 2,
 }
 
+// SAFETY: AVCaptureDevicePosition is repr(isize), same encoding as NSInteger.
+unsafe impl Encode for AVCaptureDevicePosition {
+    const ENCODING: Encoding = isize::ENCODING;
+}
+
 #[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
 #[repr(isize)]
 pub enum AVAuthorizationStatus {
@@ -139,4 +145,9 @@ pub enum AVAuthorizationStatus {
     Restricted = 1,
     Denied = 2,
     Authorized = 3,
+}
+
+// SAFETY: AVAuthorizationStatus is repr(isize), same encoding as NSInteger.
+unsafe impl Encode for AVAuthorizationStatus {
+    const ENCODING: Encoding = isize::ENCODING;
 }

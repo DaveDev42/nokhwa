@@ -23,10 +23,6 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-#[macro_use]
-extern crate objc;
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod callback;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod device;

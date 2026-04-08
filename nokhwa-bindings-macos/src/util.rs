@@ -1,5 +1,4 @@
-use crate::ffi::{CGFloat, NSObject, OSType};
-use cocoa_foundation::foundation::{NSArray, NSString};
+use crate::ffi::OSType;
 use core_media_sys::{
     kCMPixelFormat_24RGB, kCMPixelFormat_422YpCbCr8_yuvs, kCMPixelFormat_8IndexedGray_WhiteIsZero,
     kCMVideoCodecType_422YpCbCr8, kCMVideoCodecType_JPEG, kCMVideoCodecType_JPEG_OpenDML,
@@ -11,11 +10,11 @@ use core_video_sys::{
 };
 use flume::{Receiver, Sender};
 use nokhwa_core::types::FrameFormat;
-use objc::runtime::{objc_getClass, Object};
+use objc2::runtime::AnyObject;
 use std::{
     borrow::Cow,
     error::Error,
-    ffi::{c_void, CStr, CString},
+    ffi::{c_void, CStr},
 };
 
 pub(crate) const UTF8_ENCODING: usize = 4;
@@ -26,14 +25,14 @@ macro_rules! create_boilerplate_impl {
     } => {
         $(
             $class_vis struct $class_name {
-                inner: *mut Object,
+                inner: *mut AnyObject,
                 $(
                     $field_vis $field_name : $field_type
                 )*
             }
 
             impl $class_name {
-                pub fn inner(&self) -> *mut Object {
+                pub fn inner(&self) -> *mut AnyObject {
                     self.inner
                 }
             }
@@ -45,17 +44,17 @@ macro_rules! create_boilerplate_impl {
     } => {
         $(
             $class_vis struct $class_name {
-                inner: *mut Object,
+                inner: *mut AnyObject,
             }
 
             impl $class_name {
-                pub fn inner(&self) -> *mut Object {
+                pub fn inner(&self) -> *mut AnyObject {
                     self.inner
                 }
             }
 
-            impl From<*mut Object> for $class_name {
-                fn from(obj: *mut Object) -> Self {
+            impl From<*mut AnyObject> for $class_name {
+                fn from(obj: *mut AnyObject) -> Self {
                     $class_name {
                         inner: obj,
                     }
@@ -66,67 +65,67 @@ macro_rules! create_boilerplate_impl {
 }
 pub(crate) use create_boilerplate_impl;
 
-pub(crate) fn str_to_nsstr(string: &str) -> *mut Object {
-    let cls = class!(NSString);
+pub(crate) fn str_to_nsstr(string: &str) -> *mut AnyObject {
+    let cls = objc2::class!(NSString);
     let bytes = string.as_ptr() as *const c_void;
     unsafe {
-        let obj: *mut Object = msg_send![cls, alloc];
-        let obj: *mut Object = msg_send![
+        let obj: *mut AnyObject = objc2::msg_send![cls, alloc];
+        let obj: *mut AnyObject = objc2::msg_send![
             obj,
-            initWithBytes:bytes
-            length:string.len()
+            initWithBytes:bytes,
+            length:string.len(),
             encoding:UTF8_ENCODING
         ];
         obj
     }
 }
 
-pub(crate) fn nsstr_to_str<'a>(nsstr: *mut Object) -> Cow<'a, str> {
-    let data = unsafe { CStr::from_ptr(nsstr.UTF8String()) };
+pub(crate) fn nsstr_to_str<'a>(nsstr: *mut AnyObject) -> Cow<'a, str> {
+    let utf8ptr: *const std::os::raw::c_char = unsafe { objc2::msg_send![nsstr, UTF8String] };
+    let data = unsafe { CStr::from_ptr(utf8ptr) };
     data.to_string_lossy()
 }
 
-pub(crate) fn vec_to_ns_arr<T: Into<*mut Object>>(data: Vec<T>) -> *mut Object {
-    let cstr = CString::new("NSMutableArray").unwrap();
-    let ns_arr_cls = unsafe { objc_getClass(cstr.as_ptr()) };
-    let mutable_array: *mut Object = unsafe { msg_send![ns_arr_cls, array] };
+pub(crate) fn vec_to_ns_arr<T: Into<*mut AnyObject>>(data: Vec<T>) -> *mut AnyObject {
+    let ns_arr_cls = objc2::class!(NSMutableArray);
+    let mutable_array: *mut AnyObject = unsafe { objc2::msg_send![ns_arr_cls, array] };
     data.into_iter().for_each(|item| {
-        let item_obj: *mut Object = item.into();
-        let _: () = unsafe { msg_send![mutable_array, addObject: item_obj] };
+        let item_obj: *mut AnyObject = item.into();
+        let _: () = unsafe { objc2::msg_send![mutable_array, addObject: item_obj] };
     });
     mutable_array
 }
 
-pub(crate) fn ns_arr_to_vec<T: From<*mut Object>>(data: *mut Object) -> Vec<T> {
-    let length = unsafe { NSArray::count(data) };
+pub(crate) fn ns_arr_to_vec<T: From<*mut AnyObject>>(data: *mut AnyObject) -> Vec<T> {
+    let length: usize = unsafe { objc2::msg_send![data, count] };
 
-    let mut out_vec: Vec<T> = Vec::with_capacity(length as usize);
+    let mut out_vec: Vec<T> = Vec::with_capacity(length);
     for index in 0..length {
-        let item = unsafe { NSArray::objectAtIndex(data, index) };
+        let item: *mut AnyObject = unsafe { objc2::msg_send![data, objectAtIndex: index] };
         out_vec.push(T::from(item));
     }
     out_vec
 }
 
-pub(crate) fn try_ns_arr_to_vec<T, TE>(data: *mut Object) -> Result<Vec<T>, TE>
+pub(crate) fn try_ns_arr_to_vec<T, TE>(data: *mut AnyObject) -> Result<Vec<T>, TE>
 where
     TE: Error,
-    T: TryFrom<*mut Object, Error = TE>,
+    T: TryFrom<*mut AnyObject, Error = TE>,
 {
-    let length = unsafe { NSArray::count(data) };
+    let length: usize = unsafe { objc2::msg_send![data, count] };
 
-    let mut out_vec: Vec<T> = Vec::with_capacity(length as usize);
+    let mut out_vec: Vec<T> = Vec::with_capacity(length);
     for index in 0..length {
-        let item = unsafe { NSArray::objectAtIndex(data, index) };
+        let item: *mut AnyObject = unsafe { objc2::msg_send![data, objectAtIndex: index] };
         out_vec.push(T::try_from(item)?);
     }
     Ok(out_vec)
 }
 
-pub(crate) fn compare_ns_string(this: *mut Object, other: crate::ffi::NSString) -> bool {
+pub(crate) fn compare_ns_string(this: *mut AnyObject, other: crate::ffi::NSString) -> bool {
     unsafe {
-        let equal: objc::runtime::BOOL = msg_send![this, isEqualToString: other];
-        equal == objc::runtime::YES
+        let equal: bool = objc2::msg_send![this, isEqualToString: other];
+        equal
     }
 }
 

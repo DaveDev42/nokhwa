@@ -1,14 +1,8 @@
 use crate::callback::AVCaptureVideoCallback;
 use crate::device::{get_raw_device_info, AVCaptureDevice};
-use crate::ffi::{AVMediaTypeVideo, NSObject};
-use crate::types::{AVCaptureDeviceType, AVMediaType};
+use crate::ffi::AVMediaTypeVideo;
+use crate::types::AVCaptureDeviceType;
 use crate::util::{create_boilerplate_impl, vec_to_ns_arr};
-use cocoa_foundation::{
-    base::{nil, Nil},
-    foundation::{NSArray, NSDictionary, NSInteger, NSUInteger},
-};
-use core_foundation::base::TCFType;
-use core_foundation::number::CFNumber;
 use core_media_sys::{
     kCMPixelFormat_24RGB, kCMPixelFormat_422YpCbCr8_yuvs, kCMPixelFormat_8IndexedGray_WhiteIsZero,
     kCMVideoCodecType_JPEG,
@@ -20,7 +14,7 @@ use nokhwa_core::{
     error::NokhwaError,
     types::{CameraIndex, CameraInfo, FrameFormat},
 };
-use objc::runtime::{Object, BOOL, YES};
+use objc2::runtime::AnyObject;
 
 create_boilerplate_impl! {
     [pub AVCaptureDeviceDiscoverySession],
@@ -31,13 +25,13 @@ create_boilerplate_impl! {
 impl AVCaptureDeviceDiscoverySession {
     pub fn new(device_types: Vec<AVCaptureDeviceType>) -> Result<Self, NokhwaError> {
         let device_types = vec_to_ns_arr(device_types);
-        let position = 0 as NSInteger;
+        let position: isize = 0;
 
         let media_type_video = unsafe { AVMediaTypeVideo.clone() }.0;
 
-        let discovery_session_cls = class!(AVCaptureDeviceDiscoverySession);
-        let discovery_session: *mut Object = unsafe {
-            msg_send![discovery_session_cls, discoverySessionWithDeviceTypes:device_types mediaType:media_type_video position:position]
+        let discovery_session_cls = objc2::class!(AVCaptureDeviceDiscoverySession);
+        let discovery_session: *mut AnyObject = unsafe {
+            objc2::msg_send![discovery_session_cls, discoverySessionWithDeviceTypes:device_types, mediaType:media_type_video, position:position]
         };
 
         Ok(AVCaptureDeviceDiscoverySession {
@@ -57,11 +51,12 @@ impl AVCaptureDeviceDiscoverySession {
     }
 
     pub fn devices(&self) -> Vec<CameraInfo> {
-        let device_ns_array: *mut Object = unsafe { msg_send![self.inner, devices] };
-        let objects_len: NSUInteger = unsafe { NSArray::count(device_ns_array) };
-        let mut devices = Vec::with_capacity(objects_len as usize);
+        let device_ns_array: *mut AnyObject = unsafe { objc2::msg_send![self.inner, devices] };
+        let objects_len: usize = unsafe { objc2::msg_send![device_ns_array, count] };
+        let mut devices = Vec::with_capacity(objects_len);
         for index in 0..objects_len {
-            let device = unsafe { device_ns_array.objectAtIndex(index) };
+            let device: *mut AnyObject =
+                unsafe { objc2::msg_send![device_ns_array, objectAtIndex: index] };
             devices.push(get_raw_device_info(
                 CameraIndex::Index(index as u32),
                 device,
@@ -74,11 +69,11 @@ impl AVCaptureDeviceDiscoverySession {
 
 impl AVCaptureDeviceInput {
     pub fn new(capture_device: &AVCaptureDevice) -> Result<Self, NokhwaError> {
-        let cls = class!(AVCaptureDeviceInput);
+        let cls = objc2::class!(AVCaptureDeviceInput);
         let err_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
-        let capture_input: *mut Object = unsafe {
-            let allocated: *mut Object = msg_send![cls, alloc];
-            msg_send![allocated, initWithDevice:capture_device.inner() error:err_ptr]
+        let capture_input: *mut AnyObject = unsafe {
+            let allocated: *mut AnyObject = objc2::msg_send![cls, alloc];
+            objc2::msg_send![allocated, initWithDevice:capture_device.inner(), error:err_ptr]
         };
         if !err_ptr.is_null() {
             return Err(NokhwaError::InitializeError {
@@ -94,7 +89,7 @@ impl AVCaptureDeviceInput {
 }
 
 pub struct AVCaptureVideoDataOutput {
-    inner: *mut Object,
+    inner: *mut AnyObject,
 }
 
 impl AVCaptureVideoDataOutput {
@@ -104,9 +99,9 @@ impl AVCaptureVideoDataOutput {
 
     pub fn add_delegate(&self, delegate: &AVCaptureVideoCallback) -> Result<(), NokhwaError> {
         unsafe {
-            let _: () = msg_send![
+            let _: () = objc2::msg_send![
                 self.inner,
-                setSampleBufferDelegate: delegate.delegate
+                setSampleBufferDelegate: delegate.delegate,
                 queue: delegate.queue().0
             ];
         };
@@ -128,19 +123,26 @@ impl AVCaptureVideoDataOutput {
                 });
             }
         };
-        let obj = CFNumber::from(cmpixelfmt as i32);
-        let obj = obj.as_CFTypeRef() as *mut Object;
-        let key = unsafe { kCVPixelBufferPixelFormatTypeKey } as *mut Object;
-        let dict = unsafe { NSDictionary::dictionaryWithObject_forKey_(nil, obj, key) };
-        let _: () = unsafe { msg_send![self.inner, setVideoSettings:dict] };
+
+        // Create NSNumber from the pixel format value
+        let ns_number_cls = objc2::class!(NSNumber);
+        let obj: *mut AnyObject =
+            unsafe { objc2::msg_send![ns_number_cls, numberWithInt: cmpixelfmt as i32] };
+        let key = unsafe { kCVPixelBufferPixelFormatTypeKey } as *mut AnyObject;
+
+        // Create NSDictionary with the single key-value pair
+        let dict_cls = objc2::class!(NSDictionary);
+        let dict: *mut AnyObject =
+            unsafe { objc2::msg_send![dict_cls, dictionaryWithObject:obj, forKey:key] };
+        let _: () = unsafe { objc2::msg_send![self.inner, setVideoSettings:dict] };
         Ok(())
     }
 }
 
 impl Default for AVCaptureVideoDataOutput {
     fn default() -> Self {
-        let cls = class!(AVCaptureVideoDataOutput);
-        let inner: *mut Object = unsafe { msg_send![cls, new] };
+        let cls = objc2::class!(AVCaptureVideoDataOutput);
+        let inner: *mut AnyObject = unsafe { objc2::msg_send![cls, new] };
 
         AVCaptureVideoDataOutput { inner }
     }
@@ -152,21 +154,21 @@ impl AVCaptureSession {
     }
 
     pub fn begin_configuration(&self) {
-        unsafe { msg_send![self.inner, beginConfiguration] }
+        unsafe { objc2::msg_send![self.inner, beginConfiguration] }
     }
 
     pub fn commit_configuration(&self) {
-        unsafe { msg_send![self.inner, commitConfiguration] }
+        unsafe { objc2::msg_send![self.inner, commitConfiguration] }
     }
 
     pub fn can_add_input(&self, input: &AVCaptureDeviceInput) -> bool {
-        let result: BOOL = unsafe { msg_send![self.inner, canAddInput:input.inner] };
-        result == YES
+        let result: bool = unsafe { objc2::msg_send![self.inner, canAddInput:input.inner] };
+        result
     }
 
     pub fn add_input(&self, input: &AVCaptureDeviceInput) -> Result<(), NokhwaError> {
         if self.can_add_input(input) {
-            let _: () = unsafe { msg_send![self.inner, addInput:input.inner] };
+            let _: () = unsafe { objc2::msg_send![self.inner, addInput:input.inner] };
             return Ok(());
         }
         Err(NokhwaError::SetPropertyError {
@@ -177,17 +179,17 @@ impl AVCaptureSession {
     }
 
     pub fn remove_input(&self, input: &AVCaptureDeviceInput) {
-        unsafe { msg_send![self.inner, removeInput:input.inner] }
+        unsafe { objc2::msg_send![self.inner, removeInput:input.inner] }
     }
 
     pub fn can_add_output(&self, output: &AVCaptureVideoDataOutput) -> bool {
-        let result: BOOL = unsafe { msg_send![self.inner, canAddOutput:output.inner] };
-        result == YES
+        let result: bool = unsafe { objc2::msg_send![self.inner, canAddOutput:output.inner] };
+        result
     }
 
     pub fn add_output(&self, output: &AVCaptureVideoDataOutput) -> Result<(), NokhwaError> {
         if self.can_add_output(output) {
-            let _: () = unsafe { msg_send![self.inner, addOutput:output.inner] };
+            let _: () = unsafe { objc2::msg_send![self.inner, addOutput:output.inner] };
             return Ok(());
         }
         Err(NokhwaError::SetPropertyError {
@@ -198,18 +200,19 @@ impl AVCaptureSession {
     }
 
     pub fn remove_output(&self, output: &AVCaptureVideoDataOutput) {
-        unsafe { msg_send![self.inner, removeOutput:output.inner] }
+        unsafe { objc2::msg_send![self.inner, removeOutput:output.inner] }
     }
 
     pub fn is_running(&self) -> bool {
-        let running: BOOL = unsafe { msg_send![self.inner, isRunning] };
-        running == YES
+        let running: bool = unsafe { objc2::msg_send![self.inner, isRunning] };
+        running
     }
 
     pub fn start(&self) -> Result<(), NokhwaError> {
-        let start_stream_fn = || {
-            let _: () = unsafe { msg_send![self.inner, startRunning] };
-        };
+        let inner = self.inner;
+        let start_stream_fn = std::panic::AssertUnwindSafe(move || {
+            let _: () = unsafe { objc2::msg_send![inner, startRunning] };
+        });
 
         if std::panic::catch_unwind(start_stream_fn).is_err() {
             return Err(NokhwaError::OpenStreamError(
@@ -220,21 +223,21 @@ impl AVCaptureSession {
     }
 
     pub fn stop(&self) {
-        unsafe { msg_send![self.inner, stopRunning] }
+        unsafe { objc2::msg_send![self.inner, stopRunning] }
     }
 
     pub fn is_interrupted(&self) -> bool {
-        let interrupted: BOOL = unsafe { msg_send![self.inner, isInterrupted] };
-        interrupted == YES
+        let interrupted: bool = unsafe { objc2::msg_send![self.inner, isInterrupted] };
+        interrupted
     }
 }
 
 impl Default for AVCaptureSession {
     fn default() -> Self {
-        let cls = class!(AVCaptureSession);
-        let session: *mut Object = {
-            let alloc: *mut Object = unsafe { msg_send![cls, alloc] };
-            unsafe { msg_send![alloc, init] }
+        let cls = objc2::class!(AVCaptureSession);
+        let session: *mut AnyObject = {
+            let alloc: *mut AnyObject = unsafe { objc2::msg_send![cls, alloc] };
+            unsafe { objc2::msg_send![alloc, init] }
         };
         AVCaptureSession { inner: session }
     }
