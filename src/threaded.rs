@@ -81,7 +81,7 @@ impl CallbackCamera {
             frame_callback: Arc::new(Mutex::new(Box::new(callback))),
             last_frame_captured: Arc::new(Mutex::new(Buffer::new(
                 Resolution::new(0, 0),
-                &vec![],
+                &[],
                 FrameFormat::GRAY,
             ))),
             die_bool: Arc::new(Default::default()),
@@ -136,11 +136,8 @@ impl CallbackCamera {
         *self
             .last_frame_captured
             .lock()
-            .map_err(|why| NokhwaError::GeneralError(why.to_string()))? = Buffer::new(
-            new_fmt.resolution(),
-            &Vec::default(),
-            self.camera_format()?.format(),
-        );
+            .map_err(|why| NokhwaError::GeneralError(why.to_string()))? =
+            Buffer::new(new_fmt.resolution(), &[], self.camera_format()?.format());
         let formats = vec![new_fmt.format()];
         let request = RequestedFormat::with_formats(RequestedFormatType::Exact(new_fmt), &formats);
         let set_fmt = self.camera.lock().set_camera_requset(request)?;
@@ -199,7 +196,7 @@ impl CallbackCamera {
             .last_frame_captured
             .lock()
             .map_err(|why| NokhwaError::GeneralError(why.to_string()))? =
-            Buffer::new(new_res, &Vec::default(), self.camera_format()?.format());
+            Buffer::new(new_res, &[], self.camera_format()?.format());
         self.camera.lock().set_resolution(new_res)
     }
 
@@ -400,7 +397,7 @@ impl CallbackCamera {
 impl Drop for CallbackCamera {
     fn drop(&mut self) {
         let _stop_stream_err = self.stop_stream();
-        self.die_bool.store(true, Ordering::SeqCst);
+        self.die_bool.store(true, Ordering::Relaxed);
     }
 }
 
@@ -411,17 +408,27 @@ fn camera_frame_thread_loop(
     die_bool: Arc<AtomicBool>,
 ) {
     loop {
-        let mut camera = camera.lock();
-        if let Ok(frame) = camera.frame() {
-            if let Ok(mut last_frame) = last_frame_captured.lock() {
-                *last_frame = frame.clone();
+        if die_bool.load(Ordering::Relaxed) {
+            break;
+        }
+
+        let frame = {
+            let mut camera = camera.lock();
+            camera.frame()
+        };
+
+        match frame {
+            Ok(frame) => {
+                if let Ok(mut last_frame) = last_frame_captured.lock() {
+                    *last_frame = frame.clone();
+                }
                 if let Ok(mut cb) = frame_callback.lock() {
                     cb(frame);
                 }
             }
-        }
-        if die_bool.load(Ordering::SeqCst) {
-            break;
+            Err(_) => {
+                std::thread::yield_now();
+            }
         }
     }
 }
