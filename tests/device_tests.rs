@@ -10,14 +10,11 @@ use nokhwa::{native_api_backend, query, Buffer, Camera};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-/// Skip test if no camera is available instead of failing.
-fn require_camera() -> CameraIndex {
+/// Returns the first camera index, or None if no camera is available.
+fn require_camera() -> Option<CameraIndex> {
     match query(native_api_backend().unwrap()) {
-        Ok(cameras) if !cameras.is_empty() => cameras[0].index().clone(),
-        _ => {
-            eprintln!("SKIP: no camera device found");
-            std::process::exit(0);
-        }
+        Ok(cameras) if !cameras.is_empty() => Some(cameras[0].index().clone()),
+        _ => None,
     }
 }
 
@@ -37,7 +34,10 @@ fn query_devices_returns_cameras() {
 
 #[test]
 fn open_camera_and_capture_frame() {
-    let idx = require_camera();
+    let Some(idx) = require_camera() else {
+        eprintln!("SKIP: no camera device found");
+        return;
+    };
     let format = RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
     let mut camera = Camera::new(idx, format).expect("failed to open camera");
 
@@ -45,7 +45,7 @@ fn open_camera_and_capture_frame() {
     assert!(camera.is_stream_open());
 
     let frame: Buffer = camera.frame().expect("failed to capture frame");
-    assert!(frame.buffer().len() > 0, "frame buffer is empty");
+    assert!(!frame.buffer().is_empty(), "frame buffer is empty");
     assert!(frame.resolution().width() > 0);
     assert!(frame.resolution().height() > 0);
 
@@ -54,7 +54,10 @@ fn open_camera_and_capture_frame() {
 
 #[test]
 fn query_compatible_formats() {
-    let idx = require_camera();
+    let Some(idx) = require_camera() else {
+        eprintln!("SKIP: no camera device found");
+        return;
+    };
     let format = RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
     let mut camera = Camera::new(idx, format).expect("failed to open camera");
 
@@ -73,7 +76,10 @@ fn query_compatible_formats() {
 #[cfg(feature = "output-threaded")]
 #[test]
 fn callback_camera_receives_frames() {
-    let idx = require_camera();
+    let Some(idx) = require_camera() else {
+        eprintln!("SKIP: no camera device found");
+        return;
+    };
     let received = Arc::new(AtomicBool::new(false));
     let received_clone = received.clone();
 

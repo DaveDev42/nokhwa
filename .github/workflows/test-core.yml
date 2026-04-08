@@ -12,6 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
       - run: cargo test -p nokhwa-core
 
   check-features:
@@ -23,8 +24,8 @@ jobs:
         features:
           - output-threaded
           - output-wgpu
-          - decoding
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
       - run: cargo check --features ${{ matrix.features }}

@@ -3,6 +3,7 @@ name: Device Test
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   device-test:
