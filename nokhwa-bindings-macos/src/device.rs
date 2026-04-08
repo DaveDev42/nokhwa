@@ -638,8 +638,13 @@ impl AVCaptureDevice {
             unsafe { objc2::msg_send![self.inner, deviceWhiteBalanceGains] };
         let white_balance_default: AVCaptureWhiteBalanceGains =
             unsafe { objc2::msg_send![self.inner, grayWorldDeviceWhiteBalanceGains] };
-        let white_balance_max: AVCaptureWhiteBalanceGains =
+        let white_balance_max_scalar: f32 =
             unsafe { objc2::msg_send![self.inner, maxWhiteBalanceGain] };
+        let white_balance_max = AVCaptureWhiteBalanceGains {
+            redGain: white_balance_max_scalar,
+            greenGain: white_balance_max_scalar,
+            blueGain: white_balance_max_scalar,
+        };
         let white_balance_gain_supported: bool = unsafe {
             objc2::msg_send![
                 self.inner,
@@ -680,7 +685,6 @@ impl AVCaptureDevice {
 
         // get flash
         let has_torch: bool = unsafe { objc2::msg_send![self.inner, isTorchAvailable] };
-        let torch_active: bool = unsafe { objc2::msg_send![self.inner, isTorchActive] };
         let torch_off: bool =
             unsafe { objc2::msg_send![self.inner, isTorchModeSupported: 0_isize] };
         let torch_on: bool = unsafe { objc2::msg_send![self.inner, isTorchModeSupported: 1_isize] };
@@ -700,15 +704,17 @@ impl AVCaptureDevice {
                 possible.push(2);
             }
 
+            let torch_mode_current: isize = unsafe { objc2::msg_send![self.inner, torchMode] };
+
             controls.push(CameraControl::new(
                 KnownCameraControl::Other(5),
                 "TorchMode".to_string(),
                 ControlValueDescription::Enum {
-                    value: torch_active as i64,
+                    value: torch_mode_current as i64,
                     possible,
                     default: 0,
                 },
-                if has_torch {
+                if !has_torch {
                     vec![
                         KnownCameraControlFlag::Disabled,
                         KnownCameraControlFlag::ReadOnly,

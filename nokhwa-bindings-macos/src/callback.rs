@@ -41,7 +41,8 @@ static CALLBACK_CLASS: LazyLock<&'static AnyClass> = LazyLock::new(|| {
     }
 
     // Delegate compliance method
-    // SAFETY: This assumes that the buffer byte size is a u8. Any other size will cause unsafety.
+    // SAFETY: Reads pixel data from CVPixelBuffer while base address lock is held.
+    // The lock guarantees buffer_ptr is valid and buffer_length bytes are readable.
     #[allow(non_snake_case)]
     #[allow(non_upper_case_globals)]
     extern "C" fn capture_out_callback(
