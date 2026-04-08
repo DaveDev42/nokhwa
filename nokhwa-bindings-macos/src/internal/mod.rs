@@ -273,5 +273,6 @@ pub(crate) use create_boilerplate_impl;
 
 pub use callback::*;
 pub use device::*;
-pub use helpers::*;
+pub(crate) use helpers::*;
+pub use helpers::{CompressionData, DataPipe};
 pub use session::*;

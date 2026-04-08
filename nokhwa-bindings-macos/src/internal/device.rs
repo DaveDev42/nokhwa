@@ -185,7 +185,7 @@ pub enum AVAuthorizationStatus {
 
 pub struct AVCaptureVideoCallback {
     pub(crate) delegate: *mut Object,
-    pub(crate) queue: NSObject,
+    queue: NSObject,
 }
 
 impl AVCaptureVideoCallback {
