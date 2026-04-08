@@ -221,7 +221,7 @@ pub mod wmf {
             };
 
             let frame_rates = {
-                let mut rates = vec![];
+                let mut rates = Vec::with_capacity(3);
                 for attr in [
                     &MF_MT_FRAME_RATE_RANGE_MAX,
                     &MF_MT_FRAME_RATE,
