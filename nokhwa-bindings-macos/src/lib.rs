@@ -21,6 +21,8 @@
 // <some change so we can call this 0.10.4>
 
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(unexpected_cfgs)]
+#![allow(deprecated)]
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 #[macro_use]
@@ -817,6 +819,7 @@ mod internal {
             })
         }
 
+        #[allow(clippy::should_implement_trait)]
         pub fn default() -> Result<Self, NokhwaError> {
             AVCaptureDeviceDiscoverySession::new(vec![
                 AVCaptureDeviceType::UltraWide,
@@ -962,7 +965,7 @@ mod internal {
                 });
             }
             // Space these out for debug purposes
-            if !accepted == YES {
+            if accepted != YES {
                 return Err(NokhwaError::SetPropertyError {
                     property: "lockForConfiguration".to_string(),
                     value: "Locked".to_string(),
@@ -2232,9 +2235,9 @@ mod internal {
                     CameraFormat::new(resolution, fourcc, fps)
                 })
                 .collect::<Vec<_>>();
-            a.sort_by(|a, b| a.frame_rate().cmp(&b.frame_rate()));
+            a.sort_by_key(|a| a.frame_rate());
 
-            if a.len() != 0 {
+            if !a.is_empty() {
                 Ok(a[a.len() - 1])
             } else {
                 Err(NokhwaError::GetPropertyError {

@@ -84,15 +84,16 @@ impl CallbackCamera {
                 &[],
                 FrameFormat::GRAY,
             ))),
-            die_bool: Arc::new(Default::default()),
+            die_bool: Arc::new(AtomicBool::default()),
             current_camera,
             handle: Arc::new(Mutex::new(None)),
         }
     }
 
     /// Gets the current Camera's index.
+    #[must_use]
     pub fn index(&self) -> &CameraIndex {
-        &self.current_camera.index()
+        self.current_camera.index()
     }
 
     /// Sets the current Camera's index. Note that this re-initializes the camera.
@@ -106,6 +107,8 @@ impl CallbackCamera {
     }
 
     /// Gets the current Camera's backend
+    /// # Errors
+    /// This should not error under normal circumstances.
     pub fn backend(&self) -> Result<ApiBackend, NokhwaError> {
         Ok(self.camera.lock().backend())
     }
@@ -118,11 +121,14 @@ impl CallbackCamera {
     }
 
     /// Gets the camera information such as Name and Index as a [`CameraInfo`].
+    #[must_use]
     pub fn info(&self) -> &CameraInfo {
         &self.current_camera
     }
 
     /// Gets the current [`CameraFormat`].
+    /// # Errors
+    /// This should not error under normal circumstances.
     pub fn camera_format(&self) -> Result<CameraFormat, NokhwaError> {
         Ok(self.camera.lock().camera_format())
     }
@@ -183,6 +189,8 @@ impl CallbackCamera {
     }
 
     /// Gets the current camera resolution (See: [`Resolution`], [`CameraFormat`]).
+    /// # Errors
+    /// This should not error under normal circumstances.
     pub fn resolution(&self) -> Result<Resolution, NokhwaError> {
         Ok(self.camera.lock().resolution())
     }
@@ -201,6 +209,8 @@ impl CallbackCamera {
     }
 
     /// Gets the current camera framerate (See: [`CameraFormat`]).
+    /// # Errors
+    /// This should not error under normal circumstances.
     pub fn frame_rate(&self) -> Result<u32, NokhwaError> {
         Ok(self.camera.lock().frame_rate())
     }
@@ -214,6 +224,8 @@ impl CallbackCamera {
     }
 
     /// Gets the current camera's frame format (See: [`FrameFormat`], [`CameraFormat`]).
+    /// # Errors
+    /// This should not error under normal circumstances.
     pub fn frame_format(&self) -> Result<FrameFormat, NokhwaError> {
         Ok(self.camera.lock().frame_format())
     }
@@ -240,9 +252,7 @@ impl CallbackCamera {
         let known_controls = self.supported_camera_controls()?;
         let maybe_camera_controls = known_controls
             .iter()
-            .map(|x| self.camera_control(*x))
-            .filter(Result::is_ok)
-            .map(Result::unwrap)
+            .filter_map(|x| self.camera_control(*x).ok())
             .collect::<Vec<CameraControl>>();
 
         Ok(maybe_camera_controls)
@@ -334,7 +344,7 @@ impl CallbackCamera {
             let last_frame = self.last_frame_captured.clone();
             let callback = self.frame_callback.clone();
             let handle = std::thread::spawn(move || {
-                camera_frame_thread_loop(camera_clone, callback, last_frame, die_bool_clone)
+                camera_frame_thread_loop(&camera_clone, &callback, &last_frame, &die_bool_clone);
             });
             *handle_lock = Some(handle);
             Ok(())
@@ -346,6 +356,8 @@ impl CallbackCamera {
     }
 
     /// Sets the frame callback to the new specified function. This function will be called instead of the previous one(s).
+    /// # Errors
+    /// This will error if the internal mutex is poisoned.
     pub fn set_callback(
         &mut self,
         callback: impl FnMut(Buffer) + Send + 'static,
@@ -373,6 +385,8 @@ impl CallbackCamera {
     }
 
     /// Gets the last frame captured by the camera.
+    /// # Errors
+    /// This will error if the internal mutex is poisoned.
     pub fn last_frame(&self) -> Result<Buffer, NokhwaError> {
         Ok(self
             .last_frame_captured
@@ -382,6 +396,8 @@ impl CallbackCamera {
     }
 
     /// Checks if stream if open. If it is, it will return true.
+    /// # Errors
+    /// This should not error under normal circumstances.
     pub fn is_stream_open(&self) -> Result<bool, NokhwaError> {
         Ok(self.camera.lock().is_stream_open())
     }
@@ -407,10 +423,10 @@ impl Drop for CallbackCamera {
 }
 
 fn camera_frame_thread_loop(
-    camera: Arc<parking_lot::FairMutex<Camera>>,
-    frame_callback: HeldCallbackType,
-    last_frame_captured: AtomicLock<Buffer>,
-    die_bool: Arc<AtomicBool>,
+    camera: &Arc<parking_lot::FairMutex<Camera>>,
+    frame_callback: &HeldCallbackType,
+    last_frame_captured: &AtomicLock<Buffer>,
+    die_bool: &Arc<AtomicBool>,
 ) {
     loop {
         if die_bool.load(Ordering::Acquire) {

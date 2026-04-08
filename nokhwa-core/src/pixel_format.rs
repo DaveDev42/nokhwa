@@ -251,7 +251,7 @@ impl FormatDecoder for LumaFormat {
                 .chunks_exact(3)
                 .map(|x| {
                     let mut avg = 0;
-                    x.iter().for_each(|v| avg += u16::from(*v));
+                    for v in x { avg += u16::from(*v); }
                     (avg / 3) as u8
                 })
                 .collect()),
@@ -260,7 +260,7 @@ impl FormatDecoder for LumaFormat {
                 .chunks_exact(3)
                 .map(|x| {
                     let mut avg = 0;
-                    x.iter().for_each(|v| avg += u16::from(*v));
+                    for v in x { avg += u16::from(*v); }
                     (avg / 3) as u8
                 })
                 .collect()),
@@ -269,7 +269,7 @@ impl FormatDecoder for LumaFormat {
                 .chunks_exact(3)
                 .map(|x| {
                     let mut avg = 0;
-                    x.iter().for_each(|v| avg += u16::from(*v));
+                    for v in x { avg += u16::from(*v); }
                     (avg / 3) as u8
                 })
                 .collect()),
@@ -348,7 +348,7 @@ impl FormatDecoder for LumaAFormat {
                 .chunks_exact(3)
                 .flat_map(|x| {
                     let mut avg = 0;
-                    x.iter().for_each(|v| avg += u16::from(*v));
+                    for v in x { avg += u16::from(*v); }
                     [(avg / 3) as u8, 255]
                 })
                 .collect()),
@@ -357,7 +357,7 @@ impl FormatDecoder for LumaAFormat {
                 .chunks_exact(3)
                 .flat_map(|x| {
                     let mut avg = 0;
-                    x.iter().for_each(|v| avg += u16::from(*v));
+                    for v in x { avg += u16::from(*v); }
                     [(avg / 3) as u8, 255]
                 })
                 .collect()),
@@ -366,7 +366,7 @@ impl FormatDecoder for LumaAFormat {
                 .chunks_exact(3)
                 .flat_map(|x| {
                     let mut avg = 0;
-                    x.iter().for_each(|v| avg += u16::from(*v));
+                    for v in x { avg += u16::from(*v); }
                     [(avg / 3) as u8, 255]
                 })
                 .collect()),
@@ -443,6 +443,7 @@ impl FormatDecoder for LumaAFormat {
     }
 }
 
+/// ```ignore
 /// let image: ImageBuffer<Rgb<u8>, Vec<u8>> = buffer.to_image::<YuyvFormat>();
 /// ```
 #[derive(Copy, Clone, Debug, Default, Hash, Ord, PartialOrd, Eq, PartialEq)]
@@ -493,9 +494,10 @@ impl FormatDecoder for YuyvFormat {
     }
 }
 
+#[allow(clippy::similar_names)]
 fn private_convert_yuyv_to_i420(yuyv: &[u8], width: usize, height: usize) -> Vec<u8> {
     assert!(
-        width % 2 == 0 && height % 2 == 0,
+        width.is_multiple_of(2) && height.is_multiple_of(2),
         "Width and height must be even numbers."
     );
 
@@ -524,6 +526,7 @@ fn private_convert_yuyv_to_i420(yuyv: &[u8], width: usize, height: usize) -> Vec
     i420
 }
 
+#[allow(clippy::similar_names)]
 fn convert_yuyv_to_i420_direct(
     yuyv: &[u8],
     dest: &mut [u8],
