@@ -271,7 +271,7 @@ macro_rules! create_boilerplate_impl {
 
 pub(crate) use create_boilerplate_impl;
 
-pub use callback::*;
+pub(crate) use callback::*;
 pub use device::*;
 pub(crate) use helpers::*;
 pub use helpers::{CompressionData, DataPipe};
