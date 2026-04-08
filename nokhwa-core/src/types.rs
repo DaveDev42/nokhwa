@@ -167,7 +167,7 @@ impl RequestedFormat<'_> {
                         (dist_no_sqrt, res)
                     })
                     .collect::<Vec<(i32, Resolution)>>();
-                resolution_map.sort_by(|a, b| a.0.cmp(&b.0));
+                resolution_map.sort_by_key(|a| a.0);
                 resolution_map.dedup_by(|a, b| a.0.eq(&b.0));
                 let resolution = resolution_map.first()?.1;
 
@@ -188,7 +188,7 @@ impl RequestedFormat<'_> {
                         (abs.unsigned_abs(), *x)
                     })
                     .collect::<Vec<(u32, u32)>>();
-                framerate_map.sort_by(|a, b| a.0.cmp(&b.0));
+                framerate_map.sort_by_key(|a| a.0);
                 let frame_rate = framerate_map.first()?.1;
                 Some(CameraFormat::new(resolution, c.format(), frame_rate))
             }
@@ -929,7 +929,7 @@ impl Display for ControlValueDescription {
                 default,
                 step,
             } => {
-                write!(f, "(Current: {value}, Default: {default}, Step: {step})",)
+                write!(f, "(Current: {value}, Default: {default}, Step: {step})")
             }
             ControlValueDescription::IntegerRange {
                 min,
@@ -948,7 +948,7 @@ impl Display for ControlValueDescription {
                 default,
                 step,
             } => {
-                write!(f, "(Current: {value}, Default: {default}, Step: {step})",)
+                write!(f, "(Current: {value}, Default: {default}, Step: {step})")
             }
             ControlValueDescription::FloatRange {
                 min,
