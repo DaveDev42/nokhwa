@@ -7,7 +7,8 @@ use core_media_sys::{
 use objc2::encode::{Encode, Encoding};
 use objc2::runtime::AnyObject;
 
-pub type CGFloat = std::ffi::c_float;
+// CGFloat is f64 on 64-bit Apple platforms (all modern macOS/iOS)
+pub type CGFloat = std::ffi::c_double;
 
 pub type Id = *mut AnyObject;
 
@@ -83,7 +84,7 @@ pub struct CGPoint {
 
 // SAFETY: CGPoint is repr(C) with two f32 fields, matching {ff} encoding.
 unsafe impl Encode for CGPoint {
-    const ENCODING: Encoding = Encoding::Struct("CGPoint", &[Encoding::Float, Encoding::Float]);
+    const ENCODING: Encoding = Encoding::Struct("CGPoint", &[Encoding::Double, Encoding::Double]);
 }
 
 #[repr(C)]

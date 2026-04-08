@@ -25,6 +25,7 @@ static CALLBACK_CLASS: LazyLock<&'static AnyClass> = LazyLock::new(|| {
         // oooh scary provenannce-breaking BULLSHIT AAAAAA I LOVE TYPE ERASURE
         builder.add_ivar::<*const c_void>(c"_arcmutptr"); // ArkMutex, the not-arknights totally not gacha totally not ripoff new vidya game from l-pleasestop-npengtul
 
+        // TODO: Migrate to DeclaredClass + Ivar API when get_ivar/get_mut_ivar are removed in a future objc2 release
         #[allow(deprecated)]
         extern "C" fn my_callback_get_arcmutptr(this: *mut AnyObject, _: Sel) -> *const c_void {
             unsafe { *(*this).get_ivar("_arcmutptr") }

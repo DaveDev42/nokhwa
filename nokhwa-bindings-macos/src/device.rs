@@ -1065,7 +1065,7 @@ impl AVCaptureDevice {
                     property: id.to_string(),
                     value: value.to_string(),
                     error: "Expected float".to_string(),
-                })? as c_float;
+                })? as CGFloat;
 
                 if !ctrlvalue.description().verify_setter(&value) {
                     return Err(NokhwaError::SetPropertyError {
@@ -1200,8 +1200,8 @@ impl AVCaptureDevice {
                             error: "Expected Point".to_string(),
                         })
                         .map(|(x, y)| CGPoint {
-                            x: *x as f32,
-                            y: *y as f32,
+                            x: *x as CGFloat,
+                            y: *y as CGFloat,
                         })?;
 
                     if !ctrlvalue.description().verify_setter(&value) {
@@ -1291,8 +1291,8 @@ impl AVCaptureDevice {
                             error: "Expected Point".to_string(),
                         })
                         .map(|(x, y)| CGPoint {
-                            x: *x as f32,
-                            y: *y as f32,
+                            x: *x as CGFloat,
+                            y: *y as CGFloat,
                         })?;
 
                     if !ctrlvalue.description().verify_setter(&value) {

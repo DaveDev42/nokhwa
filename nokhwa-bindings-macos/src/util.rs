@@ -21,25 +21,6 @@ pub(crate) const UTF8_ENCODING: usize = 4;
 
 macro_rules! create_boilerplate_impl {
     {
-        $( [$class_vis:vis $class_name:ident : $( {$field_vis:vis $field_name:ident : $field_type:ty} ),*] ),+
-    } => {
-        $(
-            $class_vis struct $class_name {
-                inner: *mut AnyObject,
-                $(
-                    $field_vis $field_name : $field_type
-                )*
-            }
-
-            impl $class_name {
-                pub fn inner(&self) -> *mut AnyObject {
-                    self.inner
-                }
-            }
-        )+
-    };
-
-    {
         $( [$class_vis:vis $class_name:ident ] ),+
     } => {
         $(
