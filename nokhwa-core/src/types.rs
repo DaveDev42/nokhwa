@@ -87,6 +87,7 @@ impl RequestedFormat<'_> {
             RequestedFormatType::AbsoluteHighestResolution => {
                 let max_resolution = all_formats
                     .iter()
+                    .filter(|fmt| self.wanted_decoder.contains(&fmt.format()))
                     .max_by_key(|fmt| fmt.resolution())?
                     .resolution();
                 all_formats
@@ -101,6 +102,7 @@ impl RequestedFormat<'_> {
             RequestedFormatType::AbsoluteHighestFrameRate => {
                 let max_frame_rate = all_formats
                     .iter()
+                    .filter(|fmt| self.wanted_decoder.contains(&fmt.format()))
                     .max_by_key(|fmt| fmt.frame_rate())?
                     .frame_rate();
                 all_formats
