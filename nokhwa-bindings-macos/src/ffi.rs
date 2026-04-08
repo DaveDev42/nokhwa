@@ -52,12 +52,21 @@ extern "C" {
 
     pub fn CMSampleBufferGetDataBuffer(sbuf: CMSampleBufferRef) -> CMBlockBufferRef;
 
+    pub fn CMSampleBufferGetImageBuffer(sbuf: CMSampleBufferRef) -> CVImageBufferRef;
+}
+
+// dispatch_queue_create / dispatch_release are libdispatch (GCD) symbols,
+// part of libSystem which is always linked on Apple platforms.
+#[allow(non_snake_case)]
+extern "C" {
     pub fn dispatch_queue_create(label: *const std::os::raw::c_char, attr: NSObject) -> NSObject;
 
     pub fn dispatch_release(object: NSObject);
+}
 
-    pub fn CMSampleBufferGetImageBuffer(sbuf: CMSampleBufferRef) -> CVImageBufferRef;
-
+#[allow(non_snake_case)]
+#[link(name = "CoreVideo", kind = "framework")]
+extern "C" {
     pub fn CVPixelBufferLockBaseAddress(
         pixelBuffer: CVPixelBufferRef,
         lockFlags: CVPixelBufferLockFlags,

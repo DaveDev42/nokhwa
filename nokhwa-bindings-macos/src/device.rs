@@ -225,7 +225,7 @@ impl AVCaptureDevice {
         }
     }
 
-    pub fn lock(&self) -> Result<(), NokhwaError> {
+    pub fn lock(&mut self) -> Result<(), NokhwaError> {
         if self.locked {
             return Ok(());
         }
@@ -252,6 +252,7 @@ impl AVCaptureDevice {
                 error: "Lock Rejected".to_string(),
             });
         }
+        self.locked = true;
         Ok(())
     }
 
@@ -479,7 +480,7 @@ impl AVCaptureDevice {
             focus_auto || focus_continuous,
         ));
 
-        let expposure_face_driven_supported: bool =
+        let exposure_face_driven_supported: bool =
             unsafe { objc2::msg_send![self.inner, isFaceDrivenAutoExposureEnabled] };
         let exposure_face_driven: bool = unsafe {
             objc2::msg_send![
@@ -495,7 +496,7 @@ impl AVCaptureDevice {
                 value: exposure_face_driven,
                 default: false,
             },
-            if !expposure_face_driven_supported {
+            if !exposure_face_driven_supported {
                 vec![
                     KnownCameraControlFlag::Disabled,
                     KnownCameraControlFlag::ReadOnly,
@@ -597,7 +598,7 @@ impl AVCaptureDevice {
             false,
         ));
 
-        // get whiteblaance
+        // get white balance
         let white_balance_current: isize =
             unsafe { objc2::msg_send![self.inner, whiteBalanceMode] };
         let white_balance_manual: bool =
@@ -637,7 +638,7 @@ impl AVCaptureDevice {
             unsafe { objc2::msg_send![self.inner, deviceWhiteBalanceGains] };
         let white_balance_default: AVCaptureWhiteBalanceGains =
             unsafe { objc2::msg_send![self.inner, grayWorldDeviceWhiteBalanceGains] };
-        let white_balancne_max: AVCaptureWhiteBalanceGains =
+        let white_balance_max: AVCaptureWhiteBalanceGains =
             unsafe { objc2::msg_send![self.inner, maxWhiteBalanceGain] };
         let white_balance_gain_supported: bool = unsafe {
             objc2::msg_send![
@@ -656,9 +657,9 @@ impl AVCaptureDevice {
                     white_balance_gains.blueGain as f64,
                 ),
                 max: (
-                    white_balancne_max.redGain as f64,
-                    white_balancne_max.greenGain as f64,
-                    white_balancne_max.blueGain as f64,
+                    white_balance_max.redGain as f64,
+                    white_balance_max.greenGain as f64,
+                    white_balance_max.blueGain as f64,
                 ),
                 default: (
                     white_balance_default.redGain as f64,
@@ -666,7 +667,7 @@ impl AVCaptureDevice {
                     white_balance_default.blueGain as f64,
                 ),
             },
-            if white_balance_gain_supported {
+            if !white_balance_gain_supported {
                 vec![
                     KnownCameraControlFlag::Disabled,
                     KnownCameraControlFlag::ReadOnly,
@@ -777,7 +778,7 @@ impl AVCaptureDevice {
                 value: distortion_correction_current_value,
                 default: false,
             },
-            if distortion_correction_supported {
+            if !distortion_correction_supported {
                 vec![
                     KnownCameraControlFlag::ReadOnly,
                     KnownCameraControlFlag::Disabled,
@@ -979,11 +980,11 @@ impl AVCaptureDevice {
                     });
                 }
 
-                let setter = *value.as_enum().ok_or(NokhwaError::SetPropertyError {
+                let setter = *value.as_boolean().ok_or(NokhwaError::SetPropertyError {
                     property: id.to_string(),
                     value: value.to_string(),
-                    error: "Expected Enum".to_string(),
-                })? as isize;
+                    error: "Expected Boolean".to_string(),
+                })?;
 
                 if !ctrlvalue.description().verify_setter(&value) {
                     return Err(NokhwaError::SetPropertyError {
@@ -993,7 +994,12 @@ impl AVCaptureDevice {
                     });
                 }
 
-                let _: () = unsafe { objc2::msg_send![self.inner, whiteBalanceMode: setter] };
+                let _: () = unsafe {
+                    objc2::msg_send![
+                        self.inner,
+                        setAutomaticallyEnablesLowLightBoostWhenAvailable: setter
+                    ]
+                };
 
                 Ok(())
             }
@@ -1020,11 +1026,11 @@ impl AVCaptureDevice {
                     });
                 }
 
-                let setter = *value.as_boolean().ok_or(NokhwaError::SetPropertyError {
+                let (r, g, b) = value.as_rgb().ok_or(NokhwaError::SetPropertyError {
                     property: id.to_string(),
                     value: value.to_string(),
-                    error: "Expected Boolean".to_string(),
-                })? as isize;
+                    error: "Expected RGB".to_string(),
+                })?;
 
                 if !ctrlvalue.description().verify_setter(&value) {
                     return Err(NokhwaError::SetPropertyError {
@@ -1034,7 +1040,19 @@ impl AVCaptureDevice {
                     });
                 }
 
-                let _: () = unsafe { objc2::msg_send![self.inner, whiteBalanceMode: setter] };
+                let gains = AVCaptureWhiteBalanceGains {
+                    redGain: *r as f32,
+                    greenGain: *g as f32,
+                    blueGain: *b as f32,
+                };
+                let null_handler: *mut AnyObject = std::ptr::null_mut();
+                let _: () = unsafe {
+                    objc2::msg_send![
+                        self.inner,
+                        setWhiteBalanceModeLockedWithDeviceWhiteBalanceGains: gains,
+                        completionHandler: null_handler
+                    ]
+                };
 
                 Ok(())
             }
@@ -1514,7 +1532,7 @@ impl AVCaptureDevice {
             .collect::<Vec<_>>();
         a.sort_by(|a, b| a.frame_rate().cmp(&b.frame_rate()));
 
-        if a.len() != 0 {
+        if !a.is_empty() {
             Ok(a[a.len() - 1])
         } else {
             Err(NokhwaError::GetPropertyError {
