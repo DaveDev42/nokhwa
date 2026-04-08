@@ -29,6 +29,9 @@ cargo clippy --features input-avfoundation  # (use your platform's input-* featu
 
 # Format
 cargo fmt --all
+
+# Enable pre-commit hook (runs fmt + clippy before each commit)
+git config core.hooksPath .githooks
 ```
 
 The crate uses nightly Rust (configured via flake.nix). The `docs-features` feature requires nightly (`doc_cfg`).

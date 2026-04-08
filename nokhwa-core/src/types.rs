@@ -16,7 +16,7 @@ use std::{
 /// - `Exact`: Pick the exact [`CameraFormat`] provided.
 /// - `Closest`: Pick the closest [`CameraFormat`] provided in order of [`FrameFormat`], [`Resolution`], and FPS. Note that if the [`FrameFormat`] does not exist, this will fail to resolve.
 /// - `None`: Pick a random [`CameraFormat`]
-#[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Default, Hash, Ord, PartialOrd, Eq, PartialEq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub enum RequestedFormatType {
     AbsoluteHighestResolution,
@@ -25,14 +25,8 @@ pub enum RequestedFormatType {
     HighestFrameRate(u32),
     Exact(CameraFormat),
     Closest(CameraFormat),
+    #[default]
     None,
-}
-
-impl Default for RequestedFormatType {
-    #[allow(clippy::derivable_impls)]
-    fn default() -> Self {
-        RequestedFormatType::None
-    }
 }
 
 impl Display for RequestedFormatType {
