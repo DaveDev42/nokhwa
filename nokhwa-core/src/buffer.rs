@@ -364,3 +364,7 @@ pub mod channel_defs {
 
     unsafe impl Pod for RGBA8 {}
 }
+
+#[cfg(test)]
+#[path = "buffer_tests.rs"]
+mod tests;
