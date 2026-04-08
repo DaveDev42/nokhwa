@@ -167,7 +167,7 @@ impl RequestedFormat<'_> {
                         (dist_no_sqrt, res)
                     })
                     .collect::<Vec<(i32, Resolution)>>();
-                resolution_map.sort_by(|a, b| a.0.cmp(&b.0));
+                resolution_map.sort_by_key(|a| a.0);
                 resolution_map.dedup_by(|a, b| a.0.eq(&b.0));
                 let resolution = resolution_map.first()?.1;
 
@@ -188,7 +188,7 @@ impl RequestedFormat<'_> {
                         (abs.unsigned_abs(), *x)
                     })
                     .collect::<Vec<(u32, u32)>>();
-                framerate_map.sort_by(|a, b| a.0.cmp(&b.0));
+                framerate_map.sort_by_key(|a| a.0);
                 let frame_rate = framerate_map.first()?.1;
                 Some(CameraFormat::new(resolution, c.format(), frame_rate))
             }
@@ -636,24 +636,6 @@ impl CameraInfo {
     pub fn set_index(&mut self, index: CameraIndex) {
         self.index = index;
     }
-
-    // /// Gets the device info's index as an `u32`.
-    // /// # Errors
-    // /// If the index is not parsable as a `u32`, this will error.
-    // /// # JS-WASM
-    // /// This is exported as `get_Index_Int`
-    // pub fn index_num(&self) -> Result<u32, NokhwaError> {
-    //     match &self.index {
-    //         CameraIndex::Index(i) => Ok(*i),
-    //         CameraIndex::String(s) => match s.parse::<u32>() {
-    //             Ok(p) => Ok(p),
-    //             Err(why) => Err(NokhwaError::GetPropertyError {
-    //                 property: "index-int".to_string(),
-    //                 error: why.to_string(),
-    //             }),
-    //         },
-    //     }
-    // }
 }
 
 impl Display for CameraInfo {
@@ -688,7 +670,7 @@ pub enum KnownCameraControl {
     Iris,
     Focus,
     /// Other camera control. Listed is the ID.
-    /// Wasteful, however is needed for a unified API across Windows, Linux, and macOS due to Microsoft's usage of GUIDs.
+    /// Wasteful, however is needed for a unified API across Windows, Linux, and `MacOSX` due to Microsoft's usage of `GUIDs`.
     ///
     /// THIS SHOULD ONLY BE USED WHEN YOU KNOW THE PLATFORM THAT YOU ARE RUNNING ON.
     Other(u128),
@@ -947,7 +929,7 @@ impl Display for ControlValueDescription {
                 default,
                 step,
             } => {
-                write!(f, "(Current: {value}, Default: {default}, Step: {step})",)
+                write!(f, "(Current: {value}, Default: {default}, Step: {step})")
             }
             ControlValueDescription::IntegerRange {
                 min,
@@ -966,7 +948,7 @@ impl Display for ControlValueDescription {
                 default,
                 step,
             } => {
-                write!(f, "(Current: {value}, Default: {default}, Step: {step})",)
+                write!(f, "(Current: {value}, Default: {default}, Step: {step})")
             }
             ControlValueDescription::FloatRange {
                 min,
@@ -1031,16 +1013,6 @@ impl Display for ControlValueDescription {
         }
     }
 }
-
-// fn step_chk(val: i64, default: i64, step: i64) -> Result<(), NokhwaError> {
-//     if (val - default) % step != 0 {
-//         return Err(NokhwaError::StructureError {
-//             structure: "Value".to_string(),
-//             error: "Doesnt fit step".to_string(),
-//         });
-//     }
-//     Ok(())
-// }
 
 /// This struct tells you everything about a particular [`KnownCameraControl`].
 ///
@@ -1157,6 +1129,7 @@ impl ControlValueSetter {
             None
         }
     }
+
     #[must_use]
     pub fn as_integer(&self) -> Option<&i64> {
         if let ControlValueSetter::Integer(i) = self {
@@ -1165,6 +1138,7 @@ impl ControlValueSetter {
             None
         }
     }
+
     #[must_use]
     pub fn as_float(&self) -> Option<&f64> {
         if let ControlValueSetter::Float(f) = self {
@@ -1173,6 +1147,7 @@ impl ControlValueSetter {
             None
         }
     }
+
     #[must_use]
     pub fn as_boolean(&self) -> Option<&bool> {
         if let ControlValueSetter::Boolean(f) = self {
@@ -1181,6 +1156,7 @@ impl ControlValueSetter {
             None
         }
     }
+
     #[must_use]
     pub fn as_str(&self) -> Option<&str> {
         if let ControlValueSetter::String(s) = self {
@@ -1189,6 +1165,7 @@ impl ControlValueSetter {
             None
         }
     }
+
     #[must_use]
     pub fn as_bytes(&self) -> Option<&[u8]> {
         if let ControlValueSetter::Bytes(b) = self {
@@ -1197,6 +1174,7 @@ impl ControlValueSetter {
             None
         }
     }
+
     #[must_use]
     pub fn as_key_value(&self) -> Option<(&i128, &i128)> {
         if let ControlValueSetter::KeyValue(k, v) = self {
@@ -1205,6 +1183,7 @@ impl ControlValueSetter {
             None
         }
     }
+
     #[must_use]
     pub fn as_point(&self) -> Option<(&f64, &f64)> {
         if let ControlValueSetter::Point(x, y) = self {
@@ -1213,6 +1192,7 @@ impl ControlValueSetter {
             None
         }
     }
+
     #[must_use]
     pub fn as_enum(&self) -> Option<&i64> {
         if let ControlValueSetter::EnumValue(e) = self {
@@ -1221,6 +1201,7 @@ impl ControlValueSetter {
             None
         }
     }
+
     #[must_use]
     pub fn as_rgb(&self) -> Option<(&f64, &f64, &f64)> {
         if let ControlValueSetter::RGB(r, g, b) = self {
@@ -1298,71 +1279,6 @@ impl Display for ApiBackend {
     }
 }
 
-// /// A webcam index that supports both strings and integers. Most backends take an int, but `IPCamera`s take a URL (string).
-// #[derive(Clone, Debug, Hash, PartialEq, PartialOrd)]
-// pub enum CameraIndex {
-//     Index(u32),
-//     String(String),
-// }
-
-// impl CameraIndex {
-//     /// Gets the device info's index as an `u32`.
-//     /// # Errors
-//     /// If the index is not parsable as a `u32`, this will error.
-//     pub fn as_index(&self) -> Result<u32, NokhwaError> {
-//         match self {
-//             CameraIndex::Index(i) => Ok(*i),
-//             CameraIndex::String(s) => match s.parse::<u32>() {
-//                 Ok(p) => Ok(p),
-//                 Err(why) => Err(NokhwaError::GetPropertyError {
-//                     property: "index-int".to_string(),
-//                     error: why.to_string(),
-//                 }),
-//             },
-//         }
-//     }
-// }
-
-// impl Display for CameraIndex {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         match self {
-//             CameraIndex::Index(idx) => {
-//                 write!(f, "{}", idx)
-//             }
-//             CameraIndex::String(ip) => {
-//                 write!(f, "{}", ip)
-//             }
-//         }
-//     }
-// }
-
-// impl From<u32> for CameraIndex {
-//     fn from(v: u32) -> Self {
-//         CameraIndex::Index(v)
-//     }
-// }
-
-// /// Trait for strings that can be converted to [`CameraIndex`]es.
-// pub trait ValidString: AsRef<str> {}
-//
-// impl ValidString for String {}
-// impl<'a> ValidString for &'a String {}
-// impl<'a> ValidString for &'a mut String {}
-// impl<'a> ValidString for Cow<'a, str> {}
-// impl<'a> ValidString for &'a Cow<'a, str> {}
-// impl<'a> ValidString for &'a mut Cow<'a, str> {}
-// impl<'a> ValidString for &'a str {}
-// impl<'a> ValidString for &'a mut str {}
-
-// impl<T> From<T> for CameraIndex
-// where
-//     T: ValidString,
-// {
-//     fn from(v: T) -> Self {
-//         CameraIndex::String(v.as_ref().to_string())
-//     }
-// }
-
 /// Converts a MJPEG stream of `&[u8]` into a `Vec<u8>` of RGB888. (R,G,B,R,G,B,...)
 /// # Errors
 /// If `mozjpeg` fails to read scanlines or setup the decompressor, this will error.
@@ -1424,9 +1340,9 @@ pub fn mjpeg_to_rgb(data: &[u8], rgba: bool) -> Result<Vec<u8>, NokhwaError> {
     Ok(scanlines_res)
 }
 
-/// Converts a MJPEG stream to RGB. Always returns an error on this platform.
+/// Converts MJPEG to RGB (stub for non-MJPEG/WASM builds).
 /// # Errors
-/// Always returns `NotImplementedError` when the `mjpeg` feature is not enabled.
+/// Always returns `NokhwaError::NotImplementedError` on unsupported platforms.
 #[cfg(not(all(feature = "mjpeg", not(target_arch = "wasm32"))))]
 pub fn mjpeg_to_rgb(_data: &[u8], _rgba: bool) -> Result<Vec<u8>, NokhwaError> {
     Err(NokhwaError::NotImplementedError(
@@ -1497,9 +1413,9 @@ pub fn buf_mjpeg_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<(), 
     Ok(())
 }
 
-/// Converts a MJPEG stream to RGB into a destination buffer. Always returns an error on this platform.
+/// Converts MJPEG to RGB into a destination buffer (stub for non-MJPEG/WASM builds).
 /// # Errors
-/// Always returns `NotImplementedError` when the `mjpeg` feature is not enabled.
+/// Always returns `NokhwaError::NotImplementedError` on unsupported platforms.
 #[cfg(not(all(feature = "mjpeg", not(target_arch = "wasm32"))))]
 pub fn buf_mjpeg_to_rgb(_data: &[u8], _dest: &mut [u8], _rgba: bool) -> Result<(), NokhwaError> {
     Err(NokhwaError::NotImplementedError(
@@ -1708,7 +1624,6 @@ pub fn buf_nv12_to_rgb(
     let y_section = (resolution.width() * resolution.height()) as usize;
 
     let width_usize = resolution.width() as usize;
-    // let height_usize = resolution.height() as usize;
 
     for (hidx, horizontal_row) in data[0..y_section].chunks_exact(width_usize).enumerate() {
         for (cidx, column) in horizontal_row.chunks_exact(2).enumerate() {
@@ -1748,9 +1663,9 @@ pub fn buf_nv12_to_rgb(
     Ok(())
 }
 
-/// Converts a BGR datastream to RGB into a destination buffer.
+/// Converts a BGR datastream to RGB, writing into the provided output buffer.
 /// # Errors
-/// This may error when the resolution dimensions are not even or the buffer sizes are incorrect.
+/// Returns `NokhwaError::ProcessFrameError` if the resolution or data size is invalid.
 #[allow(clippy::similar_names)]
 #[inline]
 pub fn buf_bgr_to_rgb(
@@ -1802,3 +1717,7 @@ pub fn buf_bgr_to_rgb(
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "types_tests.rs"]
+mod tests;

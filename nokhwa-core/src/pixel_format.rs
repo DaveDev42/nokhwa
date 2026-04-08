@@ -455,10 +455,17 @@ impl FormatDecoder for LumaAFormat {
     }
 }
 
-/// Decodes YUYV (YUV 4:2:2) frames to RGB image buffers.
+/// A Zero-Size-Type that contains the definition to convert a given YUYV image
+/// stream to RGB in the [`Buffer`](crate::buffer::Buffer)'s
+/// [`.decode_image()`](crate::buffer::Buffer::decode_image) method.
 ///
-/// ```ignore
-/// let image: ImageBuffer<Rgb<u8>, Vec<u8>> = buffer.to_image::<YuyvFormat>();
+/// ```no_run
+/// use image::{ImageBuffer, Rgb};
+/// # use nokhwa_core::{buffer::Buffer, pixel_format::YuyvFormat};
+/// # fn example(buffer: &Buffer) -> Result<(), nokhwa_core::error::NokhwaError> {
+/// let image: ImageBuffer<Rgb<u8>, Vec<u8>> = buffer.decode_image::<YuyvFormat>()?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Copy, Clone, Debug, Default, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub struct YuyvFormat;
@@ -508,7 +515,7 @@ impl FormatDecoder for YuyvFormat {
     }
 }
 
-#[allow(clippy::similar_names)]
+#[allow(clippy::similar_names)] // y/u/v plane names are standard color-space terminology
 fn private_convert_yuyv_to_i420(yuyv: &[u8], width: usize, height: usize) -> Vec<u8> {
     assert!(
         width.is_multiple_of(2) && height.is_multiple_of(2),
@@ -540,7 +547,7 @@ fn private_convert_yuyv_to_i420(yuyv: &[u8], width: usize, height: usize) -> Vec
     i420
 }
 
-#[allow(clippy::similar_names)]
+#[allow(clippy::similar_names)] // y/u/v plane names are standard color-space terminology
 fn convert_yuyv_to_i420_direct(
     yuyv: &[u8],
     dest: &mut [u8],

@@ -18,7 +18,10 @@ members = [
     "nokhwa-bindings-linux",
     "nokhwa-core",
 ]
-exclude = [ "examples/jscam" ]
+exclude = [
+    "examples/jscam",
+    "examples/threaded-capture",
+]
 
 [lib]
 crate-type = [ "cdylib", "rlib" ]
@@ -64,6 +67,8 @@ docs-only = [
 ]
 docs-nolink = [ "nokhwa-core/docs-features" ]
 docs-features = [  ]
+# Gates integration tests that require a physical camera device (CI only)
+device-test = [  ]
 
 [dependencies]
 thiserror = "2.0"
