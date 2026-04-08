@@ -66,9 +66,8 @@ pub mod wmf {
                 MediaFoundation::{
                     IMFActivate, IMFAttributes, IMFMediaSource, IMFMediaType, IMFSample,
                     IMFSourceReader, MFCreateAttributes, MFCreateSourceReaderFromMediaSource,
-                    MFEnumDeviceSources, MFShutdown, MFStartup, MFSTARTUP_NOSOCKET,
-                    MF_API_VERSION, MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME,
-                    MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
+                    MFEnumDeviceSources, MFShutdown, MFStartup, MFSTARTUP_NOSOCKET, MF_API_VERSION,
+                    MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
                     MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID,
                     MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK, MF_MT_FRAME_RATE,
                     MF_MT_FRAME_RATE_RANGE_MAX, MF_MT_FRAME_RATE_RANGE_MIN, MF_MT_FRAME_SIZE,
@@ -186,9 +185,9 @@ pub mod wmf {
         let mut result = vec![];
         let mut index = 0;
 
-        while let Ok(media_type) = unsafe {
-            source_reader.GetNativeMediaType(MEDIA_FOUNDATION_FIRST_VIDEO_STREAM, index)
-        } {
+        while let Ok(media_type) =
+            unsafe { source_reader.GetNativeMediaType(MEDIA_FOUNDATION_FIRST_VIDEO_STREAM, index) }
+        {
             index += 1;
 
             let fourcc = match unsafe { media_type.GetGUID(&MF_MT_SUBTYPE) } {
@@ -221,7 +220,7 @@ pub mod wmf {
             };
 
             let frame_rates = {
-                let mut rates = Vec::with_capacity(3);
+                let mut rates = Vec::with_capacity(3); // max, default, min
                 for attr in [
                     &MF_MT_FRAME_RATE_RANGE_MAX,
                     &MF_MT_FRAME_RATE,

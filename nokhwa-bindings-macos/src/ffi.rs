@@ -65,10 +65,7 @@ extern "C" {
 
     pub fn CMSampleBufferGetDataBuffer(sbuf: CMSampleBufferRef) -> CMBlockBufferRef;
 
-    pub fn dispatch_queue_create(
-        label: *const std::os::raw::c_char,
-        attr: NSObject,
-    ) -> NSObject;
+    pub fn dispatch_queue_create(label: *const std::os::raw::c_char, attr: NSObject) -> NSObject;
 
     pub fn dispatch_release(object: NSObject);
 
@@ -84,12 +81,9 @@ extern "C" {
         unlockFlags: CVPixelBufferLockFlags,
     ) -> CVReturn;
 
-    pub fn CVPixelBufferGetDataSize(pixelBuffer: CVPixelBufferRef)
-        -> std::os::raw::c_ulong;
+    pub fn CVPixelBufferGetDataSize(pixelBuffer: CVPixelBufferRef) -> std::os::raw::c_ulong;
 
-    pub fn CVPixelBufferGetBaseAddress(
-        pixelBuffer: CVPixelBufferRef,
-    ) -> *mut std::os::raw::c_void;
+    pub fn CVPixelBufferGetBaseAddress(pixelBuffer: CVPixelBufferRef) -> *mut std::os::raw::c_void;
 
     pub fn CVPixelBufferGetPixelFormatType(pixelBuffer: CVPixelBufferRef) -> OSType;
 }
