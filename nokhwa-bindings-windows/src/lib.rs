@@ -64,10 +64,11 @@ pub mod wmf {
                 },
                 KernelStreaming::GUID_NULL,
                 MediaFoundation::{
-                    IMFActivate, IMFAttributes, IMFMediaSource, IMFSample, IMFSourceReader,
-                    MFCreateAttributes, MFCreateSourceReaderFromMediaSource, MFEnumDeviceSources,
-                    MFShutdown, MFStartup, MFSTARTUP_NOSOCKET, MF_API_VERSION,
-                    MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
+                    IMFActivate, IMFAttributes, IMFMediaSource, IMFMediaType, IMFSample,
+                    IMFSourceReader, MFCreateAttributes, MFCreateSourceReaderFromMediaSource,
+                    MFEnumDeviceSources, MFShutdown, MFStartup, MFSTARTUP_NOSOCKET,
+                    MF_API_VERSION, MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME,
+                    MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
                     MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID,
                     MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK, MF_MT_FRAME_RATE,
                     MF_MT_FRAME_RATE_RANGE_MAX, MF_MT_FRAME_RATE_RANGE_MIN, MF_MT_FRAME_SIZE,
@@ -170,6 +171,85 @@ pub mod wmf {
             MF_VIDEO_FORMAT_MJPEG => Some(FrameFormat::MJPEG),
             _ => None,
         }
+    }
+
+    struct ParsedMediaType {
+        media_type: IMFMediaType,
+        frame_format: FrameFormat,
+        resolution: Resolution,
+        frame_rates: Vec<u32>,
+    }
+
+    fn parse_native_media_types(
+        source_reader: &IMFSourceReader,
+    ) -> Result<Vec<ParsedMediaType>, NokhwaError> {
+        let mut result = vec![];
+        let mut index = 0;
+
+        while let Ok(media_type) = unsafe {
+            source_reader.GetNativeMediaType(MEDIA_FOUNDATION_FIRST_VIDEO_STREAM, index)
+        } {
+            index += 1;
+
+            let fourcc = match unsafe { media_type.GetGUID(&MF_MT_SUBTYPE) } {
+                Ok(fcc) => fcc,
+                Err(why) => {
+                    return Err(NokhwaError::GetPropertyError {
+                        property: "MF_MT_SUBTYPE".to_string(),
+                        error: why.to_string(),
+                    })
+                }
+            };
+
+            let frame_format = match guid_to_frameformat(fourcc) {
+                Some(fcc) => fcc,
+                None => continue,
+            };
+
+            let (width, height) = match unsafe { media_type.GetUINT64(&MF_MT_FRAME_SIZE) } {
+                Ok(res_u64) => {
+                    let width = (res_u64 >> 32) as u32;
+                    let height = res_u64 as u32;
+                    (width, height)
+                }
+                Err(why) => {
+                    return Err(NokhwaError::GetPropertyError {
+                        property: "MF_MT_FRAME_SIZE".to_string(),
+                        error: why.to_string(),
+                    })
+                }
+            };
+
+            let frame_rates = {
+                let mut rates = vec![];
+                for attr in [
+                    &MF_MT_FRAME_RATE_RANGE_MAX,
+                    &MF_MT_FRAME_RATE,
+                    &MF_MT_FRAME_RATE_RANGE_MIN,
+                ] {
+                    if let Ok(fraction_u64) = unsafe { media_type.GetUINT64(attr) } {
+                        let mut numerator = (fraction_u64 >> 32) as u32;
+                        let denominator = fraction_u64 as u32;
+                        if denominator != 1 {
+                            numerator = 0;
+                        }
+                        if numerator != 0 {
+                            rates.push(numerator);
+                        }
+                    }
+                }
+                rates
+            };
+
+            result.push(ParsedMediaType {
+                media_type,
+                frame_format,
+                resolution: Resolution::new(width, height),
+                frame_rates,
+            });
+        }
+
+        Ok(result)
     }
 
     pub fn initialize_mf() -> Result<(), NokhwaError> {
@@ -555,84 +635,13 @@ pub mod wmf {
 
         pub fn compatible_format_list(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
             let mut camera_format_list = vec![];
-            let mut index = 0;
-
-            while let Ok(media_type) = unsafe {
-                self.source_reader
-                    .GetNativeMediaType(MEDIA_FOUNDATION_FIRST_VIDEO_STREAM, index)
-            } {
-                index += 1;
-                let fourcc = match unsafe { media_type.GetGUID(&MF_MT_SUBTYPE) } {
-                    Ok(fcc) => fcc,
-                    Err(why) => {
-                        return Err(NokhwaError::GetPropertyError {
-                            property: "MF_MT_SUBTYPE".to_string(),
-                            error: why.to_string(),
-                        })
-                    }
-                };
-
-                let (width, height) = match unsafe { media_type.GetUINT64(&MF_MT_FRAME_SIZE) } {
-                    Ok(res_u64) => {
-                        let width = (res_u64 >> 32) as u32;
-                        let height = res_u64 as u32; // the cast will truncate the upper bits
-                        (width, height)
-                    }
-                    Err(why) => {
-                        return Err(NokhwaError::GetPropertyError {
-                            property: "MF_MT_FRAME_SIZE".to_string(),
-                            error: why.to_string(),
-                        })
-                    }
-                };
-
-                // MFRatio is represented as 2 u32s in memory. This means we can convert it to 2
-                let framerate_list = {
-                    let mut framerates = vec![0_u32; 3];
-                    if let Ok(fraction_u64) =
-                        unsafe { media_type.GetUINT64(&MF_MT_FRAME_RATE_RANGE_MAX) }
-                    {
-                        let mut numerator = (fraction_u64 >> 32) as u32;
-                        let denominator = fraction_u64 as u32;
-                        if denominator != 1 {
-                            numerator = 0;
-                        }
-                        framerates.push(numerator);
-                    };
-                    if let Ok(fraction_u64) = unsafe { media_type.GetUINT64(&MF_MT_FRAME_RATE) } {
-                        let mut numerator = (fraction_u64 >> 32) as u32;
-                        let denominator = fraction_u64 as u32;
-                        if denominator != 1 {
-                            numerator = 0;
-                        }
-                        framerates.push(numerator);
-                    };
-                    if let Ok(fraction_u64) =
-                        unsafe { media_type.GetUINT64(&MF_MT_FRAME_RATE_RANGE_MIN) }
-                    {
-                        let mut numerator = (fraction_u64 >> 32) as u32;
-                        let denominator = fraction_u64 as u32;
-                        if denominator != 1 {
-                            numerator = 0;
-                        }
-                        framerates.push(numerator);
-                    };
-                    framerates
-                };
-
-                let frame_fmt = match guid_to_frameformat(fourcc) {
-                    Some(fcc) => fcc,
-                    None => continue,
-                };
-
-                for frame_rate in framerate_list {
-                    if frame_rate != 0 {
-                        camera_format_list.push(CameraFormat::new(
-                            Resolution::new(width, height),
-                            frame_fmt,
-                            frame_rate,
-                        ));
-                    }
+            for parsed in parse_native_media_types(&self.source_reader)? {
+                for frame_rate in &parsed.frame_rates {
+                    camera_format_list.push(CameraFormat::new(
+                        parsed.resolution,
+                        parsed.frame_format,
+                        *frame_rate,
+                    ));
                 }
             }
             Ok(camera_format_list)
@@ -994,99 +1003,26 @@ pub mod wmf {
 
             let mut last_error: Option<NokhwaError> = None;
 
-            let mut index = 0;
-            while let Ok(media_type) = unsafe {
-                self.source_reader
-                    .GetNativeMediaType(MEDIA_FOUNDATION_FIRST_VIDEO_STREAM, index)
-            } {
-                index += 1;
-                let fourcc = match unsafe { media_type.GetGUID(&MF_MT_SUBTYPE) } {
-                    Ok(fcc) => fcc,
-                    Err(why) => {
-                        return Err(NokhwaError::GetPropertyError {
-                            property: "MF_MT_SUBTYPE".to_string(),
-                            error: why.to_string(),
-                        })
-                    }
-                };
-
-                let frame_fmt = match guid_to_frameformat(fourcc) {
-                    Some(fcc) => fcc,
-                    None => continue,
-                };
-
-                if frame_fmt != format.format() {
+            for parsed in parse_native_media_types(&self.source_reader)? {
+                if parsed.frame_format != format.format() {
+                    continue;
+                }
+                if parsed.resolution != format.resolution() {
                     continue;
                 }
 
-                let (width, height) = match unsafe { media_type.GetUINT64(&MF_MT_FRAME_SIZE) } {
-                    Ok(res_u64) => {
-                        let width = (res_u64 >> 32) as u32;
-                        let height = res_u64 as u32; // the cast will truncate the upper bits
-                        (width, height)
-                    }
-                    Err(why) => {
-                        return Err(NokhwaError::GetPropertyError {
-                            property: "MF_MT_FRAME_SIZE".to_string(),
-                            error: why.to_string(),
-                        })
-                    }
-                };
-
-                if (Resolution {
-                    width_x: width,
-                    height_y: height,
-                }) != format.resolution()
-                {
-                    continue;
-                }
-
-                // MFRatio is represented as 2 u32s in memory. This means we can convert it to 2
-                let framerate_list = {
-                    let mut framerates = vec![0_u32; 3];
-                    if let Ok(fraction_u64) =
-                        unsafe { media_type.GetUINT64(&MF_MT_FRAME_RATE_RANGE_MAX) }
-                    {
-                        let mut numerator = (fraction_u64 >> 32) as u32;
-                        let denominator = fraction_u64 as u32;
-                        if denominator != 1 {
-                            numerator = 0;
-                        }
-                        framerates.push(numerator);
-                    };
-                    if let Ok(fraction_u64) = unsafe { media_type.GetUINT64(&MF_MT_FRAME_RATE) } {
-                        let mut numerator = (fraction_u64 >> 32) as u32;
-                        let denominator = fraction_u64 as u32;
-                        if denominator != 1 {
-                            numerator = 0;
-                        }
-                        framerates.push(numerator);
-                    };
-                    if let Ok(fraction_u64) =
-                        unsafe { media_type.GetUINT64(&MF_MT_FRAME_RATE_RANGE_MIN) }
-                    {
-                        let mut numerator = (fraction_u64 >> 32) as u32;
-                        let denominator = fraction_u64 as u32;
-                        if denominator != 1 {
-                            numerator = 0;
-                        }
-                        framerates.push(numerator);
-                    };
-                    framerates
-                };
-
-                for frame_rate in framerate_list {
-                    if frame_rate == format.frame_rate() {
+                for frame_rate in &parsed.frame_rates {
+                    if *frame_rate == format.frame_rate() {
                         let result = unsafe {
                             self.source_reader.SetCurrentMediaType(
                                 MEDIA_FOUNDATION_FIRST_VIDEO_STREAM,
                                 None,
-                                &media_type,
+                                &parsed.media_type,
                             )
                         };
 
                         match result {
-                            Ok(_) => {
+                            Ok(()) => {
                                 self.device_format = format;
                                 self.format_refreshed()?;
                                 return Ok(());
@@ -1094,7 +1030,7 @@ pub mod wmf {
                             Err(why) => {
                                 last_error = Some(NokhwaError::SetPropertyError {
                                     property: "MEDIA_FOUNDATION_FIRST_VIDEO_STREAM".to_string(),
-                                    value: format!("{media_type:?}"),
+                                    value: format!("{:?}", parsed.media_type),
                                     error: why.to_string(),
                                 });
                             }
