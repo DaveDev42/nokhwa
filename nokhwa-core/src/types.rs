@@ -1717,3 +1717,7 @@ pub fn buf_bgr_to_rgb(
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "types_tests.rs"]
+mod tests;

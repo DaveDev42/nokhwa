@@ -1,0 +1,44 @@
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            runner: ubuntu-latest
+            features: input-v4l
+            deps: sudo apt-get update && sudo apt-get install -y libv4l-dev
+          - os: windows
+            runner: windows-latest
+            features: input-msmf
+            deps: ""
+          - os: macos
+            runner: macos-latest
+            features: input-avfoundation
+            deps: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install system dependencies
+        if: matrix.deps != ''
+        run: ${{ matrix.deps }}
+
+      - name: Build
+        run: cargo build --features ${{ matrix.features }}
