@@ -204,8 +204,8 @@ mod internal {
         AVMediaTypeMetadataObject, AVMediaTypeMuxed, AVMediaTypeSubtitle, AVMediaTypeText,
         AVMediaTypeTimecode, AVMediaTypeVideo, CGPoint, CMSampleBufferGetImageBuffer,
         CMVideoFormatDescriptionGetDimensions, CVImageBufferRef, CVPixelBufferGetBaseAddress,
-        CVPixelBufferGetDataSize, CVPixelBufferLockBaseAddress, CVPixelBufferUnlockBaseAddress,
-        NSObject, OSType,
+        CVPixelBufferGetDataSize, CVPixelBufferGetPixelFormatType, CVPixelBufferLockBaseAddress,
+        CVPixelBufferUnlockBaseAddress, NSObject, OSType,
     };
 
     use block::ConcreteBlock;
@@ -415,30 +415,40 @@ mod internal {
             ) {
                 let image_buffer: CVImageBufferRef =
                     unsafe { CMSampleBufferGetImageBuffer(didOutputSampleBuffer) };
+
+                if image_buffer.is_null() {
+                    return;
+                }
+
                 unsafe {
                     CVPixelBufferLockBaseAddress(image_buffer, 0);
                 };
 
                 let buffer_length = unsafe { CVPixelBufferGetDataSize(image_buffer) };
                 let buffer_ptr = unsafe { CVPixelBufferGetBaseAddress(image_buffer) };
+
+                if buffer_ptr.is_null() || buffer_length == 0 {
+                    unsafe { CVPixelBufferUnlockBaseAddress(image_buffer, 0) };
+                    return;
+                }
+
                 let buffer_as_vec = unsafe {
                     std::slice::from_raw_parts_mut(buffer_ptr as *mut u8, buffer_length as usize)
                         .to_vec()
                 };
 
+                let pixel_format = unsafe { CVPixelBufferGetPixelFormatType(image_buffer) };
+                let frame_format =
+                    raw_fcc_to_frameformat(pixel_format).unwrap_or(FrameFormat::YUYV);
+
                 unsafe { CVPixelBufferUnlockBaseAddress(image_buffer, 0) };
-                // oooooh scarey unsafe
-                // AAAAAAAAAAAAAAAAAAAAAAAAA
-                // https://c.tenor.com/0e_zWtFLOzQAAAAC/needy-streamer-overload-needy-girl-overdose.gif
+
                 let bufferlck_cv: *const c_void = unsafe { msg_send![this, bufferPtr] };
                 let buffer_sndr = unsafe {
                     let ptr = bufferlck_cv.cast::<Sender<(Vec<u8>, FrameFormat)>>();
                     Arc::from_raw(ptr)
                 };
-                if let Err(_) = buffer_sndr.send((buffer_as_vec, FrameFormat::GRAY)) {
-                    // FIXME: dont, what the fuck???
-                    return;
-                }
+                let _ = buffer_sndr.send((buffer_as_vec, frame_format));
                 std::mem::forget(buffer_sndr);
             }
 
