@@ -21,6 +21,7 @@
 // <some change so we can call this 0.10.4>
 
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
+// Old `objc` crate macros emit cfg(feature = "cargo-clippy") which triggers unexpected_cfgs
 #![allow(unexpected_cfgs)]
 // cocoa/cocoa-foundation APIs are deprecated in favor of objc2; suppress until migration
 #![allow(deprecated)]

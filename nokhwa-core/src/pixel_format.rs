@@ -251,7 +251,9 @@ impl FormatDecoder for LumaFormat {
                 .chunks_exact(3)
                 .map(|x| {
                     let mut avg = 0;
-                    for v in x { avg += u16::from(*v); }
+                    for v in x {
+                        avg += u16::from(*v);
+                    }
                     (avg / 3) as u8
                 })
                 .collect()),
@@ -260,7 +262,9 @@ impl FormatDecoder for LumaFormat {
                 .chunks_exact(3)
                 .map(|x| {
                     let mut avg = 0;
-                    for v in x { avg += u16::from(*v); }
+                    for v in x {
+                        avg += u16::from(*v);
+                    }
                     (avg / 3) as u8
                 })
                 .collect()),
@@ -269,7 +273,9 @@ impl FormatDecoder for LumaFormat {
                 .chunks_exact(3)
                 .map(|x| {
                     let mut avg = 0;
-                    for v in x { avg += u16::from(*v); }
+                    for v in x {
+                        avg += u16::from(*v);
+                    }
                     (avg / 3) as u8
                 })
                 .collect()),
@@ -348,7 +354,9 @@ impl FormatDecoder for LumaAFormat {
                 .chunks_exact(3)
                 .flat_map(|x| {
                     let mut avg = 0;
-                    for v in x { avg += u16::from(*v); }
+                    for v in x {
+                        avg += u16::from(*v);
+                    }
                     [(avg / 3) as u8, 255]
                 })
                 .collect()),
@@ -357,7 +365,9 @@ impl FormatDecoder for LumaAFormat {
                 .chunks_exact(3)
                 .flat_map(|x| {
                     let mut avg = 0;
-                    for v in x { avg += u16::from(*v); }
+                    for v in x {
+                        avg += u16::from(*v);
+                    }
                     [(avg / 3) as u8, 255]
                 })
                 .collect()),
@@ -366,7 +376,9 @@ impl FormatDecoder for LumaAFormat {
                 .chunks_exact(3)
                 .flat_map(|x| {
                     let mut avg = 0;
-                    for v in x { avg += u16::from(*v); }
+                    for v in x {
+                        avg += u16::from(*v);
+                    }
                     [(avg / 3) as u8, 255]
                 })
                 .collect()),
@@ -443,6 +455,8 @@ impl FormatDecoder for LumaAFormat {
     }
 }
 
+/// Decodes YUYV (YUV 4:2:2) frames to RGB image buffers.
+///
 /// ```ignore
 /// let image: ImageBuffer<Rgb<u8>, Vec<u8>> = buffer.to_image::<YuyvFormat>();
 /// ```
