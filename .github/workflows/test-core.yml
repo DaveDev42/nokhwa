@@ -1,9 +1,13 @@
-name: Test
+name: Test Core & Features
 
 on:
   pull_request:
   push:
     branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test-core:
@@ -15,6 +19,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p nokhwa-core
 
+  # Verifies feature deps resolve without a backend.
+  # These are dependency-resolution checks, not functional tests.
   check-features:
     name: Feature check (${{ matrix.features }})
     runs-on: ubuntu-latest
