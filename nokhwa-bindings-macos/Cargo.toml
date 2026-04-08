@@ -19,6 +19,5 @@ path = "../nokhwa-core"
 core-media-sys = "0.1"
 core-video-sys = "0.1"
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSString", "NSArray", "NSDictionary", "NSObject", "NSObjCRuntime", "NSEnumerator"] }
 block2 = "0.6"
 flume = "0.11"
