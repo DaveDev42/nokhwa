@@ -11,6 +11,13 @@
 - Split macOS bindings monolith (2,422 lines) into 6 focused modules (ffi, util, types, callback, device, session)
 - Fixed UB: `from_raw_parts_mut` → `from_raw_parts` in CVPixelBuffer callback
 
+## Features
+- Added sensor capture timestamp support across all backends (cherry-picked from upstream l1npengtul/nokhwa#234)
+  - `Buffer::with_timestamp()` constructor and `Buffer::capture_timestamp()` accessor
+  - macOS: `CMSampleBufferGetPresentationTimeStamp` → wall clock conversion
+  - Linux: `v4l2_buffer.timestamp` → wall clock conversion
+  - Windows: `IMFSample::GetSampleTime` → wall clock conversion
+
 ## Bug Fixes
 - Fixed `wanted_decoder` filter inconsistently applied in `HighestResolution`/`HighestFrameRate` format selection
 - Fixed several macOS AVFoundation bugs discovered during objc2 migration:
