@@ -75,6 +75,7 @@ Almost everything is behind feature flags. A build **must** enable at least one 
 - `main` branch is protected via GitHub Rulesets (require PR, require signed commits). Do not attempt direct push.
 - When using `gh` commands, always specify `--repo DaveDev42/nokhwa` to avoid accidentally targeting upstream.
 - **NEVER commit planning artifacts, spec documents, or skill-generated files (e.g. `docs/superpowers/`, `docs/plans/`) to the repository.** Keep all planning work in local context only.
+- **Keep `CHANGELOG.md` up to date.** When merging feature or fix PRs, add an entry under the current unreleased version section. Group entries by: Performance, Refactoring, Bug Fixes, Infrastructure, Cleanup.
 
 ## Code Style
 
