@@ -30,7 +30,7 @@ unsafe impl Encode for NSString {
     const ENCODING: Encoding = Encoding::Object;
 }
 
-pub type AVMediaType = NSString;
+pub type AVMediaTypeRaw = NSString;
 
 #[allow(non_snake_case)]
 #[link(name = "CoreMedia", kind = "framework")]
@@ -181,16 +181,16 @@ extern "C" {
     pub static AVVideoHeightKey: NSString;
     pub static AVVideoExpectedSourceFrameRateKey: NSString;
 
-    pub static AVMediaTypeVideo: AVMediaType;
-    pub static AVMediaTypeAudio: AVMediaType;
-    pub static AVMediaTypeText: AVMediaType;
-    pub static AVMediaTypeClosedCaption: AVMediaType;
-    pub static AVMediaTypeSubtitle: AVMediaType;
-    pub static AVMediaTypeTimecode: AVMediaType;
-    pub static AVMediaTypeMetadata: AVMediaType;
-    pub static AVMediaTypeMuxed: AVMediaType;
-    pub static AVMediaTypeMetadataObject: AVMediaType;
-    pub static AVMediaTypeDepthData: AVMediaType;
+    pub static AVMediaTypeVideo: AVMediaTypeRaw;
+    pub static AVMediaTypeAudio: AVMediaTypeRaw;
+    pub static AVMediaTypeText: AVMediaTypeRaw;
+    pub static AVMediaTypeClosedCaption: AVMediaTypeRaw;
+    pub static AVMediaTypeSubtitle: AVMediaTypeRaw;
+    pub static AVMediaTypeTimecode: AVMediaTypeRaw;
+    pub static AVMediaTypeMetadata: AVMediaTypeRaw;
+    pub static AVMediaTypeMuxed: AVMediaTypeRaw;
+    pub static AVMediaTypeMetadataObject: AVMediaTypeRaw;
+    pub static AVMediaTypeDepthData: AVMediaTypeRaw;
 
     pub static AVCaptureLensPositionCurrent: f32;
     pub static AVCaptureExposureTargetBiasCurrent: f32;

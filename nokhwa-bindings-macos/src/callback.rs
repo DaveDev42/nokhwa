@@ -20,9 +20,8 @@ static CALLBACK_CLASS: LazyLock<&'static AnyClass> = LazyLock::new(|| {
     let superclass = objc2::class!(NSObject);
     let mut builder = ClassBuilder::new(c"MyCaptureCallback", superclass).unwrap();
 
-    // frame stack
-    // oooh scary provenance-breaking BULLSHIT AAAAAA I LOVE TYPE ERASURE
-    builder.add_ivar::<*const c_void>(c"_arcmutptr"); // ArkMutex, the not-arknights totally not gacha totally not ripoff new vidya game from l-pleasestop-npengtul
+    // Ivar to hold a type-erased pointer to the Arc<Sender> for frame data
+    builder.add_ivar::<*const c_void>(c"_arcmutptr");
 
     // TODO: Migrate to DeclaredClass + Ivar API when get_ivar/get_mut_ivar are removed in a future objc2 release
     #[allow(deprecated)]
