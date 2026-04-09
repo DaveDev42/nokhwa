@@ -1536,7 +1536,7 @@ impl AVCaptureDevice {
                 CameraFormat::new(resolution, fourcc, fps)
             })
             .collect::<Vec<_>>();
-        a.sort_by(|a, b| a.frame_rate().cmp(&b.frame_rate()));
+        a.sort_by_key(|a| a.frame_rate());
 
         if !a.is_empty() {
             Ok(a[a.len() - 1])

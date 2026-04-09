@@ -39,7 +39,7 @@ impl AVCaptureDeviceDiscoverySession {
         })
     }
 
-    pub fn default() -> Result<Self, NokhwaError> {
+    pub fn with_default_types() -> Result<Self, NokhwaError> {
         AVCaptureDeviceDiscoverySession::new(vec![
             AVCaptureDeviceType::UltraWide,
             AVCaptureDeviceType::Telephoto,

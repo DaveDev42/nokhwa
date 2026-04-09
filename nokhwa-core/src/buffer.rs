@@ -27,10 +27,11 @@ use opencv::{boxed_ref::BoxedRef, core::Mat};
 /// Contains information of Resolution, the buffer's [`FrameFormat`], and the buffer.
 ///
 /// Note that decoding on the main thread **will** decrease your performance and lead to dropped frames.
+#[allow(clippy::struct_field_names)]
 #[derive(Clone, Debug, Hash, PartialOrd, PartialEq, Eq)]
 pub struct Buffer {
     resolution: Resolution,
-    buffer: Bytes,
+    data: Bytes,
     source_frame_format: FrameFormat,
 }
 
@@ -41,7 +42,7 @@ impl Buffer {
     pub fn new(res: Resolution, buf: &[u8], source_frame_format: FrameFormat) -> Self {
         Self {
             resolution: res,
-            buffer: Bytes::copy_from_slice(buf),
+            data: Bytes::copy_from_slice(buf),
             source_frame_format,
         }
     }
@@ -57,13 +58,13 @@ impl Buffer {
     /// For an owned [`Bytes`], see [`buffer_bytes`](Self::buffer_bytes).
     #[must_use]
     pub fn buffer(&self) -> &[u8] {
-        &self.buffer
+        &self.data
     }
 
     /// Get an owned version of this buffer.
     #[must_use]
     pub fn buffer_bytes(&self) -> Bytes {
-        self.buffer.clone()
+        self.data.clone()
     }
 
     /// Get the [`FrameFormat`] of this buffer.
@@ -79,7 +80,7 @@ impl Buffer {
     pub fn decode_image<F: FormatDecoder>(
         &self,
     ) -> Result<ImageBuffer<F::Output, Vec<u8>>, NokhwaError> {
-        let new_data = F::write_output(self.source_frame_format, self.resolution, &self.buffer)?;
+        let new_data = F::write_output(self.source_frame_format, self.resolution, &self.data)?;
         let image =
             ImageBuffer::from_raw(self.resolution.width_x, self.resolution.height_y, new_data)
                 .ok_or(NokhwaError::ProcessFrameError {
@@ -101,7 +102,7 @@ impl Buffer {
         F::write_output_buffer(
             self.source_frame_format,
             self.resolution,
-            &self.buffer,
+            &self.data,
             buffer,
         )
     }
@@ -203,7 +204,7 @@ impl Buffer {
             }
         };
 
-        let mut buffer = self.buffer.as_ref();
+        let mut buffer = self.data.as_ref();
         if bytes.len() != buffer.len() {
             return Err(NokhwaError::ProcessFrameError {
                 src: FrameFormat::RAWRGB,
@@ -364,3 +365,7 @@ pub mod channel_defs {
 
     unsafe impl Pod for RGBA8 {}
 }
+
+#[cfg(test)]
+#[path = "buffer_tests.rs"]
+mod tests;

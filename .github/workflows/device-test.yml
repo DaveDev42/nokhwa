@@ -1,0 +1,26 @@
+name: Device Test
+
+# Only on main push and manual dispatch — requires self-hosted runner with physical camera.
+# PRs are intentionally excluded to avoid blocking on hardware availability.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  device-test:
+    name: Camera integration (macOS)
+    runs-on: macos-camera
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run device tests
+        run: cargo test --features device-test,input-avfoundation,output-threaded -- --test-threads=1
