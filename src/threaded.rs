@@ -263,17 +263,10 @@ impl CallbackCamera {
     /// If the list cannot be collected, this will error. This can be treated as a "nothing supported".
     pub fn camera_controls_string(&self) -> Result<HashMap<String, CameraControl>, NokhwaError> {
         let known_controls = self.supported_camera_controls()?;
-        let maybe_camera_controls = known_controls
+        let control_map = known_controls
             .iter()
-            .map(|x| (x.to_string(), self.camera_control(*x)))
-            .filter(|(_, x)| x.is_ok())
-            .map(|(c, x)| (c, Result::unwrap(x)))
-            .collect::<Vec<(String, CameraControl)>>();
-        let mut control_map = HashMap::with_capacity(maybe_camera_controls.len());
-
-        for (kc, cc) in maybe_camera_controls {
-            control_map.insert(kc, cc);
-        }
+            .filter_map(|x| self.camera_control(*x).ok().map(|cc| (x.to_string(), cc)))
+            .collect::<HashMap<String, CameraControl>>();
 
         Ok(control_map)
     }
@@ -285,17 +278,10 @@ impl CallbackCamera {
         &self,
     ) -> Result<HashMap<KnownCameraControl, CameraControl>, NokhwaError> {
         let known_controls = self.supported_camera_controls()?;
-        let maybe_camera_controls = known_controls
+        let control_map = known_controls
             .iter()
-            .map(|x| (*x, self.camera_control(*x)))
-            .filter(|(_, x)| x.is_ok())
-            .map(|(c, x)| (c, Result::unwrap(x)))
-            .collect::<Vec<(KnownCameraControl, CameraControl)>>();
-        let mut control_map = HashMap::with_capacity(maybe_camera_controls.len());
-
-        for (kc, cc) in maybe_camera_controls {
-            control_map.insert(kc, cc);
-        }
+            .filter_map(|x| self.camera_control(*x).ok().map(|cc| (*x, cc)))
+            .collect::<HashMap<KnownCameraControl, CameraControl>>();
 
         Ok(control_map)
     }
