@@ -285,7 +285,7 @@ impl Camera {
         let known_controls = self.supported_camera_controls()?;
         let controls = known_controls
             .iter()
-            .flat_map(|x| self.camera_control(*x))
+            .filter_map(|x| self.camera_control(*x).ok())
             .collect::<Vec<CameraControl>>();
 
         Ok(controls)

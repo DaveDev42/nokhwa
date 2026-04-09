@@ -71,7 +71,7 @@ static CALLBACK_CLASS: LazyLock<&'static AnyClass> = LazyLock::new(|| {
         }
 
         let buffer_as_vec = unsafe {
-            std::slice::from_raw_parts_mut(buffer_ptr as *mut u8, buffer_length as usize).to_vec()
+            std::slice::from_raw_parts(buffer_ptr as *const u8, buffer_length as usize).to_vec()
         };
 
         let pixel_format = unsafe { CVPixelBufferGetPixelFormatType(image_buffer) };
@@ -154,12 +154,17 @@ pub fn request_permission_with_callback(callback: impl Fn(bool) + Send + Sync + 
 
 pub fn current_authorization_status() -> AVAuthorizationStatus {
     let cls = objc2::class!(AVCaptureDevice);
-    let status: AVAuthorizationStatus = unsafe {
+    unsafe {
         objc2::msg_send![cls, authorizationStatusForMediaType:AVMediaType::Video.into_ns_str()]
-    };
-    status
+    }
 }
 
+/// Wraps an Objective-C delegate and GCD dispatch queue for receiving video frames.
+///
+/// # Thread Safety
+/// This type is `!Send + !Sync` because it holds raw ObjC pointers. The delegate
+/// and queue are only safe to use from the thread that created them or from the
+/// GCD dispatch queue associated with the AVCaptureSession.
 pub struct AVCaptureVideoCallback {
     pub(crate) delegate: *mut AnyObject,
     pub(crate) queue: NSObject,
