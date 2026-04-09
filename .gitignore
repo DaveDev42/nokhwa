@@ -4,14 +4,12 @@ Cargo.lock
 .idea
 nokhwa.iml
 .vs
-
 .vscode
 
 /pkg
 
-target
-
 .DS_STORE
+
 # Devenv
 .devenv*
 devenv.local.nix

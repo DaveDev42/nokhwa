@@ -68,6 +68,13 @@ Almost everything is behind feature flags. A build **must** enable at least one 
 
 `CaptureBackendTrait::frame()` → `nokhwa_core::buffer::Buffer` (raw bytes + format metadata) → `Buffer::decode_image::<FormatDecoder>()` → `image::ImageBuffer`. Pixel format decoders implement `FormatDecoder` trait in `nokhwa-core/src/pixel_format.rs`.
 
+## Git & GitHub Rules
+
+- This is a **fork** of `l1npengtul/nokhwa`. Our remote is `origin` (`DaveDev42/nokhwa`).
+- **NEVER create PRs against the upstream repository (`l1npengtul/nokhwa`).** Always use `--repo DaveDev42/nokhwa` with `gh pr create`.
+- `main` branch is protected via GitHub Rulesets (require PR, require signed commits). Do not attempt direct push.
+- When using `gh` commands, always specify `--repo DaveDev42/nokhwa` to avoid accidentally targeting upstream.
+
 ## Code Style
 
 - `#![deny(clippy::pedantic)]` and `#![warn(clippy::all)]` are enforced in both `nokhwa` and `nokhwa-core`
