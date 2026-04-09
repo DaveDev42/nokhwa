@@ -21,99 +21,37 @@
 // <some change so we can call this 0.10.4>
 
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
-#![allow(unexpected_cfgs)] // objc crate macros (msg_send!, class!) emit cfg(feature = "cargo-clippy") checks
-#![allow(deprecated)] // TODO: migrate cocoa_foundation -> objc2-foundation (see #10)
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-#[macro_use]
-extern crate objc;
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-use std::ffi::c_float;
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-const UTF8_ENCODING: usize = 4;
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-type CGFloat = c_float;
-
-/// Shared boilerplate macro for ObjC wrapper structs.
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-macro_rules! create_boilerplate_impl {
-    {
-        $( [$class_vis:vis $class_name:ident : $( {$field_vis:vis $field_name:ident : $field_type:ty} ),*] ),+
-    } => {
-        $(
-            $class_vis struct $class_name {
-                inner: *mut objc::runtime::Object,
-                $(
-                    $field_vis $field_name : $field_type
-                )*
-            }
-
-            impl $class_name {
-                pub fn inner(&self) -> *mut objc::runtime::Object {
-                    self.inner
-                }
-            }
-        )+
-    };
-
-    {
-        $( [$class_vis:vis $class_name:ident ] ),+
-    } => {
-        $(
-            $class_vis struct $class_name {
-                pub(crate) inner: *mut objc::runtime::Object,
-            }
-
-            impl $class_name {
-                pub fn inner(&self) -> *mut objc::runtime::Object {
-                    self.inner
-                }
-            }
-
-            impl From<*mut objc::runtime::Object> for $class_name {
-                fn from(obj: *mut objc::runtime::Object) -> Self {
-                    $class_name {
-                        inner: obj,
-                    }
-                }
-            }
-        )+
-    };
-}
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-#[allow(non_snake_case)]
-pub mod ffi;
-
-/// Backward-compatible alias for the `ffi` module (previously named `core_media`).
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-pub use ffi as core_media;
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-pub(crate) mod format;
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-pub(crate) mod callback;
-
+pub mod callback;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod device;
-
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+pub mod ffi;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod session;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+pub mod types;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+mod util;
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-pub use callback::AVCaptureVideoCallback;
-
+pub use callback::{
+    current_authorization_status, request_permission_with_callback, AVCaptureVideoCallback,
+};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use device::{
-    current_authorization_status, get_raw_device_info, query_avfoundation,
-    request_permission_with_callback, AVAuthorizationStatus, AVCaptureDevice,
-    AVCaptureDeviceDiscoverySession, AVCaptureDeviceFormat, AVCaptureDevicePosition,
-    AVCaptureDeviceType, AVFrameRateRange, AVMediaType, CompressionData, DataPipe,
+    get_raw_device_info, query_avfoundation, AVCaptureDevice, AVCaptureDeviceFormat,
+    AVFrameRateRange,
 };
-
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-pub use session::{AVCaptureDeviceInput, AVCaptureSession, AVCaptureVideoDataOutput};
+pub use ffi::*;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+pub use session::{
+    AVCaptureDeviceDiscoverySession, AVCaptureDeviceInput, AVCaptureSession,
+    AVCaptureVideoDataOutput,
+};
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+pub use types::{AVAuthorizationStatus, AVCaptureDevicePosition, AVCaptureDeviceType, AVMediaType};
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+pub use util::{CompressionData, DataPipe};

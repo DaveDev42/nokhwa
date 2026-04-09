@@ -1,49 +1,36 @@
-//! FFI declarations: extern C blocks, framework links, type aliases, and constants.
-
+// all of this is stolen from bindgen
+// steal it idc
 use core_media_sys::{
     CMBlockBufferRef, CMFormatDescriptionRef, CMSampleBufferRef, CMTime, CMVideoDimensions,
     FourCharCode,
 };
-use objc::{runtime::Object, Message};
-use std::ops::Deref;
+use objc2::encode::{Encode, Encoding};
+use objc2::runtime::AnyObject;
 
-use crate::CGFloat;
+// CGFloat is f64 on 64-bit Apple platforms (all modern macOS/iOS)
+pub type CGFloat = std::ffi::c_double;
 
-pub type Id = *mut Object;
+pub type Id = *mut AnyObject;
 
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct NSObject(pub Id);
-impl Deref for NSObject {
-    type Target = Object;
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.0 }
-    }
-}
-unsafe impl Message for NSObject {}
-impl NSObject {
-    pub fn alloc() -> Self {
-        Self(unsafe { msg_send!(objc::class!(NSObject), alloc) })
-    }
+
+// SAFETY: NSObject is repr(transparent) over *mut AnyObject, which is a pointer.
+unsafe impl Encode for NSObject {
+    const ENCODING: Encoding = Encoding::Object;
 }
 
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct NSString(pub Id);
-impl Deref for NSString {
-    type Target = Object;
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.0 }
-    }
-}
-unsafe impl Message for NSString {}
-impl NSString {
-    pub fn alloc() -> Self {
-        Self(unsafe { msg_send!(objc::class!(NSString), alloc) })
-    }
+
+// SAFETY: NSString is repr(transparent) over *mut AnyObject, which is a pointer.
+unsafe impl Encode for NSString {
+    const ENCODING: Encoding = Encoding::Object;
 }
 
-pub type AVMediaType = NSString;
+pub type AVMediaTypeRaw = NSString;
 
 #[allow(non_snake_case)]
 #[link(name = "CoreMedia", kind = "framework")]
@@ -65,12 +52,21 @@ extern "C" {
 
     pub fn CMSampleBufferGetDataBuffer(sbuf: CMSampleBufferRef) -> CMBlockBufferRef;
 
+    pub fn CMSampleBufferGetImageBuffer(sbuf: CMSampleBufferRef) -> CVImageBufferRef;
+}
+
+// dispatch_queue_create / dispatch_release are libdispatch (GCD) symbols,
+// part of libSystem which is always linked on Apple platforms.
+#[allow(non_snake_case)]
+extern "C" {
     pub fn dispatch_queue_create(label: *const std::os::raw::c_char, attr: NSObject) -> NSObject;
 
     pub fn dispatch_release(object: NSObject);
+}
 
-    pub fn CMSampleBufferGetImageBuffer(sbuf: CMSampleBufferRef) -> CVImageBufferRef;
-
+#[allow(non_snake_case)]
+#[link(name = "CoreVideo", kind = "framework")]
+extern "C" {
     pub fn CVPixelBufferLockBaseAddress(
         pixelBuffer: CVPixelBufferRef,
         lockFlags: CVPixelBufferLockFlags,
@@ -95,6 +91,11 @@ pub struct CGPoint {
     pub y: CGFloat,
 }
 
+// SAFETY: CGPoint is repr(C) with two CGFloat (f64) fields, matching {dd} encoding.
+unsafe impl Encode for CGPoint {
+    const ENCODING: Encoding = Encoding::Struct("CGPoint", &[Encoding::Double, Encoding::Double]);
+}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct __CVBuffer {
@@ -108,6 +109,45 @@ pub struct AVCaptureWhiteBalanceGains {
     pub blueGain: f32,
     pub greenGain: f32,
     pub redGain: f32,
+}
+
+// SAFETY: AVCaptureWhiteBalanceGains is repr(C) with three f32 fields.
+unsafe impl Encode for AVCaptureWhiteBalanceGains {
+    const ENCODING: Encoding = Encoding::Struct(
+        "AVCaptureWhiteBalanceGains",
+        &[Encoding::Float, Encoding::Float, Encoding::Float],
+    );
+}
+
+/// A local newtype wrapper around `CMTime` to implement `Encode`.
+/// This is needed because both `CMTime` and `Encode` are from external crates.
+#[repr(transparent)]
+#[derive(Debug, Copy, Clone)]
+pub struct EncodableCMTime(pub CMTime);
+
+// SAFETY: EncodableCMTime is repr(transparent) over CMTime which is repr(C) with fields {i64, i32, u32, i64}.
+unsafe impl Encode for EncodableCMTime {
+    const ENCODING: Encoding = Encoding::Struct(
+        "CMTime",
+        &[
+            Encoding::LongLong,
+            Encoding::Int,
+            Encoding::UInt,
+            Encoding::LongLong,
+        ],
+    );
+}
+
+impl From<EncodableCMTime> for CMTime {
+    fn from(e: EncodableCMTime) -> CMTime {
+        e.0
+    }
+}
+
+impl From<CMTime> for EncodableCMTime {
+    fn from(t: CMTime) -> EncodableCMTime {
+        EncodableCMTime(t)
+    }
 }
 
 pub type CVBufferRef = *mut __CVBuffer;
@@ -141,16 +181,16 @@ extern "C" {
     pub static AVVideoHeightKey: NSString;
     pub static AVVideoExpectedSourceFrameRateKey: NSString;
 
-    pub static AVMediaTypeVideo: AVMediaType;
-    pub static AVMediaTypeAudio: AVMediaType;
-    pub static AVMediaTypeText: AVMediaType;
-    pub static AVMediaTypeClosedCaption: AVMediaType;
-    pub static AVMediaTypeSubtitle: AVMediaType;
-    pub static AVMediaTypeTimecode: AVMediaType;
-    pub static AVMediaTypeMetadata: AVMediaType;
-    pub static AVMediaTypeMuxed: AVMediaType;
-    pub static AVMediaTypeMetadataObject: AVMediaType;
-    pub static AVMediaTypeDepthData: AVMediaType;
+    pub static AVMediaTypeVideo: AVMediaTypeRaw;
+    pub static AVMediaTypeAudio: AVMediaTypeRaw;
+    pub static AVMediaTypeText: AVMediaTypeRaw;
+    pub static AVMediaTypeClosedCaption: AVMediaTypeRaw;
+    pub static AVMediaTypeSubtitle: AVMediaTypeRaw;
+    pub static AVMediaTypeTimecode: AVMediaTypeRaw;
+    pub static AVMediaTypeMetadata: AVMediaTypeRaw;
+    pub static AVMediaTypeMuxed: AVMediaTypeRaw;
+    pub static AVMediaTypeMetadataObject: AVMediaTypeRaw;
+    pub static AVMediaTypeDepthData: AVMediaTypeRaw;
 
     pub static AVCaptureLensPositionCurrent: f32;
     pub static AVCaptureExposureTargetBiasCurrent: f32;
