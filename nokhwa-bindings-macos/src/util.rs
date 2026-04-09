@@ -124,5 +124,5 @@ pub(crate) fn raw_fcc_to_frameformat(raw: OSType) -> Option<FrameFormat> {
     }
 }
 
-pub type CompressionData<'a> = (Cow<'a, [u8]>, FrameFormat);
+pub type CompressionData<'a> = (Cow<'a, [u8]>, FrameFormat, Option<std::time::Duration>);
 pub type DataPipe<'a> = (Sender<CompressionData<'a>>, Receiver<CompressionData<'a>>);

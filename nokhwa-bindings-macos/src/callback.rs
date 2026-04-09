@@ -1,8 +1,9 @@
 use crate::ffi::AVMediaTypeVideo;
 use crate::ffi::{
-    dispatch_queue_create, CMSampleBufferGetImageBuffer, CVImageBufferRef,
-    CVPixelBufferGetBaseAddress, CVPixelBufferGetDataSize, CVPixelBufferGetPixelFormatType,
-    CVPixelBufferLockBaseAddress, CVPixelBufferUnlockBaseAddress, NSObject,
+    dispatch_queue_create, CMSampleBufferGetImageBuffer, CMSampleBufferGetPresentationTimeStamp,
+    CVImageBufferRef, CVPixelBufferGetBaseAddress, CVPixelBufferGetDataSize,
+    CVPixelBufferGetPixelFormatType, CVPixelBufferLockBaseAddress, CVPixelBufferUnlockBaseAddress,
+    NSObject,
 };
 use crate::types::{AVAuthorizationStatus, AVMediaType};
 use crate::util::raw_fcc_to_frameformat;
@@ -14,7 +15,36 @@ use objc2::runtime::{AnyClass, AnyObject, AnyProtocol, Bool, ClassBuilder, Sel};
 use std::{
     ffi::{c_void, CStr},
     sync::{Arc, LazyLock},
+    time::Duration,
 };
+
+/// Raw frame data from the capture callback: (pixels, format, optional sensor timestamp).
+pub type FrameData = (Vec<u8>, FrameFormat, Option<Duration>);
+
+extern "C" {
+    fn mach_absolute_time() -> u64;
+}
+
+#[repr(C)]
+struct MachTimebaseInfo {
+    numer: u32,
+    denom: u32,
+}
+
+extern "C" {
+    fn mach_timebase_info(info: *mut MachTimebaseInfo) -> i32;
+}
+
+fn mach_absolute_time_nanos() -> u64 {
+    static TIMEBASE: LazyLock<(u32, u32)> = LazyLock::new(|| {
+        let mut info = MachTimebaseInfo { numer: 0, denom: 0 };
+        unsafe { mach_timebase_info(&mut info) };
+        (info.numer, info.denom)
+    });
+    let ticks = unsafe { mach_absolute_time() };
+    let (numer, denom) = *TIMEBASE;
+    ticks.wrapping_mul(u64::from(numer)) / u64::from(denom)
+}
 
 static CALLBACK_CLASS: LazyLock<&'static AnyClass> = LazyLock::new(|| {
     let superclass = objc2::class!(NSObject);
@@ -79,12 +109,31 @@ static CALLBACK_CLASS: LazyLock<&'static AnyClass> = LazyLock::new(|| {
 
         unsafe { CVPixelBufferUnlockBaseAddress(image_buffer, 0) };
 
+        // Compute sensor capture timestamp from CMSampleBuffer presentation time
+        let capture_ts = {
+            let pts = unsafe { CMSampleBufferGetPresentationTimeStamp(didOutputSampleBuffer) };
+            if pts.timescale > 0 {
+                let pts_nanos =
+                    (pts.value as u128).saturating_mul(1_000_000_000) / (pts.timescale as u128);
+                let mono_now_nanos = u128::from(mach_absolute_time_nanos());
+                let wall_now = std::time::SystemTime::now();
+
+                let age = Duration::from_nanos(mono_now_nanos.saturating_sub(pts_nanos) as u64);
+                wall_now
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .ok()
+                    .and_then(|wall_dur| wall_dur.checked_sub(age))
+            } else {
+                None
+            }
+        };
+
         let bufferlck_cv: *const c_void = unsafe { objc2::msg_send![this, bufferPtr] };
         let buffer_sndr = unsafe {
-            let ptr = bufferlck_cv.cast::<Sender<(Vec<u8>, FrameFormat)>>();
+            let ptr = bufferlck_cv.cast::<Sender<FrameData>>();
             Arc::from_raw(ptr)
         };
-        let _ = buffer_sndr.send((buffer_as_vec, frame_format));
+        let _ = buffer_sndr.send((buffer_as_vec, frame_format, capture_ts));
         std::mem::forget(buffer_sndr);
     }
 
@@ -171,10 +220,7 @@ pub struct AVCaptureVideoCallback {
 }
 
 impl AVCaptureVideoCallback {
-    pub fn new(
-        device_spec: &CStr,
-        buffer: &Arc<Sender<(Vec<u8>, FrameFormat)>>,
-    ) -> Result<Self, NokhwaError> {
+    pub fn new(device_spec: &CStr, buffer: &Arc<Sender<FrameData>>) -> Result<Self, NokhwaError> {
         let cls = &CALLBACK_CLASS as &AnyClass;
         let delegate: *mut AnyObject = unsafe { objc2::msg_send![cls, alloc] };
         let delegate: *mut AnyObject = unsafe { objc2::msg_send![delegate, init] };

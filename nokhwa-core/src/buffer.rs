@@ -22,6 +22,7 @@ use bytes::Bytes;
 use image::ImageBuffer;
 #[cfg(feature = "opencv-mat")]
 use opencv::{boxed_ref::BoxedRef, core::Mat};
+use std::time::Duration;
 
 /// A buffer returned by a camera to accommodate custom decoding.
 /// Contains information of Resolution, the buffer's [`FrameFormat`], and the buffer.
@@ -33,6 +34,7 @@ pub struct Buffer {
     resolution: Resolution,
     data: Bytes,
     source_frame_format: FrameFormat,
+    capture_timestamp: Option<Duration>,
 }
 
 impl Buffer {
@@ -44,7 +46,31 @@ impl Buffer {
             resolution: res,
             data: Bytes::copy_from_slice(buf),
             source_frame_format,
+            capture_timestamp: None,
         }
+    }
+
+    /// Creates a new buffer with a [`&[u8]`] and a backend-provided capture timestamp.
+    #[must_use]
+    #[inline]
+    pub fn with_timestamp(
+        res: Resolution,
+        buf: &[u8],
+        source_frame_format: FrameFormat,
+        capture_timestamp: Option<Duration>,
+    ) -> Self {
+        Self {
+            resolution: res,
+            data: Bytes::copy_from_slice(buf),
+            source_frame_format,
+            capture_timestamp,
+        }
+    }
+
+    /// Get the backend-provided capture timestamp, if available.
+    #[must_use]
+    pub fn capture_timestamp(&self) -> Option<Duration> {
+        self.capture_timestamp
     }
 
     /// Get the [`Resolution`] of this buffer.
