@@ -74,6 +74,7 @@ Almost everything is behind feature flags. A build **must** enable at least one 
 - **NEVER create PRs against the upstream repository (`l1npengtul/nokhwa`).** Always use `--repo DaveDev42/nokhwa` with `gh pr create`.
 - `main` branch is protected via GitHub Rulesets (require PR, require signed commits). Do not attempt direct push.
 - When using `gh` commands, always specify `--repo DaveDev42/nokhwa` to avoid accidentally targeting upstream.
+- **NEVER commit planning artifacts, spec documents, or skill-generated files (e.g. `docs/superpowers/`, `docs/plans/`) to the repository.** Keep all planning work in local context only.
 
 ## Code Style
 
