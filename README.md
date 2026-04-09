@@ -92,11 +92,14 @@ Contributions are welcome!
 `nokhwa` may build on older versions of `rustc`, but there is no guarantee except for the latest stable rust. 
 
 ## Sponsors
+
+This project is a fork of [l1npengtul/nokhwa](https://github.com/l1npengtul/nokhwa). The following sponsors supported the original author's work on nokhwa:
+
 - $40/mo sponsors:
   - [erlend-sh](https://github.com/erlend-sh)
   - [DanielMSchmidt](https://github.com/DanielMSchmidt)
 - $5/mo sponsors:
   - [remifluff](https://github.com/remifluff)
   - [gennyble](https://github.com/gennyble)
-  
-Please consider [donating](https://github.com/sponsors/l1npengtul)! It helps me not look like a failure to my parents!
+
+Please consider [sponsoring the original author](https://github.com/sponsors/l1npengtul) to support the continued development of nokhwa.
