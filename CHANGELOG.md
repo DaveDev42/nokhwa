@@ -1,3 +1,38 @@
+# 0.10.11 (unreleased, fork: DaveDev42/nokhwa)
+
+## Performance
+- CallbackCamera threading overhaul: eliminated simultaneous multi-lock, fixed memory ordering (SeqCst → Release/Acquire), added thread join in Drop
+- Replaced `to_vec()` + sort allocations with zero-allocation `max_by_key` iterators in `RequestedFormat::fulfill()`
+- Deduplicated Windows Media Foundation format enumeration (~80 lines removed)
+- Removed unnecessary `Vec::default()` allocations in CallbackCamera
+
+## Refactoring
+- **macOS: migrated from `objc`/`cocoa-foundation` to `objc2`/`block2`** — eliminated all 186 deprecation warnings, reduced dependencies from 6 to 3
+- Split macOS bindings monolith (2,422 lines) into 6 focused modules (ffi, util, types, callback, device, session)
+- Fixed UB: `from_raw_parts_mut` → `from_raw_parts` in CVPixelBuffer callback
+
+## Bug Fixes
+- Fixed `wanted_decoder` filter inconsistently applied in `HighestResolution`/`HighestFrameRate` format selection
+- Fixed several macOS AVFoundation bugs discovered during objc2 migration:
+  - `maxWhiteBalanceGain` read as wrong type (UB)
+  - `BacklightComp` setter sending wrong selector
+  - `Gain` setter extracting wrong value type
+  - `TorchMode` inverted flag logic
+  - `data_len()` sending unregistered selector (runtime crash)
+  - `CGFloat` incorrectly defined as f32 on 64-bit (should be f64)
+- Poisoned mutex errors now logged instead of silently swallowed in CallbackCamera
+
+## Infrastructure
+- Added cross-platform CI: lint, build-matrix, test-core, device-test workflows
+- Added pre-commit hook (cargo fmt + clippy)
+- Added 24 unit tests for nokhwa-core
+- Clippy pedantic: 30 errors → 0
+
+## Cleanup
+- Removed unused dependencies: `usb_enumeration`, `regex`, `cocoa-foundation`, `core-foundation`, `once_cell`
+- Removed dead code: empty `VirtualBackendTrait`, commented-out module declarations, obsolete code blocks
+- Removed obsolete `make-npm.sh` (JS bindings removed in 0.10.0)
+
 # 0.10.0
 - Split core types and traits into `nokhwa-core`
   - Now you can use `nokhwa`'s Camera types in your own packages, to e.g. create `nokhwa` extensions or use `nokhwa`'s decoders.  
