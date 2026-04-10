@@ -1457,6 +1457,8 @@ pub fn yuyv422_to_rgb(data: &[u8], rgba: bool) -> Result<Vec<u8>, NokhwaError> {
 /// # Errors
 /// If the stream is invalid YUYV, or the destination buffer is not large enough, this will error.
 #[inline]
+#[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::cast_sign_loss)]
 pub fn buf_yuyv422_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<(), NokhwaError> {
     if !data.len().is_multiple_of(4) {
         return Err(NokhwaError::ProcessFrameError {
@@ -1479,56 +1481,47 @@ pub fn buf_yuyv422_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<()
         });
     }
 
-    let iter = data.chunks_exact(4);
-
     if rgba {
-        let mut iter = iter
-            .flat_map(|yuyv| {
-                let y1 = i32::from(yuyv[0]);
-                let u = i32::from(yuyv[1]);
-                let y2 = i32::from(yuyv[2]);
-                let v = i32::from(yuyv[3]);
-                let pixel1 = yuyv444_to_rgba(y1, u, v);
-                let pixel2 = yuyv444_to_rgba(y2, u, v);
-                [pixel1, pixel2]
-            })
-            .flatten();
-        for i in dest.iter_mut().take(rgb_buf_size) {
-            *i = match iter.next() {
-                Some(v) => v,
-                None => {
-                    return Err(NokhwaError::ProcessFrameError {
-                        src: FrameFormat::YUYV,
-                        destination: "RGBA8888".to_string(),
-                        error: "Ran out of RGBA YUYV values! (this should not happen, please file an issue: l1npengtul/nokhwa)".to_string()
-                    })
-                }
-            }
+        for (i, yuyv) in data.chunks_exact(4).enumerate() {
+            let y1 = i32::from(yuyv[0]);
+            let u = i32::from(yuyv[1]);
+            let y2 = i32::from(yuyv[2]);
+            let v = i32::from(yuyv[3]);
+
+            let c298 = (y1 - 16) * 298;
+            let d = u - 128;
+            let e = v - 128;
+            let base = i * 8;
+            dest[base] = ((c298 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
+            dest[base + 1] = ((c298 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
+            dest[base + 2] = ((c298 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
+            dest[base + 3] = 255;
+
+            let c298 = (y2 - 16) * 298;
+            dest[base + 4] = ((c298 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
+            dest[base + 5] = ((c298 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
+            dest[base + 6] = ((c298 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
+            dest[base + 7] = 255;
         }
     } else {
-        let mut iter = iter
-            .flat_map(|yuyv| {
-                let y1 = i32::from(yuyv[0]);
-                let u = i32::from(yuyv[1]);
-                let y2 = i32::from(yuyv[2]);
-                let v = i32::from(yuyv[3]);
-                let pixel1 = yuyv444_to_rgb(y1, u, v);
-                let pixel2 = yuyv444_to_rgb(y2, u, v);
-                [pixel1, pixel2]
-            })
-            .flatten();
+        for (i, yuyv) in data.chunks_exact(4).enumerate() {
+            let y1 = i32::from(yuyv[0]);
+            let u = i32::from(yuyv[1]);
+            let y2 = i32::from(yuyv[2]);
+            let v = i32::from(yuyv[3]);
 
-        for i in dest.iter_mut().take(rgb_buf_size) {
-            *i = match iter.next() {
-                Some(v) => v,
-                None => {
-                    return Err(NokhwaError::ProcessFrameError {
-                        src: FrameFormat::YUYV,
-                        destination: "RGB888".to_string(),
-                        error: "Ran out of RGB YUYV values! (this should not happen, please file an issue: l1npengtul/nokhwa)".to_string()
-                    })
-                }
-            }
+            let c298 = (y1 - 16) * 298;
+            let d = u - 128;
+            let e = v - 128;
+            let base = i * 6;
+            dest[base] = ((c298 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
+            dest[base + 1] = ((c298 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
+            dest[base + 2] = ((c298 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
+
+            let c298 = (y2 - 16) * 298;
+            dest[base + 3] = ((c298 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
+            dest[base + 4] = ((c298 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
+            dest[base + 5] = ((c298 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
         }
     }
 
