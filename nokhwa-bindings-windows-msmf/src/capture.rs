@@ -15,7 +15,7 @@
  */
 use crate::wmf::MediaFoundationDevice;
 use nokhwa_core::{
-    buffer::Buffer,
+    buffer::{Buffer, TimestampKind},
     error::NokhwaError,
     pixel_format::RgbFormat,
     traits::CaptureBackendTrait,
@@ -249,7 +249,7 @@ impl CaptureBackendTrait for MediaFoundationCaptureDevice {
             self_ctrl.resolution(),
             &bytes,
             self_ctrl.format(),
-            capture_ts,
+            capture_ts.map(|ts| (ts, TimestampKind::MonotonicClock)),
         ))
     }
 

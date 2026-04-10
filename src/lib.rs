@@ -43,7 +43,7 @@ pub mod threaded;
 
 pub use camera::Camera;
 pub use init::*;
-pub use nokhwa_core::buffer::Buffer;
+pub use nokhwa_core::buffer::{Buffer, TimestampKind};
 pub use nokhwa_core::error::NokhwaError;
 #[cfg(feature = "output-wgpu")]
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "output-wgpu")))]

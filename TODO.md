@@ -11,7 +11,7 @@
   - [ ] Robustness against malformed input (e.g. malformed MJPEG)
 - [ ] Restructure error types — replace `String`-based variants (`GeneralError`, `OpenStreamError`, `ReadFrameError`) with structured context (backend, attempted format, device index). Also fix `UnitializedError` typo.
 - [ ] Replace `cap_impl_fn!`/`cap_impl_matches!` macros with a Backend Registry or Builder pattern — current macro-based backend dispatch in `camera.rs` is hard to read and debug.
-- [ ] Unify timestamp semantics — `Buffer::capture_timestamp` (`Option<Duration>`) has different meanings per platform (macOS: presentation TS, Linux: v4l2 TS, Windows: COM clock). Introduce a `TimestampSource` enum to let consumers distinguish semantics.
+- [x] ~~Unify timestamp semantics~~ — Done: added `TimestampKind` enum (`Capture`, `Presentation`, `MonotonicClock`, `WallClock`, `Unknown`) paired with `Duration` in `Buffer`.
 
 ## Low Priority
 - [ ] Add async support — `frame()` is blocking with no timeout mechanism. Short-term: add `frame_timeout(Duration)`. Long-term: consider `AsyncCaptureBackendTrait` or `Stream`-based API.

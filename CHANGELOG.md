@@ -25,6 +25,12 @@
   - macOS: `CMSampleBufferGetPresentationTimeStamp` → wall clock conversion
   - Linux: `v4l2_buffer.timestamp` → wall clock conversion
   - Windows: `IMFSample::GetSampleTime` → wall clock conversion
+- Added `TimestampKind` enum for platform-aware timestamp semantics
+  - Variants: `Capture`, `Presentation`, `MonotonicClock`, `WallClock`, `Unknown`
+  - `Buffer::with_timestamp()` now accepts `Option<(Duration, TimestampKind)>`
+  - New `Buffer::capture_timestamp_with_kind()` accessor; `capture_timestamp()` remains backward-compatible
+  - Each backend tags its timestamps: macOS → `Presentation`, Linux → `WallClock`, Windows → `MonotonicClock`
+  - `#[non_exhaustive]` for future extensibility; serde support behind `serialize` feature
 
 ## Bug Fixes
 - Fixed NV12 pixel formats (420 biplanar YCbCr) incorrectly mapped to `FrameFormat::YUYV` instead of `FrameFormat::NV12` in macOS bindings

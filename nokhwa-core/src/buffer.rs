@@ -22,7 +22,31 @@ use bytes::Bytes;
 use image::ImageBuffer;
 #[cfg(feature = "opencv-mat")]
 use opencv::{boxed_ref::BoxedRef, core::Mat};
+#[cfg(feature = "serialize")]
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
+
+/// Describes the semantics of a capture timestamp.
+///
+/// Different platforms produce timestamps with different reference clocks.
+/// This enum lets callers know what a [`Duration`] actually represents.
+#[derive(Clone, Copy, Debug, Hash, PartialOrd, Ord, PartialEq, Eq)]
+#[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
+pub enum TimestampKind {
+    /// The timestamp represents when the frame was captured by the sensor.
+    Capture,
+    /// The timestamp is a presentation timestamp assigned by the media pipeline
+    /// (e.g. `CMSampleBuffer` on macOS).
+    Presentation,
+    /// The timestamp is derived from a monotonic clock
+    /// (e.g. `IMFSample` clock on Windows).
+    MonotonicClock,
+    /// The timestamp is a wall-clock time (e.g. `CLOCK_REALTIME` / `SystemTime`).
+    WallClock,
+    /// The timestamp source is unknown or not specified by the backend.
+    Unknown,
+}
 
 /// A buffer returned by a camera to accommodate custom decoding.
 /// Contains information of Resolution, the buffer's [`FrameFormat`], and the buffer.
@@ -34,7 +58,7 @@ pub struct Buffer {
     resolution: Resolution,
     data: Bytes,
     source_frame_format: FrameFormat,
-    capture_timestamp: Option<Duration>,
+    capture_timestamp: Option<(Duration, TimestampKind)>,
 }
 
 impl Buffer {
@@ -57,7 +81,7 @@ impl Buffer {
         res: Resolution,
         buf: &[u8],
         source_frame_format: FrameFormat,
-        capture_timestamp: Option<Duration>,
+        capture_timestamp: Option<(Duration, TimestampKind)>,
     ) -> Self {
         Self {
             resolution: res,
@@ -68,8 +92,20 @@ impl Buffer {
     }
 
     /// Get the backend-provided capture timestamp, if available.
+    ///
+    /// This returns only the [`Duration`] value. To also get the
+    /// [`TimestampKind`] describing what the timestamp represents,
+    /// use [`capture_timestamp_with_kind`](Self::capture_timestamp_with_kind).
     #[must_use]
     pub fn capture_timestamp(&self) -> Option<Duration> {
+        self.capture_timestamp.map(|(ts, _)| ts)
+    }
+
+    /// Get the backend-provided capture timestamp and its [`TimestampKind`], if available.
+    ///
+    /// For just the [`Duration`], see [`capture_timestamp`](Self::capture_timestamp).
+    #[must_use]
+    pub fn capture_timestamp_with_kind(&self) -> Option<(Duration, TimestampKind)> {
         self.capture_timestamp
     }
 
