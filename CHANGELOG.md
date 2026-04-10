@@ -11,6 +11,7 @@
 - `NokhwaError` variant changes: `UnitializedError` renamed to `UninitializedError`; `GeneralError(String)`, `OpenStreamError(String)`, `ReadFrameError(String)`, `StreamShutdownError(String)` changed from tuple to struct variants with structured context fields
 
 ## Performance
+- Optimized NV12 decoder: pre-computed UV row offset and output row offset outside inner loop, consolidated UV indexing to eliminate redundant per-pixel division
 - CallbackCamera threading overhaul: eliminated simultaneous multi-lock, fixed memory ordering (SeqCst → Release/Acquire), added thread join in Drop
 - Replaced `to_vec()` + sort allocations with zero-allocation `max_by_key` iterators in `RequestedFormat::fulfill()`
 - Deduplicated Windows Media Foundation format enumeration (~80 lines removed)

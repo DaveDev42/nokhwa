@@ -22,7 +22,7 @@
 - [ ] Eliminate redundant frame copies — Buffer::new() always uses `Bytes::copy_from_slice()`. Add `Buffer::from_vec(Vec<u8>)` constructor using `Bytes::from(vec)` for zero-copy ownership transfer. Update all backends to use it.
 - [ ] Remove AVFoundation double copy — CMSampleBuffer → `to_vec()` → `Bytes::copy_from_slice()` causes 2 full copies per frame. Use `Bytes::from(vec)` for the second step; long-term, explore direct CMSampleBuffer → Bytes path.
 - [ ] Optimize YUYV decoder — `types.rs` lines 1460-1536 use per-pixel `flat_map` + intermediate arrays. Replace with `chunks_exact` + direct write to eliminate iterator overhead.
-- [ ] Optimize NV12 decoder — `types.rs` lines 1590-1664 repeat UV plane index division per pixel. Pre-compute row offsets and use direct indexing.
+- [x] ~~Optimize NV12 decoder~~ — Done: pre-computed UV row offset and output row offset outside inner loop (#53)
 - [ ] Reduce CallbackCamera lock contention — 3 sequential mutex acquisitions per frame (Camera, Callback, last_frame). Replace `last_frame` with lock-free pattern (e.g. `ArcSwap`), shrink lock scopes.
 - [ ] Explore SIMD for pixel format conversion — YUYV/NV12/BGR→RGB decoders use scalar arithmetic. Consider `std::simd` (nightly) or manual intrinsics for 4-8x throughput.
 
