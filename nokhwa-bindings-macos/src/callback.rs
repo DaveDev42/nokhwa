@@ -1,4 +1,5 @@
 use crate::ffi::AVMediaTypeVideo;
+use crate::ffi::CMSampleBufferRef;
 use crate::ffi::{
     dispatch_queue_create, CMSampleBufferGetImageBuffer, CMSampleBufferGetPresentationTimeStamp,
     CVImageBufferRef, CVPixelBufferGetBaseAddress, CVPixelBufferGetDataSize,
@@ -8,7 +9,6 @@ use crate::ffi::{
 use crate::types::{AVAuthorizationStatus, AVMediaType};
 use crate::util::raw_fcc_to_frameformat;
 use block2::RcBlock;
-use core_media_sys::CMSampleBufferRef;
 use flume::Sender;
 use nokhwa_core::{error::NokhwaError, types::FrameFormat};
 use objc2::runtime::{AnyClass, AnyObject, AnyProtocol, Bool, ClassBuilder, Sel};
@@ -244,5 +244,19 @@ impl AVCaptureVideoCallback {
 
     pub fn queue(&self) -> &NSObject {
         &self.queue
+    }
+}
+
+impl Drop for AVCaptureVideoCallback {
+    fn drop(&mut self) {
+        if !self.delegate.is_null() {
+            unsafe {
+                let _: () = objc2::msg_send![self.delegate, release];
+            }
+        }
+        use crate::ffi::dispatch_release;
+        unsafe {
+            dispatch_release(self.queue.clone());
+        }
     }
 }

@@ -3,14 +3,14 @@ use crate::ffi::{
     AVCaptureWhiteBalanceGains, CGFloat, CGPoint, CMVideoFormatDescriptionGetDimensions,
     EncodableCMTime,
 };
+use crate::ffi::{
+    CMFormatDescriptionGetMediaSubType, CMFormatDescriptionRef, CMTime, CMVideoDimensions,
+};
 use crate::session::AVCaptureDeviceDiscoverySession;
 use crate::types::{AVCaptureDevicePosition, AVCaptureDeviceType, AVMediaType};
 use crate::util::{
     create_boilerplate_impl, ns_arr_to_vec, nsstr_to_str, raw_fcc_to_frameformat, str_to_nsstr,
     try_ns_arr_to_vec,
-};
-use core_media_sys::{
-    CMFormatDescriptionGetMediaSubType, CMFormatDescriptionRef, CMTime, CMVideoDimensions,
 };
 use nokhwa_core::{
     error::NokhwaError,
@@ -235,8 +235,9 @@ impl AVCaptureDevice {
                 error: "Already in use".to_string(),
             });
         }
-        let err_ptr: *mut c_void = std::ptr::null_mut();
-        let accepted: bool = unsafe { objc2::msg_send![self.inner, lockForConfiguration: err_ptr] };
+        let mut err_ptr: *mut AnyObject = std::ptr::null_mut();
+        let accepted: bool =
+            unsafe { objc2::msg_send![self.inner, lockForConfiguration: &mut err_ptr as *mut _] };
         if !err_ptr.is_null() {
             return Err(NokhwaError::SetPropertyError {
                 property: "lockForConfiguration".to_string(),

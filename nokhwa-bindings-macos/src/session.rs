@@ -1,15 +1,13 @@
 use crate::callback::AVCaptureVideoCallback;
 use crate::device::{get_raw_device_info, AVCaptureDevice};
 use crate::ffi::AVMediaTypeVideo;
+use crate::ffi::{
+    kCMPixelFormat_24RGB, kCMPixelFormat_422YpCbCr8_yuvs, kCMPixelFormat_8IndexedGray_WhiteIsZero,
+    kCMVideoCodecType_JPEG, kCVPixelBufferPixelFormatTypeKey,
+    kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+};
 use crate::types::AVCaptureDeviceType;
 use crate::util::{create_boilerplate_impl, vec_to_ns_arr};
-use core_media_sys::{
-    kCMPixelFormat_24RGB, kCMPixelFormat_422YpCbCr8_yuvs, kCMPixelFormat_8IndexedGray_WhiteIsZero,
-    kCMVideoCodecType_JPEG,
-};
-use core_video_sys::{
-    kCVPixelBufferPixelFormatTypeKey, kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
-};
 use nokhwa_core::{
     error::NokhwaError,
     types::{CameraIndex, CameraInfo, FrameFormat},
@@ -113,7 +111,7 @@ impl AVCaptureVideoDataOutput {
             FrameFormat::YUYV => kCMPixelFormat_422YpCbCr8_yuvs,
             FrameFormat::MJPEG => kCMVideoCodecType_JPEG,
             FrameFormat::GRAY => kCMPixelFormat_8IndexedGray_WhiteIsZero,
-            FrameFormat::NV12 => kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
+            FrameFormat::NV12 => kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
             FrameFormat::RAWRGB => kCMPixelFormat_24RGB,
             FrameFormat::RAWBGR => {
                 return Err(NokhwaError::SetPropertyError {
