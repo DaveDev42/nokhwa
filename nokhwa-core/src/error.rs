@@ -35,8 +35,8 @@ pub enum NokhwaError {
     },
     #[error("Could not generate required structure {structure}: {error}")]
     StructureError { structure: String, error: String },
-    #[error("Could not open device {0}: {1}")]
-    OpenDeviceError(String, String),
+    #[error("Could not open device {device}: {error}")]
+    OpenDeviceError { device: String, error: String },
     #[error("Could not get device property {property}: {error}")]
     GetPropertyError { property: String, error: String },
     #[error("Could not set device property {property} with value {value}: {error}")]

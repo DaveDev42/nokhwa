@@ -8,7 +8,7 @@
   - [ ] Format conversion correctness (MJPEG, NV12, YUYV decoding validation)
   - [ ] Camera control round-trip (set → get verification)
   - [ ] Robustness against malformed input (e.g. malformed MJPEG)
-- [ ] Restructure `OpenDeviceError(String, String)` tuple variant with structured fields
+- [x] Restructure `OpenDeviceError(String, String)` tuple variant with structured fields
 
 ## Low Priority
 (None)

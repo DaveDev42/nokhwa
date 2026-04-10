@@ -174,10 +174,10 @@ mod internal {
         let device = match Device::new(index) {
             Ok(dev) => dev,
             Err(why) => {
-                return Err(NokhwaError::OpenDeviceError(
-                    index.to_string(),
-                    format!("V4L2 Error: {}", why),
-                ))
+                return Err(NokhwaError::OpenDeviceError {
+                    device: index.to_string(),
+                    error: format!("V4L2 Error: {}", why),
+                })
             }
         };
 

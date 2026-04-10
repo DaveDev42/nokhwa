@@ -110,8 +110,9 @@ impl OpenCvCaptureDevice {
             CameraIndex::Index(idx) => VideoCapture::new(*idx as i32, api_pref),
             CameraIndex::String(ip) => VideoCapture::from_file(ip.as_str(), api_pref),
         }
-        .map_err(|why| {
-            NokhwaError::OpenDeviceError(format!("Failed to open {index}"), why.to_string())
+        .map_err(|why| NokhwaError::OpenDeviceError {
+            device: index.to_string(),
+            error: why.to_string(),
         })?;
 
         let camera_format =
@@ -365,10 +366,10 @@ impl CaptureBackendTrait for OpenCvCaptureDevice {
         if is_opened {
             self.stop_stream()?;
             if let Err(why) = self.open_stream() {
-                return Err(NokhwaError::OpenDeviceError(
-                    self.camera_location.to_string(),
-                    why.to_string(),
-                ));
+                return Err(NokhwaError::OpenDeviceError {
+                    device: self.camera_location.to_string(),
+                    error: why.to_string(),
+                });
             }
         }
         Ok(())
@@ -508,16 +509,16 @@ impl CaptureBackendTrait for OpenCvCaptureDevice {
                             backend: Some(ApiBackend::OpenCv),
                         })
                     }
-                    Err(why) => Err(NokhwaError::OpenDeviceError(
-                        idx.to_string(),
-                        format!("Failed to open device: {why}"),
-                    )),
+                    Err(why) => Err(NokhwaError::OpenDeviceError {
+                        device: idx.to_string(),
+                        error: format!("Failed to open device: {why}"),
+                    }),
                 }
             }
-            CameraIndex::String(_) => Err(NokhwaError::OpenDeviceError(
-                "Cannot open".to_string(),
-                "String index not supported (try NetworkCamera instead)".to_string(),
-            )),
+            CameraIndex::String(s) => Err(NokhwaError::OpenDeviceError {
+                device: s.to_string(),
+                error: "String index not supported (try NetworkCamera instead)".to_string(),
+            }),
         }?;
 
         match self.video_capture.is_opened() {
