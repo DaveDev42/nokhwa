@@ -33,10 +33,6 @@
 pub mod backends;
 mod camera;
 mod init;
-// /// A camera that uses native browser APIs meant for WASM applications.
-// #[cfg(feature = "input-jscam")]
-// #[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-jscam")))]
-// pub mod js_camera;
 
 pub use nokhwa_core::pixel_format::FormatDecoder;
 mod query;

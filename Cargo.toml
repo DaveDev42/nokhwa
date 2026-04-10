@@ -19,7 +19,6 @@ members = [
     "nokhwa-core",
 ]
 exclude = [
-    "examples/jscam",
     "examples/threaded-capture",
 ]
 
@@ -49,7 +48,6 @@ input-opencv = [
 output-wgpu = [ "wgpu", "nokhwa-core/wgpu-types" ]
 output-threaded  = [ "parking_lot", "camera-sync-impl" ]
 camera-sync-impl = [  ]
-# small-wasm = [  ]
 docs-only = [
     "input-native",
     "input-opencv",
