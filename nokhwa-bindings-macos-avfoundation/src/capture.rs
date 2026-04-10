@@ -339,3 +339,16 @@ impl Drop for AVFoundationCaptureDevice {
         self.device.unlock();
     }
 }
+
+// SAFETY: AVFoundationCaptureDevice is safe to Send (move) between threads because:
+// - All access goes through &mut self, so after a move the new thread has exclusive
+//   ownership — no aliasing across threads occurs. We do NOT implement Sync.
+// - The Retained<AVCaptureDevice/Session/Input/Output> fields hold reference-counted
+//   ObjC pointers. objc2 conservatively marks them !Send because Apple docs recommend
+//   dispatching calls on a specific queue, but exclusive &mut self access satisfies
+//   that constraint: only one thread touches them at a time.
+// - The GCD DispatchQueue is designed for cross-thread use.
+// - The *mut AnyObject delegate is only accessed during setup and by the GCD queue
+//   callback; it is not touched directly after construction.
+// - The mpsc Sender/Receiver are themselves Send.
+unsafe impl Send for AVFoundationCaptureDevice {}

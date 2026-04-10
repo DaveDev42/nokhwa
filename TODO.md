@@ -2,7 +2,7 @@
 
 ## High Priority
 - [x] ~~Fix `CallbackCamera` Drop panic~~ — Already fixed: `Drop` uses `let _ = self.stop_stream()` and `stop_stream()` uses `if let Ok(...)` for mutex access. No `unwrap()` in destructor path.
-- [ ] Remove `unsafe impl Send for Camera` (`camera-sync-impl` feature) — backend types should satisfy `Send` at the type level, or `Camera` should be made generic to enforce it at compile time.
+- [x] ~~Remove `unsafe impl Send for Camera` (`camera-sync-impl` feature)~~ — Done: replaced with `Send` bound on `Box<dyn CaptureBackendTrait + Send>` and `unsafe impl Send` on `AVFoundationCaptureDevice`.
 
 ## Medium Priority
 - [ ] Add integration tests for each platform backend (currently only core unit tests + macOS format tests)

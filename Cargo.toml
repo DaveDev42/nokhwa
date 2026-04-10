@@ -51,8 +51,7 @@ input-opencv = [
     "nokhwa-core/opencv-mat",
 ]
 output-wgpu = [ "wgpu", "nokhwa-core/wgpu-types" ]
-output-threaded  = [ "parking_lot", "camera-sync-impl" ]
-camera-sync-impl = [  ]
+output-threaded  = [ "parking_lot" ]
 docs-only = [
     "input-native",
     "input-opencv",

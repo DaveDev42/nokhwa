@@ -43,6 +43,15 @@ pub struct MediaFoundationCaptureDevice {
     info: CameraInfo,
 }
 
+// SAFETY: MediaFoundationCaptureDevice is safe to Send (move) between threads because:
+// - All access goes through &mut self, so after a move the new thread has exclusive
+//   ownership — no aliasing across threads occurs. We do NOT implement Sync.
+// - The inner IMFSourceReader (COM interface) wraps NonNull<c_void> which is !Send by
+//   default, but Media Foundation is initialized with MTA (multi-threaded apartment)
+//   mode, making COM objects safe to move between threads.
+// - CameraInfo and CameraFormat are plain data types that are already Send.
+unsafe impl Send for MediaFoundationCaptureDevice {}
+
 impl MediaFoundationCaptureDevice {
     /// Creates a new capture device using the Media Foundation backend. Indexes are gives to devices by the OS, and usually numbered by order of discovery.
     /// # Errors
