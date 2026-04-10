@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#[cfg(feature = "output-wgpu")]
+use nokhwa_core::traits::RawTextureData;
 use nokhwa_core::types::RequestedFormatType;
 use nokhwa_core::{
     buffer::Buffer,
@@ -442,6 +444,22 @@ impl Camera {
         label: Option<&'a str>,
     ) -> Result<WgpuTexture, NokhwaError> {
         self.device.frame_texture(device, queue, label)
+    }
+
+    #[cfg(feature = "output-wgpu")]
+    #[cfg_attr(feature = "docs-features", doc(cfg(feature = "output-wgpu")))]
+    /// Copies a frame to a Wgpu texture in the camera's native pixel format
+    /// (e.g. NV12, YUYV) without converting to RGBA. See [`RawTextureData`]
+    /// for the format metadata needed to decode on the GPU.
+    /// # Errors
+    /// If the frame cannot be captured or the resolution is 0 on any axis, this will error.
+    pub fn frame_texture_raw(
+        &mut self,
+        device: &WgpuDevice,
+        queue: &WgpuQueue,
+        label: Option<&str>,
+    ) -> Result<RawTextureData, NokhwaError> {
+        self.device.frame_texture_raw(device, queue, label)
     }
 
     /// Will drop the stream.

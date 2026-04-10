@@ -30,6 +30,113 @@ use wgpu::{
     TextureUsages,
 };
 
+/// A GPU texture containing raw camera frame data in its native pixel format,
+/// without conversion to RGBA. Consumers can use GPU shaders to decode the
+/// data according to the [`FrameFormat`] and [`TextureFormat`] provided.
+#[derive(Debug)]
+#[cfg(feature = "wgpu-types")]
+#[cfg_attr(feature = "docs-features", doc(cfg(feature = "wgpu-types")))]
+pub struct RawTextureData {
+    /// The wgpu texture containing the raw frame data.
+    pub texture: WgpuTexture,
+    /// The camera's native pixel format (e.g. NV12, YUYV).
+    pub source_frame_format: FrameFormat,
+    /// The wgpu texture format used to store the data.
+    pub texture_format: TextureFormat,
+    /// The original frame resolution.
+    pub resolution: Resolution,
+}
+
+/// Returns the wgpu [`TextureFormat`] and texture dimensions suitable for
+/// storing raw frame data of the given [`FrameFormat`] and [`Resolution`].
+///
+/// For formats without a direct wgpu equivalent, the data is packed into a
+/// single-channel or two-channel texture that a shader can decode.
+///
+/// # Errors
+/// Returns `Err` for [`FrameFormat::MJPEG`] because compressed MJPEG data
+/// cannot be uploaded as a raw texture — use
+/// [`CaptureBackendTrait::frame_texture()`] instead.
+#[cfg(feature = "wgpu-types")]
+#[cfg_attr(feature = "docs-features", doc(cfg(feature = "wgpu-types")))]
+pub fn raw_texture_layout(
+    format: FrameFormat,
+    resolution: Resolution,
+) -> Result<(TextureFormat, Extent3d, u32), NokhwaError> {
+    let w = resolution.width();
+    let h = resolution.height();
+    match format {
+        // YUYV: 2 bytes per pixel, packed as [Y0 U0 Y1 V0]. Store as Rg8Unorm
+        // so each texel holds one byte-pair. Width is the full pixel width
+        // (each texel = 1 pixel channel), but total bytes per row = 2*w.
+        FrameFormat::YUYV => {
+            if !w.is_multiple_of(2) {
+                return Err(NokhwaError::ProcessFrameError {
+                    src: format,
+                    destination: "RawTextureData".to_string(),
+                    error: format!("YUYV requires even width, got {w}"),
+                });
+            }
+            Ok((
+                TextureFormat::Rg8Unorm,
+                Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                2 * w,
+            ))
+        }
+        // NV12: Y plane (w*h bytes) + interleaved UV plane (w*h/2 bytes).
+        // Total = 1.5 * w * h bytes. Store as R8Unorm with height * 3/2.
+        FrameFormat::NV12 => {
+            if !w.is_multiple_of(2) || !h.is_multiple_of(2) {
+                return Err(NokhwaError::ProcessFrameError {
+                    src: format,
+                    destination: "RawTextureData".to_string(),
+                    error: format!("NV12 requires even dimensions, got {w}x{h}"),
+                });
+            }
+            Ok((
+                TextureFormat::R8Unorm,
+                Extent3d {
+                    width: w,
+                    height: h * 3 / 2,
+                    depth_or_array_layers: 1,
+                },
+                w,
+            ))
+        }
+        // GRAY: 1 byte per pixel. Directly maps to R8Unorm.
+        FrameFormat::GRAY => Ok((
+            TextureFormat::R8Unorm,
+            Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+            w,
+        )),
+        // RAWRGB / RAWBGR: 3 bytes per pixel. No exact 3-channel unorm in
+        // wgpu, so use R8Unorm with width*3 to avoid any padding requirement.
+        FrameFormat::RAWRGB | FrameFormat::RAWBGR => Ok((
+            TextureFormat::R8Unorm,
+            Extent3d {
+                width: w * 3,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+            w * 3,
+        )),
+        // MJPEG is a compressed format — raw bytes cannot be uploaded directly.
+        FrameFormat::MJPEG => Err(NokhwaError::GeneralError(
+            "frame_texture_raw() cannot be used with MJPEG sources; \
+             use frame_texture() instead"
+                .to_string(),
+        )),
+    }
+}
+
 /// This trait is for any backend that allows you to grab and take frames from a camera.
 /// Many of the backends are **blocking**, if the camera is occupied the library will block while it waits for it to become available.
 ///
@@ -256,6 +363,82 @@ pub trait CaptureBackendTrait {
         );
 
         Ok(texture)
+    }
+
+    #[cfg(feature = "wgpu-types")]
+    #[cfg_attr(feature = "docs-features", doc(cfg(feature = "wgpu-types")))]
+    /// Copies a frame to a Wgpu texture in the camera's **native pixel format**
+    /// (e.g. NV12, YUYV) without converting to RGBA. The returned
+    /// [`RawTextureData`] carries the format metadata so consumers can apply
+    /// the appropriate GPU shader for decoding.
+    ///
+    /// The default implementation calls [`frame_raw()`](CaptureBackendTrait::frame_raw)
+    /// and uploads the bytes into a texture whose layout is determined by
+    /// [`raw_texture_layout()`]. Backends may override this to provide a more
+    /// efficient implementation (e.g. zero-copy).
+    ///
+    /// # Errors
+    /// If the frame cannot be captured or the resolution is 0 on any axis, this will error.
+    fn frame_texture_raw(
+        &mut self,
+        device: &WgpuDevice,
+        queue: &WgpuQueue,
+        label: Option<&str>,
+    ) -> Result<RawTextureData, NokhwaError> {
+        use wgpu::{Origin3d, TexelCopyTextureInfoBase};
+
+        let source_format = self.frame_format();
+        let resolution = self.resolution();
+        let raw = self.frame_raw()?;
+
+        let (tex_format, tex_size, bytes_per_row) = raw_texture_layout(source_format, resolution)?;
+
+        let expected_size = (bytes_per_row * tex_size.height) as usize;
+        if raw.len() < expected_size {
+            return Err(NokhwaError::ProcessFrameError {
+                src: source_format,
+                destination: "RawTextureData".to_string(),
+                error: format!(
+                    "raw buffer ({} bytes) smaller than expected ({} bytes)",
+                    raw.len(),
+                    expected_size
+                ),
+            });
+        }
+
+        let texture = device.create_texture(&TextureDescriptor {
+            label,
+            size: tex_size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format: tex_format,
+            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
+        queue.write_texture(
+            TexelCopyTextureInfoBase {
+                texture: &texture,
+                mip_level: 0,
+                origin: Origin3d { x: 0, y: 0, z: 0 },
+                aspect: TextureAspect::All,
+            },
+            &raw,
+            TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(bytes_per_row),
+                rows_per_image: Some(tex_size.height),
+            },
+            tex_size,
+        );
+
+        Ok(RawTextureData {
+            texture,
+            source_frame_format: source_format,
+            texture_format: tex_format,
+            resolution,
+        })
     }
 
     /// Will drop the stream.
