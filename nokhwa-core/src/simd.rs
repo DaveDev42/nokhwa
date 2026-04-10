@@ -20,6 +20,7 @@
 //! - **BGR-to-RGB**: NEON on aarch64, SSSE3 on `x86_64`, scalar fallback
 //! - **YUYV-to-RGB/RGBA**: NEON on aarch64, scalar fallback on other architectures
 
+use crate::types::yuyv444_to_rgb;
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::{int16x8_t, int32x4_t, uint8x8_t};
 
@@ -35,21 +36,15 @@ pub fn bgr_to_rgb_simd(src: &[u8], dst: &mut [u8]) {
     debug_assert!(src.len().is_multiple_of(3));
 
     #[cfg(target_arch = "aarch64")]
-    {
-        bgr_to_rgb_neon(src, dst);
-        return;
-    }
+    bgr_to_rgb_neon(src, dst);
 
     #[cfg(target_arch = "x86_64")]
-    {
-        // SAFETY: SSE2 is always available on x86_64
-        unsafe {
-            bgr_to_rgb_sse2(src, dst);
-        }
-        return;
+    // SAFETY: SSE2 is always available on x86_64
+    unsafe {
+        bgr_to_rgb_sse2(src, dst);
     }
 
-    #[allow(unreachable_code)]
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     bgr_to_rgb_scalar(src, dst);
 }
 
@@ -146,12 +141,9 @@ pub fn yuyv_to_rgb_simd(src: &[u8], dst: &mut [u8]) {
     debug_assert_eq!(dst.len(), (src.len() / 4) * 6);
 
     #[cfg(target_arch = "aarch64")]
-    {
-        yuyv_to_rgb_neon(src, dst);
-        return;
-    }
+    yuyv_to_rgb_neon(src, dst);
 
-    #[allow(unreachable_code)]
+    #[cfg(not(target_arch = "aarch64"))]
     yuyv_to_rgb_scalar(src, dst);
 }
 
@@ -163,29 +155,10 @@ pub fn yuyv_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
     debug_assert_eq!(dst.len(), (src.len() / 4) * 8);
 
     #[cfg(target_arch = "aarch64")]
-    {
-        yuyv_to_rgba_neon(src, dst);
-        return;
-    }
+    yuyv_to_rgba_neon(src, dst);
 
-    // For non-NEON platforms, use scalar RGBA conversion
-    #[allow(unreachable_code)]
+    #[cfg(not(target_arch = "aarch64"))]
     yuyv_to_rgba_scalar(src, dst);
-}
-
-/// Single YUV-to-RGB pixel conversion (fixed-point, matching existing `yuyv444_to_rgb`).
-#[allow(clippy::many_single_char_names)]
-#[allow(clippy::cast_possible_truncation)]
-#[allow(clippy::cast_sign_loss)]
-#[inline]
-fn yuv_to_rgb_pixel(y: i32, u: i32, v: i32) -> [u8; 3] {
-    let c298 = (y - 16) * 298;
-    let d = u - 128;
-    let e = v - 128;
-    let r = ((c298 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
-    let g = ((c298 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
-    let b = ((c298 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
-    [r, g, b]
 }
 
 /// Scalar YUYV-to-RGB fallback.
@@ -197,8 +170,8 @@ fn yuyv_to_rgb_scalar(src: &[u8], dst: &mut [u8]) {
         let luma1 = i32::from(chunk[2]);
         let cr = i32::from(chunk[3]);
 
-        let px0 = yuv_to_rgb_pixel(luma0, cb, cr);
-        let px1 = yuv_to_rgb_pixel(luma1, cb, cr);
+        let px0 = yuyv444_to_rgb(luma0, cb, cr);
+        let px1 = yuyv444_to_rgb(luma1, cb, cr);
 
         out[0] = px0[0];
         out[1] = px0[1];
@@ -218,8 +191,8 @@ fn yuyv_to_rgba_scalar(src: &[u8], dst: &mut [u8]) {
         let luma1 = i32::from(chunk[2]);
         let cr = i32::from(chunk[3]);
 
-        let px0 = yuv_to_rgb_pixel(luma0, cb, cr);
-        let px1 = yuv_to_rgb_pixel(luma1, cb, cr);
+        let px0 = yuyv444_to_rgb(luma0, cb, cr);
+        let px1 = yuyv444_to_rgb(luma1, cb, cr);
 
         out[0] = px0[0];
         out[1] = px0[1];
@@ -566,7 +539,7 @@ mod tests {
         let mut rgb = vec![0u8; 6];
         yuyv_to_rgb_simd(&yuyv, &mut rgb);
 
-        let expected = yuv_to_rgb_pixel(128, 128, 128);
+        let expected = yuyv444_to_rgb(128, 128, 128);
         assert_eq!(rgb[0], expected[0]);
         assert_eq!(rgb[1], expected[1]);
         assert_eq!(rgb[2], expected[2]);
@@ -627,6 +600,28 @@ mod tests {
         assert_eq!(
             simd_out, scalar_out,
             "SIMD and scalar RGBA must match for non-8-aligned pair count"
+        );
+    }
+
+    #[test]
+    fn yuyv_to_rgb_extreme_values() {
+        // Extreme YUV values that push clamping boundaries hard
+        let yuyv: Vec<u8> = vec![
+            0, 0, 0, 255, // Y=0,U=0,Y=0,V=255: deep negative green, strong red
+            255, 255, 255, 0, // Y=255,U=255,Y=255,V=0: strong blue, negative red
+            0, 0, 0, 0, // Y=0,U=0,Y=0,V=0: all minimum
+            255, 255, 255, 255, // Y=255,U=255,Y=255,V=255: all maximum
+        ];
+
+        let mut simd_out = vec![0u8; 24];
+        let mut scalar_out = vec![0u8; 24];
+
+        yuyv_to_rgb_simd(&yuyv, &mut simd_out);
+        yuyv_to_rgb_scalar(&yuyv, &mut scalar_out);
+
+        assert_eq!(
+            simd_out, scalar_out,
+            "SIMD and scalar must match for extreme YUV values"
         );
     }
 }
