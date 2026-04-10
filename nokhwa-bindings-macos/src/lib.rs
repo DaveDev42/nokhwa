@@ -25,6 +25,8 @@
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod callback;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
+mod controls;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod device;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod ffi;
