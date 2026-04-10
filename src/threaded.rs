@@ -361,8 +361,11 @@ impl CallbackCamera {
     }
 
     /// Gets the last frame captured by the camera.
+    ///
+    /// This operation is lock-free. Returns the initial empty buffer if no
+    /// frame has been captured yet.
     /// # Errors
-    /// This will error if the internal mutex is poisoned.
+    /// Currently infallible; the `Result` return type is retained for API compatibility.
     pub fn last_frame(&self) -> Result<Buffer, NokhwaError> {
         Ok(Buffer::clone(&self.last_frame_captured.load()))
     }
