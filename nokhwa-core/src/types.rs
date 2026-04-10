@@ -1481,47 +1481,33 @@ pub fn buf_yuyv422_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<()
         });
     }
 
-    if rgba {
-        for (i, yuyv) in data.chunks_exact(4).enumerate() {
-            let y1 = i32::from(yuyv[0]);
-            let u = i32::from(yuyv[1]);
-            let y2 = i32::from(yuyv[2]);
-            let v = i32::from(yuyv[3]);
+    // Conversion math inlined from `yuyv444_to_rgb` for performance: avoids per-pixel
+    // intermediate array allocations and iterator overhead on high-resolution frames.
+    let stride = pixel_size * 2;
+    for (i, yuyv) in data.chunks_exact(4).enumerate() {
+        let y1 = i32::from(yuyv[0]);
+        let u = i32::from(yuyv[1]);
+        let y2 = i32::from(yuyv[2]);
+        let v = i32::from(yuyv[3]);
 
-            let c298 = (y1 - 16) * 298;
-            let d = u - 128;
-            let e = v - 128;
-            let base = i * 8;
-            dest[base] = ((c298 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
-            dest[base + 1] = ((c298 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
-            dest[base + 2] = ((c298 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
+        let d = u - 128;
+        let e = v - 128;
+        let base = i * stride;
+
+        let c1 = (y1 - 16) * 298;
+        dest[base] = ((c1 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
+        dest[base + 1] = ((c1 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
+        dest[base + 2] = ((c1 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
+        if rgba {
             dest[base + 3] = 255;
-
-            let c298 = (y2 - 16) * 298;
-            dest[base + 4] = ((c298 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
-            dest[base + 5] = ((c298 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
-            dest[base + 6] = ((c298 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
-            dest[base + 7] = 255;
         }
-    } else {
-        for (i, yuyv) in data.chunks_exact(4).enumerate() {
-            let y1 = i32::from(yuyv[0]);
-            let u = i32::from(yuyv[1]);
-            let y2 = i32::from(yuyv[2]);
-            let v = i32::from(yuyv[3]);
 
-            let c298 = (y1 - 16) * 298;
-            let d = u - 128;
-            let e = v - 128;
-            let base = i * 6;
-            dest[base] = ((c298 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
-            dest[base + 1] = ((c298 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
-            dest[base + 2] = ((c298 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
-
-            let c298 = (y2 - 16) * 298;
-            dest[base + 3] = ((c298 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
-            dest[base + 4] = ((c298 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
-            dest[base + 5] = ((c298 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
+        let c2 = (y2 - 16) * 298;
+        dest[base + pixel_size] = ((c2 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
+        dest[base + pixel_size + 1] = ((c2 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
+        dest[base + pixel_size + 2] = ((c2 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
+        if rgba {
+            dest[base + pixel_size + 3] = 255;
         }
     }
 
