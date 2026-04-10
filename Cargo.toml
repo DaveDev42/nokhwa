@@ -1,23 +1,28 @@
 [package]
 name        = "nokhwa"
-version     = "0.10.10"
-authors     = [ "l1npengtul <l1npengtul@protonmail.com>" ]
-edition     = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "A Simple-to-use, cross-platform Rust Webcam Capture Library"
 keywords    = [ "camera", "webcam", "capture", "cross-platform" ]
 categories  = [ "api-bindings", "multimedia", "os", "web-programming" ]
-license     = "Apache-2.0"
-repository  = "https://github.com/l1npengtul/nokhwa"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [workspace]
 members = [
-    "nokhwa-bindings-macos",
-    "nokhwa-bindings-windows",
-    "nokhwa-bindings-linux",
+    "nokhwa-bindings-macos-avfoundation",
+    "nokhwa-bindings-windows-msmf",
+    "nokhwa-bindings-linux-v4l",
     "nokhwa-core",
 ]
+
+[workspace.package]
+version    = "0.11.0"
+authors    = [ "l1npengtul <l1npengtul@protonmail.com>" ]
+edition    = "2021"
+license    = "Apache-2.0"
+repository = "https://github.com/DaveDev42/nokhwa"
 exclude = [
     "examples/threaded-capture",
 ]
@@ -29,14 +34,14 @@ crate-type = [ "cdylib", "rlib" ]
 default            = [ "decoding" ]
 serialize          = [ "serde", "nokhwa-core/serialize" ]
 decoding           = [ "nokhwa-core/mjpeg" ]
-input-avfoundation = [ "nokhwa-bindings-macos" ]
-input-msmf         = [ "nokhwa-bindings-windows" ]
-input-v4l          = [ "nokhwa-bindings-linux" ]
+input-avfoundation = [ "nokhwa-bindings-macos-avfoundation" ]
+input-msmf         = [ "nokhwa-bindings-windows-msmf" ]
+input-v4l          = [ "nokhwa-bindings-linux-v4l" ]
 # Disable arena buffer on v4l
 # This should fix crash on Raspberry Pi that have faulty v4l driver.
 # WARNING: This create a performance regression, half of the frames will be dropped
 # You shouldn't enable this unless you have to.
-input-v4l-no-arena-buffer = [ "nokhwa-bindings-linux/no-arena-buffer" ]
+input-v4l-no-arena-buffer = [ "nokhwa-bindings-linux-v4l/no-arena-buffer" ]
 input-native              = [ "input-avfoundation", "input-v4l", "input-msmf" ]
 input-opencv = [
     "opencv",
@@ -65,8 +70,7 @@ thiserror = "2.0"
 paste     = "1.0"
 
 [dependencies.nokhwa-core]
-version = "0.1"
-path    = "nokhwa-core"
+path = "nokhwa-core"
 
 [dependencies.serde]
 version  = "1.0"
@@ -90,19 +94,16 @@ optional         = true
 version  = "0.8"
 optional = true
 
-[dependencies.nokhwa-bindings-windows]
-version  = "0.4"
-path     = "nokhwa-bindings-windows"
+[dependencies.nokhwa-bindings-windows-msmf]
+path     = "nokhwa-bindings-windows-msmf"
 optional = true
 
-[dependencies.nokhwa-bindings-macos]
-version  = "0.2"
-path     = "nokhwa-bindings-macos"
+[dependencies.nokhwa-bindings-macos-avfoundation]
+path     = "nokhwa-bindings-macos-avfoundation"
 optional = true
 
-[dependencies.nokhwa-bindings-linux]
-version  = "0.1"
-path     = "nokhwa-bindings-linux"
+[dependencies.nokhwa-bindings-linux-v4l]
+path     = "nokhwa-bindings-linux-v4l"
 optional = true
 
 [dependencies.parking_lot]

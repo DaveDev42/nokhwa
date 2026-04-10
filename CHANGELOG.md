@@ -1,4 +1,10 @@
-# 0.10.11 (unreleased, fork: DaveDev42/nokhwa)
+# 0.11.0 (unreleased, fork: DaveDev42/nokhwa)
+
+## Breaking
+- Renamed bindings crates: `nokhwa-bindings-macos` → `nokhwa-bindings-macos-avfoundation`, `nokhwa-bindings-windows` → `nokhwa-bindings-windows-msmf`, `nokhwa-bindings-linux` → `nokhwa-bindings-linux-v4l`
+- Unified all workspace crate versions to `0.11.0` (workspace version inheritance)
+- Moved `CaptureBackendTrait` impl from root crate wrappers into bindings crates (consistent with Linux pattern)
+- Replaced `flume` with `std::sync::mpsc` (API compatible but different error types)
 
 ## Performance
 - CallbackCamera threading overhaul: eliminated simultaneous multi-lock, fixed memory ordering (SeqCst → Release/Acquire), added thread join in Drop
