@@ -1184,6 +1184,72 @@ pub mod wmf {
             }
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn guid_nv12() {
+            assert_eq!(
+                guid_to_frameformat(MF_VIDEO_FORMAT_NV12),
+                Some(FrameFormat::NV12)
+            );
+        }
+
+        #[test]
+        fn guid_rgb24_maps_to_rawbgr() {
+            assert_eq!(
+                guid_to_frameformat(MF_VIDEO_FORMAT_RGB24),
+                Some(FrameFormat::RAWBGR)
+            );
+        }
+
+        #[test]
+        fn guid_gray() {
+            assert_eq!(
+                guid_to_frameformat(MF_VIDEO_FORMAT_GRAY),
+                Some(FrameFormat::GRAY)
+            );
+        }
+
+        #[test]
+        fn guid_yuy2() {
+            assert_eq!(
+                guid_to_frameformat(MF_VIDEO_FORMAT_YUY2),
+                Some(FrameFormat::YUYV)
+            );
+        }
+
+        #[test]
+        fn guid_mjpeg() {
+            assert_eq!(
+                guid_to_frameformat(MF_VIDEO_FORMAT_MJPEG),
+                Some(FrameFormat::MJPEG)
+            );
+        }
+
+        #[test]
+        fn guid_unknown_returns_none() {
+            let unknown = GUID::from_values(0, 0, 0, [0; 8]);
+            assert_eq!(guid_to_frameformat(unknown), None);
+        }
+
+        #[test]
+        fn all_known_guids_roundtrip() {
+            let known = [
+                (MF_VIDEO_FORMAT_NV12, FrameFormat::NV12),
+                (MF_VIDEO_FORMAT_RGB24, FrameFormat::RAWBGR),
+                (MF_VIDEO_FORMAT_GRAY, FrameFormat::GRAY),
+                (MF_VIDEO_FORMAT_YUY2, FrameFormat::YUYV),
+                (MF_VIDEO_FORMAT_MJPEG, FrameFormat::MJPEG),
+            ];
+            for (guid, expected) in known {
+                let result = guid_to_frameformat(guid);
+                assert_eq!(result, Some(expected), "GUID mismatch for {expected:?}");
+            }
+        }
+    }
 }
 
 #[cfg(any(not(windows), feature = "docs-only"))]

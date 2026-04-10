@@ -240,3 +240,361 @@ fn closest_format_when_exact_resolution_unavailable() {
     assert_eq!(result.format(), FrameFormat::MJPEG);
     assert_eq!(result.frame_rate(), 30);
 }
+
+// --- RequestedFormatType::fulfill() variant coverage ---
+
+#[test]
+fn fulfill_absolute_highest_resolution() {
+    let available = vec![
+        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30),
+        CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 60),
+        CameraFormat::new_from(1920, 1080, FrameFormat::MJPEG, 30),
+        CameraFormat::new_from(1920, 1080, FrameFormat::MJPEG, 60),
+    ];
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::AbsoluteHighestResolution,
+        &[FrameFormat::MJPEG],
+    );
+    let result = req.fulfill(&available).unwrap();
+    assert_eq!(result.resolution(), Resolution::new(1920, 1080));
+    // Among 1920x1080 formats, picks highest frame rate
+    assert_eq!(result.frame_rate(), 60);
+}
+
+#[test]
+fn fulfill_absolute_highest_framerate() {
+    let available = vec![
+        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30),
+        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 120),
+        CameraFormat::new_from(1920, 1080, FrameFormat::MJPEG, 120),
+    ];
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::AbsoluteHighestFrameRate,
+        &[FrameFormat::MJPEG],
+    );
+    let result = req.fulfill(&available).unwrap();
+    assert_eq!(result.frame_rate(), 120);
+    // Among 120fps formats, picks highest resolution
+    assert_eq!(result.resolution(), Resolution::new(1920, 1080));
+}
+
+#[test]
+fn fulfill_highest_resolution_at_given_resolution() {
+    let available = vec![
+        CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 30),
+        CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 60),
+        CameraFormat::new_from(1920, 1080, FrameFormat::MJPEG, 30),
+    ];
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::HighestResolution(Resolution::new(1280, 720)),
+        &[FrameFormat::MJPEG],
+    );
+    let result = req.fulfill(&available).unwrap();
+    assert_eq!(result.resolution(), Resolution::new(1280, 720));
+    assert_eq!(result.frame_rate(), 60);
+}
+
+#[test]
+fn fulfill_highest_resolution_no_match() {
+    let available = vec![CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30)];
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::HighestResolution(Resolution::new(1920, 1080)),
+        &[FrameFormat::MJPEG],
+    );
+    assert!(req.fulfill(&available).is_none());
+}
+
+#[test]
+fn fulfill_highest_framerate_at_given_fps() {
+    let available = vec![
+        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30),
+        CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 30),
+        CameraFormat::new_from(1920, 1080, FrameFormat::MJPEG, 60),
+    ];
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::HighestFrameRate(30),
+        &[FrameFormat::MJPEG],
+    );
+    let result = req.fulfill(&available).unwrap();
+    assert_eq!(result.frame_rate(), 30);
+    // Among 30fps formats, picks highest resolution
+    assert_eq!(result.resolution(), Resolution::new(1280, 720));
+}
+
+#[test]
+fn fulfill_exact_match() {
+    let target = CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 30);
+    let available = vec![
+        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30),
+        target,
+    ];
+    let req =
+        RequestedFormat::with_formats(RequestedFormatType::Exact(target), &[FrameFormat::MJPEG]);
+    let result = req.fulfill(&available).unwrap();
+    assert_eq!(result, target);
+}
+
+#[test]
+fn fulfill_exact_wrong_decoder() {
+    let target = CameraFormat::new_from(1280, 720, FrameFormat::NV12, 30);
+    let available = vec![target];
+    // Request MJPEG decoder but format is NV12
+    let req =
+        RequestedFormat::with_formats(RequestedFormatType::Exact(target), &[FrameFormat::MJPEG]);
+    assert!(req.fulfill(&available).is_none());
+}
+
+#[test]
+fn fulfill_none_returns_first_compatible() {
+    let available = vec![
+        CameraFormat::new_from(640, 480, FrameFormat::NV12, 30),
+        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30),
+    ];
+    let req = RequestedFormat::with_formats(RequestedFormatType::None, &[FrameFormat::MJPEG]);
+    let result = req.fulfill(&available).unwrap();
+    assert_eq!(result.format(), FrameFormat::MJPEG);
+}
+
+#[test]
+fn fulfill_empty_format_list() {
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::AbsoluteHighestResolution,
+        &[FrameFormat::MJPEG],
+    );
+    assert!(req.fulfill(&[]).is_none());
+}
+
+#[test]
+fn fulfill_closest_picks_nearest_framerate() {
+    let available = vec![
+        CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 15),
+        CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 30),
+        CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 60),
+    ];
+    let requested = CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 25);
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::Closest(requested),
+        &[FrameFormat::MJPEG],
+    );
+    let result = req.fulfill(&available).unwrap();
+    assert_eq!(result.resolution(), Resolution::new(1280, 720));
+    assert_eq!(result.frame_rate(), 30); // 30 is closest to 25
+}
+
+#[test]
+fn fulfill_decoder_filter_applies_across_variants() {
+    let available = vec![
+        CameraFormat::new_from(1920, 1080, FrameFormat::NV12, 60),
+        CameraFormat::new_from(640, 480, FrameFormat::YUYV, 30),
+    ];
+    // Only accept YUYV
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::AbsoluteHighestResolution,
+        &[FrameFormat::YUYV],
+    );
+    let result = req.fulfill(&available).unwrap();
+    assert_eq!(result.format(), FrameFormat::YUYV);
+    assert_eq!(result.resolution(), Resolution::new(640, 480));
+}
+
+// --- ControlValueDescription::verify_setter() coverage ---
+
+#[test]
+fn verify_setter_none() {
+    let desc = ControlValueDescription::None;
+    assert!(desc.verify_setter(&ControlValueSetter::None));
+    assert!(!desc.verify_setter(&ControlValueSetter::Integer(0)));
+}
+
+#[test]
+fn verify_setter_integer_range_in_bounds() {
+    let desc = ControlValueDescription::IntegerRange {
+        min: 0,
+        max: 100,
+        value: 50,
+        step: 1,
+        default: 50,
+    };
+    assert!(desc.verify_setter(&ControlValueSetter::Integer(0)));
+    assert!(desc.verify_setter(&ControlValueSetter::Integer(100)));
+}
+
+#[test]
+fn verify_setter_integer_range_out_of_bounds() {
+    let desc = ControlValueDescription::IntegerRange {
+        min: 0,
+        max: 100,
+        value: 50,
+        step: 1,
+        default: 50,
+    };
+    assert!(!desc.verify_setter(&ControlValueSetter::Integer(-1)));
+    assert!(!desc.verify_setter(&ControlValueSetter::Integer(101)));
+}
+
+#[test]
+fn verify_setter_integer_range_zero_step_always_valid() {
+    let desc = ControlValueDescription::IntegerRange {
+        min: 0,
+        max: 100,
+        value: 50,
+        step: 0,
+        default: 50,
+    };
+    assert!(desc.verify_setter(&ControlValueSetter::Integer(42)));
+    assert!(desc.verify_setter(&ControlValueSetter::Float(3.14)));
+}
+
+#[test]
+fn verify_setter_boolean() {
+    let desc = ControlValueDescription::Boolean {
+        value: true,
+        default: false,
+    };
+    assert!(desc.verify_setter(&ControlValueSetter::Boolean(true)));
+    assert!(desc.verify_setter(&ControlValueSetter::Boolean(false)));
+    assert!(!desc.verify_setter(&ControlValueSetter::Integer(1)));
+}
+
+#[test]
+fn verify_setter_string() {
+    let desc = ControlValueDescription::String {
+        value: "current".to_string(),
+        default: Some("default".to_string()),
+    };
+    assert!(desc.verify_setter(&ControlValueSetter::String("anything".into())));
+    assert!(!desc.verify_setter(&ControlValueSetter::Integer(0)));
+}
+
+#[test]
+fn verify_setter_bytes() {
+    let desc = ControlValueDescription::Bytes {
+        value: vec![1, 2, 3],
+        default: vec![0],
+    };
+    assert!(desc.verify_setter(&ControlValueSetter::Bytes(vec![4, 5])));
+    assert!(!desc.verify_setter(&ControlValueSetter::None));
+}
+
+#[test]
+fn verify_setter_point_rejects_nan() {
+    let desc = ControlValueDescription::Point {
+        value: (0.0, 0.0),
+        default: (0.0, 0.0),
+    };
+    assert!(desc.verify_setter(&ControlValueSetter::Point(1.0, 2.0)));
+    assert!(!desc.verify_setter(&ControlValueSetter::Point(f64::NAN, 0.0)));
+    assert!(!desc.verify_setter(&ControlValueSetter::Point(0.0, f64::NAN)));
+    assert!(!desc.verify_setter(&ControlValueSetter::Point(f64::INFINITY, 0.0)));
+}
+
+#[test]
+fn verify_setter_enum_checks_possible_values() {
+    let desc = ControlValueDescription::Enum {
+        value: 1,
+        possible: vec![1, 2, 3],
+        default: 1,
+    };
+    assert!(desc.verify_setter(&ControlValueSetter::EnumValue(1)));
+    assert!(desc.verify_setter(&ControlValueSetter::EnumValue(3)));
+    assert!(!desc.verify_setter(&ControlValueSetter::EnumValue(99)));
+    assert!(!desc.verify_setter(&ControlValueSetter::Integer(1)));
+}
+
+#[test]
+fn verify_setter_float_range_in_bounds() {
+    let desc = ControlValueDescription::FloatRange {
+        min: 0.0,
+        max: 1.0,
+        value: 0.5,
+        step: 0.0,
+        default: 0.5,
+    };
+    // step is 0.0, so any value in range should pass
+    assert!(desc.verify_setter(&ControlValueSetter::Float(0.75)));
+}
+
+#[test]
+fn verify_setter_float_range_wrong_type() {
+    let desc = ControlValueDescription::FloatRange {
+        min: 0.0,
+        max: 1.0,
+        value: 0.5,
+        step: 0.1,
+        default: 0.5,
+    };
+    assert!(!desc.verify_setter(&ControlValueSetter::Integer(1)));
+}
+
+#[test]
+fn verify_setter_key_value_pair() {
+    let desc = ControlValueDescription::KeyValuePair {
+        key: 1,
+        value: 2,
+        default: (0, 0),
+    };
+    assert!(desc.verify_setter(&ControlValueSetter::KeyValue(10, 20)));
+    assert!(!desc.verify_setter(&ControlValueSetter::Integer(1)));
+}
+
+// --- FrameFormat parse edge cases ---
+
+#[test]
+fn frame_format_parse_invalid_returns_error() {
+    assert!("INVALID".parse::<FrameFormat>().is_err());
+    assert!("".parse::<FrameFormat>().is_err());
+    assert!("mjpeg".parse::<FrameFormat>().is_err()); // case-sensitive
+}
+
+#[test]
+fn frame_format_rawbgr_display_parse() {
+    let fmt = FrameFormat::RAWBGR;
+    let s = format!("{fmt}");
+    assert_eq!(s, "RAWBGR");
+    let parsed: FrameFormat = s.parse().unwrap();
+    assert_eq!(parsed, FrameFormat::RAWBGR);
+}
+
+// --- CameraIndex additional coverage ---
+
+#[test]
+fn camera_index_as_index_returns_err_for_string() {
+    let idx = CameraIndex::String("test".to_string());
+    assert!(idx.as_index().is_err());
+}
+
+#[test]
+fn camera_index_display() {
+    let idx = CameraIndex::Index(5);
+    let s = format!("{idx}");
+    assert!(s.contains('5'));
+}
+
+// --- ControlValueSetter additional accessors ---
+
+#[test]
+fn control_value_setter_key_value() {
+    let setter = ControlValueSetter::KeyValue(10, 20);
+    assert_eq!(setter.as_key_value(), Some((&10, &20)));
+}
+
+#[test]
+fn control_value_setter_point() {
+    let setter = ControlValueSetter::Point(1.5, 2.5);
+    assert_eq!(setter.as_point(), Some((&1.5, &2.5)));
+}
+
+#[test]
+fn control_value_setter_enum_value() {
+    let setter = ControlValueSetter::EnumValue(42);
+    assert_eq!(setter.as_enum(), Some(&42));
+}
+
+#[test]
+fn control_value_setter_rgb() {
+    let setter = ControlValueSetter::RGB(0.1, 0.2, 0.3);
+    let (r, g, b) = setter.as_rgb().unwrap();
+    assert!((r - 0.1).abs() < f64::EPSILON);
+    assert!((g - 0.2).abs() < f64::EPSILON);
+    assert!((b - 0.3).abs() < f64::EPSILON);
+}
