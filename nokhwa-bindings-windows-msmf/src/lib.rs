@@ -1063,7 +1063,10 @@ pub mod wmf {
                 self.source_reader
                     .SetStreamSelection(MEDIA_FOUNDATION_FIRST_VIDEO_STREAM, true)
             } {
-                return Err(NokhwaError::OpenStreamError(why.to_string()));
+                return Err(NokhwaError::OpenStreamError {
+                    message: why.to_string(),
+                    backend: Some(ApiBackend::MediaFoundation),
+                });
             }
 
             self.stream_epoch = std::time::SystemTime::now()
@@ -1074,10 +1077,14 @@ pub mod wmf {
         }
 
         pub fn raw_bytes(&mut self) -> Result<(Cow<'_, [u8]>, Option<Duration>), NokhwaError> {
+            let frame_fmt = Some(self.device_format.format());
             let mut imf_sample: Option<IMFSample> = match unsafe { MFCreateSample() } {
                 Ok(sample) => Some(sample),
                 Err(why) => {
-                    return Err(NokhwaError::ReadFrameError(why.to_string()));
+                    return Err(NokhwaError::ReadFrameError {
+                        message: why.to_string(),
+                        format: frame_fmt,
+                    });
                 }
             };
             let mut stream_flags = 0;
@@ -1094,7 +1101,10 @@ pub mod wmf {
                             Some(&mut imf_sample),
                         )
                     } {
-                        return Err(NokhwaError::ReadFrameError(why.to_string()));
+                        return Err(NokhwaError::ReadFrameError {
+                            message: why.to_string(),
+                            format: frame_fmt,
+                        });
                     }
 
                     if imf_sample.is_some() {
@@ -1107,7 +1117,10 @@ pub mod wmf {
                 Some(sample) => sample,
                 None => {
                     // shouldn't happen
-                    return Err(NokhwaError::ReadFrameError("No sample".to_string()));
+                    return Err(NokhwaError::ReadFrameError {
+                        message: "No sample".to_string(),
+                        format: frame_fmt,
+                    });
                 }
             };
 
@@ -1122,7 +1135,12 @@ pub mod wmf {
 
             let buffer = match unsafe { imf_sample.ConvertToContiguousBuffer() } {
                 Ok(buf) => buf,
-                Err(why) => return Err(NokhwaError::ReadFrameError(why.to_string())),
+                Err(why) => {
+                    return Err(NokhwaError::ReadFrameError {
+                        message: why.to_string(),
+                        format: frame_fmt,
+                    })
+                }
             };
 
             let mut buffer_valid_length = 0;
@@ -1131,17 +1149,24 @@ pub mod wmf {
             if let Err(why) =
                 unsafe { buffer.Lock(&mut buffer_start_ptr, None, Some(&mut buffer_valid_length)) }
             {
-                return Err(NokhwaError::ReadFrameError(why.to_string()));
+                return Err(NokhwaError::ReadFrameError {
+                    message: why.to_string(),
+                    format: frame_fmt,
+                });
             }
 
             if buffer_start_ptr.is_null() {
-                return Err(NokhwaError::ReadFrameError(
-                    "Buffer Pointer Null".to_string(),
-                ));
+                return Err(NokhwaError::ReadFrameError {
+                    message: "Buffer Pointer Null".to_string(),
+                    format: frame_fmt,
+                });
             }
 
             if buffer_valid_length == 0 {
-                return Err(NokhwaError::ReadFrameError("Buffer Size is 0".to_string()));
+                return Err(NokhwaError::ReadFrameError {
+                    message: "Buffer Size is 0".to_string(),
+                    format: frame_fmt,
+                });
             }
 
             let mut data_slice = Vec::with_capacity(buffer_valid_length as usize);

@@ -124,7 +124,7 @@ fn query_v4l() -> Result<Vec<CameraInfo>, NokhwaError> {
 //     let context = match uvc::Context::new() {
 //         Ok(ctx) => ctx,
 //         Err(why) => {
-//             return Err(NokhwaError::GeneralError(format!(
+//             return Err(NokhwaError::general(format!(
 //                 "UVC Context failure: {}",
 //                 why
 //             )))
@@ -138,7 +138,7 @@ fn query_v4l() -> Result<Vec<CameraInfo>, NokhwaError> {
 //             device_vec
 //         }
 //         Err(why) => {
-//             return Err(NokhwaError::GeneralError(format!(
+//             return Err(NokhwaError::general(format!(
 //                 "UVC Context Devicelist failure: {}",
 //                 why
 //             )))
@@ -206,7 +206,7 @@ fn query_v4l() -> Result<Vec<CameraInfo>, NokhwaError> {
 //     use std::str::FromStr;
 //
 //     if let Err(why) = gstreamer::init() {
-//         return Err(NokhwaError::GeneralError(format!(
+//         return Err(NokhwaError::general(format!(
 //             "Failed to init gstreamer: {}",
 //             why
 //         )));
@@ -215,7 +215,7 @@ fn query_v4l() -> Result<Vec<CameraInfo>, NokhwaError> {
 //     let video_caps = match Caps::from_str("video/x-raw") {
 //         Ok(cap) => cap,
 //         Err(why) => {
-//             return Err(NokhwaError::GeneralError(format!(
+//             return Err(NokhwaError::general(format!(
 //                 "Failed to generate caps: {}",
 //                 why
 //             )))
@@ -232,7 +232,7 @@ fn query_v4l() -> Result<Vec<CameraInfo>, NokhwaError> {
 //         }
 //     };
 //     if let Err(why) = device_monitor.start() {
-//         return Err(NokhwaError::GeneralError(format!(
+//         return Err(NokhwaError::general(format!(
 //             "Failed to start device monitor: {}",
 //             why
 //         )));

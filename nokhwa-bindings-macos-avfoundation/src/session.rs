@@ -15,7 +15,7 @@ use crate::ffi::{
 use crate::types::AVCaptureDeviceTypeLocal;
 use nokhwa_core::{
     error::NokhwaError,
-    types::{CameraIndex, CameraInfo, FrameFormat},
+    types::{ApiBackend, CameraIndex, CameraInfo, FrameFormat},
 };
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
@@ -206,9 +206,10 @@ pub fn session_start(session: &AVCaptureSession) -> Result<(), NokhwaError> {
     });
 
     if std::panic::catch_unwind(start_stream_fn).is_err() {
-        return Err(NokhwaError::OpenStreamError(
-            "Cannot run AVCaptureSession".to_string(),
-        ));
+        return Err(NokhwaError::OpenStreamError {
+            message: "Cannot run AVCaptureSession".to_string(),
+            backend: Some(ApiBackend::AVFoundation),
+        });
     }
     Ok(())
 }

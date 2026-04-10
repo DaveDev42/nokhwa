@@ -9,8 +9,9 @@
   - [ ] Format conversion correctness (MJPEG, NV12, YUYV decoding validation)
   - [ ] Camera control round-trip (set → get verification)
   - [ ] Robustness against malformed input (e.g. malformed MJPEG)
-- [ ] Restructure error types — replace `String`-based variants (`GeneralError`, `OpenStreamError`, `ReadFrameError`) with structured context (backend, attempted format, device index). Also fix `UnitializedError` typo.
-- [ ] Replace `cap_impl_fn!`/`cap_impl_matches!` macros with a Backend Registry or Builder pattern — current macro-based backend dispatch in `camera.rs` is hard to read and debug.
+- [x] Restructure error types — replaced `String`-based variants (`GeneralError`, `OpenStreamError`, `ReadFrameError`, `StreamShutdownError`) with structured context (backend, format). Fixed `UnitializedError` → `UninitializedError` typo. Added helper constructors for backwards compatibility.
+- [ ] Restructure `OpenDeviceError(String, String)` tuple variant with structured fields (deferred from error type restructuring)
+- [x] ~~Replace `cap_impl_fn!`/`cap_impl_matches!` macros with a Backend Registry or Builder pattern~~ — Done in #43: replaced with explicit factory functions.
 - [x] ~~Unify timestamp semantics~~ — Done: added `TimestampKind` enum (`Capture`, `Presentation`, `MonotonicClock`, `WallClock`, `Unknown`) paired with `Duration` in `Buffer`.
 
 ## Low Priority

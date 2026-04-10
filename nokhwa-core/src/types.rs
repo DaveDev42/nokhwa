@@ -225,7 +225,7 @@ impl CameraIndex {
             CameraIndex::Index(i) => Ok(*i),
             CameraIndex::String(s) => s
                 .parse::<u32>()
-                .map_err(|why| NokhwaError::GeneralError(why.to_string())),
+                .map_err(|why| NokhwaError::general(why.to_string())),
         }
     }
 
