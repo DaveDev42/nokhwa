@@ -50,7 +50,7 @@ pub enum NokhwaError {
         message: String,
         backend: Option<ApiBackend>,
     },
-    #[error("Could not capture frame{}: {message}", format.map(|f| format!(" (format {f:?})")).unwrap_or_default())]
+    #[error("Could not capture frame{}: {message}", format.map(|f| format!(" (format {f})")).unwrap_or_default())]
     ReadFrameError {
         message: String,
         format: Option<FrameFormat>,
@@ -77,6 +77,7 @@ pub enum NokhwaError {
 // Helper constructors for backwards compatibility — allow creating structured
 // variants from a plain String, defaulting optional context fields to None.
 impl NokhwaError {
+    #[must_use]
     pub fn general(message: impl Into<String>) -> Self {
         Self::GeneralError {
             message: message.into(),
@@ -84,6 +85,7 @@ impl NokhwaError {
         }
     }
 
+    #[must_use]
     pub fn open_stream(message: impl Into<String>) -> Self {
         Self::OpenStreamError {
             message: message.into(),
@@ -91,6 +93,7 @@ impl NokhwaError {
         }
     }
 
+    #[must_use]
     pub fn read_frame(message: impl Into<String>) -> Self {
         Self::ReadFrameError {
             message: message.into(),
@@ -98,6 +101,7 @@ impl NokhwaError {
         }
     }
 
+    #[must_use]
     pub fn stream_shutdown(message: impl Into<String>) -> Self {
         Self::StreamShutdownError {
             message: message.into(),
