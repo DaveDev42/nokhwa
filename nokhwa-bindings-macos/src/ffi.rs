@@ -10,6 +10,11 @@ use objc2::encode::{Encode, Encoding};
 use objc2::runtime::AnyObject;
 
 // --- CoreMedia types (used in C function signatures) ---
+// NOTE: CMTime and CMVideoDimensions are also defined in objc2-core-media.
+// These local definitions are required because the C extern functions below
+// use raw pointer signatures (CMSampleBufferRef = *mut c_void) that don't
+// interoperate with the typed crate's opaque CF wrapper types. Both structs
+// are layout-compatible (#[repr(C)] with identical fields).
 
 pub type FourCharCode = u32;
 

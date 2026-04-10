@@ -147,10 +147,6 @@ impl AVCaptureDeviceWrapper {
     pub fn inner(&self) -> &AVCaptureDevice {
         &self.inner
     }
-
-    pub fn retained_inner(&self) -> &Retained<AVCaptureDevice> {
-        &self.inner
-    }
 }
 
 impl AVCaptureDeviceWrapper {

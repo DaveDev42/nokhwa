@@ -1,5 +1,4 @@
 use nokhwa_core::error::NokhwaError;
-use objc2::encode::{Encode, Encoding};
 use objc2_av_foundation::{
     AVCaptureDeviceType, AVCaptureDeviceTypeBuiltInDualCamera,
     AVCaptureDeviceTypeBuiltInDualWideCamera, AVCaptureDeviceTypeBuiltInTelephotoCamera,
@@ -57,6 +56,8 @@ pub enum AVMediaTypeLocal {
 
 impl AVMediaTypeLocal {
     pub fn to_av_media_type(self) -> &'static AVMediaType {
+        // unwrap(): objc2 wraps extern statics as Option<&T> for weak-linking support,
+        // but these AVMediaType constants are always available on supported Apple platforms.
         unsafe {
             match self {
                 Self::Audio => AVMediaTypeAudio.unwrap(),
@@ -78,6 +79,7 @@ impl TryFrom<&NSString> for AVMediaTypeLocal {
     type Error = NokhwaError;
 
     fn try_from(value: &NSString) -> Result<Self, Self::Error> {
+        // unwrap(): see comment in to_av_media_type() — always non-null on supported platforms.
         unsafe {
             if value.isEqualToString(AVMediaTypeAudio.unwrap()) {
                 Ok(Self::Audio)
@@ -116,9 +118,4 @@ pub enum AVAuthorizationStatus {
     Restricted = 1,
     Denied = 2,
     Authorized = 3,
-}
-
-// SAFETY: AVAuthorizationStatus is repr(isize), same encoding as NSInteger.
-unsafe impl Encode for AVAuthorizationStatus {
-    const ENCODING: Encoding = isize::ENCODING;
 }

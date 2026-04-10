@@ -50,18 +50,6 @@ pub fn discovery_session_with_types(
     Ok(session)
 }
 
-pub fn discovery_session_default() -> Result<Retained<AVCaptureDeviceDiscoverySession>, NokhwaError>
-{
-    discovery_session_with_types(&[
-        AVCaptureDeviceTypeLocal::UltraWide,
-        AVCaptureDeviceTypeLocal::Telephoto,
-        AVCaptureDeviceTypeLocal::External,
-        AVCaptureDeviceTypeLocal::Dual,
-        AVCaptureDeviceTypeLocal::DualWide,
-        AVCaptureDeviceTypeLocal::Triple,
-    ])
-}
-
 pub fn discovery_session_devices(session: &AVCaptureDeviceDiscoverySession) -> Vec<CameraInfo> {
     let devices = unsafe { session.devices() };
     let count = devices.count();
@@ -163,11 +151,6 @@ pub fn session_commit_configuration(session: &AVCaptureSession) {
     unsafe { session.commitConfiguration() }
 }
 
-pub fn session_can_add_input(session: &AVCaptureSession, input: &AVCaptureDeviceInput) -> bool {
-    let input_ref: &AVCaptureInput = input;
-    unsafe { session.canAddInput(input_ref) }
-}
-
 pub fn session_add_input(
     session: &AVCaptureSession,
     input: &AVCaptureDeviceInput,
@@ -187,14 +170,6 @@ pub fn session_add_input(
 pub fn session_remove_input(session: &AVCaptureSession, input: &AVCaptureDeviceInput) {
     let input_ref: &AVCaptureInput = input;
     unsafe { session.removeInput(input_ref) }
-}
-
-pub fn session_can_add_output(
-    session: &AVCaptureSession,
-    output: &AVCaptureVideoDataOutput,
-) -> bool {
-    let output_ref: &AVCaptureOutput = output;
-    unsafe { session.canAddOutput(output_ref) }
 }
 
 pub fn session_add_output(
