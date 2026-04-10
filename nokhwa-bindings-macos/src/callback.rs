@@ -8,10 +8,10 @@ use crate::ffi::{
 use crate::types::{AVAuthorizationStatus, AVMediaTypeLocal};
 use crate::util::raw_fcc_to_frameformat;
 use block2::RcBlock;
-use flume::Sender;
 use nokhwa_core::{error::NokhwaError, types::FrameFormat};
 use objc2::runtime::{AnyClass, AnyObject, AnyProtocol, Bool, ClassBuilder, Sel};
 use objc2_av_foundation::{AVCaptureDevice, AVMediaTypeVideo};
+use std::sync::mpsc::Sender;
 use std::{
     ffi::{c_void, CStr},
     sync::{Arc, LazyLock},

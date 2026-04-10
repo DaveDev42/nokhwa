@@ -20,7 +20,7 @@ use crate::{
     ApiBackend, CameraControl, CameraFormat, CameraInfo, CaptureBackendTrait, FrameFormat,
     KnownCameraControl, KnownCameraControlFlag, NokhwaError, Resolution,
 };
-use flume::{Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender};
 use image::{ImageBuffer, Rgb};
 use ouroboros::self_referencing;
 use std::{
@@ -148,10 +148,7 @@ impl<'a> UVCCaptureDevice<'a> {
                 index,
             );
 
-            let (frame_sender, frame_receiver) = {
-                let (a, b) = flume::unbounded::<Vec<u8>>();
-                (a, b)
-            };
+            let (frame_sender, frame_receiver) = std::sync::mpsc::channel::<Vec<u8>>();
             (camera_info, frame_receiver, frame_sender)
         };
 
@@ -527,8 +524,7 @@ impl<'a> CaptureBackendTrait for UVCCaptureDevice<'a> {
         }
 
         let f_recv = self.borrow_frame_receiver();
-        let messages_iter = f_recv.drain();
-        match messages_iter.last() {
+        match f_recv.try_iter().last() {
             Some(msg) => Ok(Cow::from(msg)),
             None => match f_recv.recv() {
                 Ok(msg) => Ok(Cow::from(msg)),

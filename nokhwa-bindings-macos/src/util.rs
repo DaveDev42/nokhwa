@@ -5,9 +5,9 @@ use crate::ffi::{
     kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
     kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, OSType,
 };
-use flume::{Receiver, Sender};
 use nokhwa_core::types::FrameFormat;
 use std::borrow::Cow;
+use std::sync::mpsc::{Receiver, Sender};
 
 #[allow(non_upper_case_globals)]
 pub(crate) fn raw_fcc_to_frameformat(raw: OSType) -> Option<FrameFormat> {

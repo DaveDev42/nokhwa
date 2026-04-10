@@ -18,7 +18,7 @@
 
 use clap::{Parser, Subcommand};
 use color_eyre::Report;
-use flume::Receiver;
+use std::sync::mpsc::Receiver;
 use ggez::graphics::ImageFormat;
 use ggez::{
     event::{run, EventHandler},
@@ -37,11 +37,10 @@ use nokhwa::{
     Buffer, CallbackCamera, Camera,
 };
 use std::str::FromStr;
-use std::sync::Arc;
 use std::time::Duration;
 
 struct CaptureState {
-    receiver: Arc<Receiver<Buffer>>,
+    receiver: Receiver<Buffer>,
     buffer: Vec<u8>,
     format: CameraFormat,
 }
@@ -336,12 +335,10 @@ fn nokhwa_main() {
             };
 
             if display {
-                let (sender, receiver) = flume::unbounded();
-                let (sender, receiver) = (Arc::new(sender), Arc::new(receiver));
-                let sender_clone = sender.clone();
+                let (sender, receiver) = std::sync::mpsc::channel();
 
                 let mut camera = CallbackCamera::new(index, requested, move |buf| {
-                    sender_clone.send(buf).expect("Error sending frame!!!!");
+                    sender.send(buf).expect("Error sending frame!!!!");
                 })
                 .unwrap();
 
