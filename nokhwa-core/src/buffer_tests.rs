@@ -130,6 +130,90 @@ fn buffer_timestamp_kind_variants() {
     }
 }
 
+// ===== Zero-copy from_vec constructor tests =====
+
+#[test]
+fn buffer_from_vec_stores_data() {
+    let res = Resolution::new(2, 2);
+    let data: Vec<u8> = vec![10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120];
+    let expected = data.clone();
+    let buf = Buffer::from_vec(res, data, FrameFormat::RAWRGB);
+
+    assert_eq!(buf.resolution(), res);
+    assert_eq!(buf.source_frame_format(), FrameFormat::RAWRGB);
+    assert_eq!(buf.buffer().len(), 12);
+    assert_eq!(buf.buffer(), &expected[..]);
+}
+
+#[test]
+fn buffer_from_vec_has_no_timestamp() {
+    let res = Resolution::new(1, 1);
+    let buf = Buffer::from_vec(res, vec![0; 3], FrameFormat::RAWRGB);
+    assert!(buf.capture_timestamp().is_none());
+}
+
+#[test]
+fn buffer_from_vec_with_timestamp_some() {
+    let res = Resolution::new(2, 2);
+    let data = vec![0; 12];
+    let ts = std::time::Duration::from_millis(12345);
+    let buf = Buffer::from_vec_with_timestamp(
+        res,
+        data,
+        FrameFormat::RAWRGB,
+        Some((ts, TimestampKind::Capture)),
+    );
+
+    assert_eq!(buf.resolution(), res);
+    assert_eq!(buf.source_frame_format(), FrameFormat::RAWRGB);
+    assert_eq!(buf.buffer().len(), 12);
+    assert_eq!(buf.capture_timestamp(), Some(ts));
+    assert_eq!(
+        buf.capture_timestamp_with_kind(),
+        Some((ts, TimestampKind::Capture))
+    );
+}
+
+#[test]
+fn buffer_from_vec_with_timestamp_none() {
+    let res = Resolution::new(1, 1);
+    let buf = Buffer::from_vec_with_timestamp(res, vec![0; 3], FrameFormat::RAWRGB, None);
+    assert!(buf.capture_timestamp().is_none());
+    assert!(buf.capture_timestamp_with_kind().is_none());
+}
+
+#[test]
+fn buffer_from_vec_empty_data() {
+    let res = Resolution::new(0, 0);
+    let buf = Buffer::from_vec(res, vec![], FrameFormat::MJPEG);
+    assert_eq!(buf.buffer().len(), 0);
+    assert_eq!(buf.resolution(), Resolution::new(0, 0));
+}
+
+#[test]
+fn buffer_from_vec_empty_data_nonzero_resolution() {
+    let res = Resolution::new(2, 2);
+    let buf = Buffer::from_vec(res, vec![], FrameFormat::RAWRGB);
+    assert_eq!(buf.buffer().len(), 0);
+    assert_eq!(buf.resolution(), Resolution::new(2, 2));
+}
+
+#[test]
+fn buffer_from_vec_equivalent_to_new() {
+    let res = Resolution::new(2, 2);
+    let data: Vec<u8> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    let buf_copy = Buffer::new(res, &data, FrameFormat::RAWRGB);
+    let buf_zero = Buffer::from_vec(res, data, FrameFormat::RAWRGB);
+
+    assert_eq!(buf_copy.buffer(), buf_zero.buffer());
+    assert_eq!(buf_copy.resolution(), buf_zero.resolution());
+    assert_eq!(
+        buf_copy.source_frame_format(),
+        buf_zero.source_frame_format()
+    );
+    assert_eq!(buf_copy.capture_timestamp(), buf_zero.capture_timestamp());
+}
+
 // ===== Format conversion correctness tests =====
 
 #[test]

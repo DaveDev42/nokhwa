@@ -543,17 +543,16 @@ impl CaptureBackendTrait for OpenCvCaptureDevice {
 
     fn frame(&mut self) -> Result<Buffer, NokhwaError> {
         let camera_resolution = self.camera_format.resolution();
-        let image_data = {
-            let mut data = self.frame_raw()?.to_vec();
-            data.resize(
-                (camera_resolution.width() * camera_resolution.height() * 3) as usize,
-                0_u8,
-            );
-            data
+        let expected_size = (camera_resolution.width() * camera_resolution.height() * 3) as usize;
+        let raw = self.frame_raw()?;
+        let mut data = match raw {
+            Cow::Owned(v) => v,
+            Cow::Borrowed(s) => s.to_vec(),
         };
-        Ok(Buffer::new(
+        data.resize(expected_size, 0_u8);
+        Ok(Buffer::from_vec(
             camera_resolution,
-            &image_data,
+            data,
             self.camera_format.format(),
         ))
     }
