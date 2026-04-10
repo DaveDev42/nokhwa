@@ -165,12 +165,15 @@ pub trait CaptureBackendTrait {
     ///
     /// The default implementation simply delegates to [`frame()`](CaptureBackendTrait::frame())
     /// without enforcing the timeout. The [`Camera`] wrapper provides a threaded timeout
-    /// mechanism. Backends may override this for more efficient platform-specific timeout
+    /// mechanism. Backends should override this for more efficient platform-specific timeout
     /// support.
+    ///
     /// # Errors
     /// If the backend fails to get the frame within the timeout, or if the underlying
     /// [`frame()`](CaptureBackendTrait::frame()) call fails, this will error.
     fn frame_timeout(&mut self, _duration: Duration) -> Result<Buffer, NokhwaError> {
+        // NOTE: timeout is intentionally ignored in the default impl; the Camera
+        // wrapper provides threaded timeout enforcement.
         self.frame()
     }
 

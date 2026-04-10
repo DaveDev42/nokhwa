@@ -383,21 +383,33 @@ impl Camera {
     /// Will get a frame from the camera as a [`Buffer`], but with a timeout. If the frame is not
     /// received within the given `duration`, this will return a [`TimeoutError`](NokhwaError::TimeoutError).
     ///
-    /// This spawns the frame capture on a background thread and waits with a timeout.
-    /// If the timeout elapses, it waits for the background thread to finish (to avoid
-    /// use-after-free) and then returns the timeout error.
+    /// This spawns the backend's [`frame_timeout()`](CaptureBackendTrait::frame_timeout) on a
+    /// background thread and waits with a timeout. If the backend overrides `frame_timeout`
+    /// with a platform-specific implementation, that implementation is used.
+    ///
+    /// **Note:** If the backend's frame capture blocks indefinitely, this method will also
+    /// block beyond the requested `duration` while waiting for the background thread to join.
+    /// The timeout is best-effort: it detects when the deadline has passed, but cannot
+    /// cancel an in-progress backend call. This method spawns a new thread per call and is
+    /// not suited for high-frequency capture loops.
+    ///
     /// # Errors
     /// If the backend fails to get the frame within the timeout, or if the underlying
     /// [`frame()`](CaptureBackendTrait::frame()) call fails, this will error.
     pub fn frame_timeout(&mut self, duration: Duration) -> Result<Buffer, NokhwaError> {
-        // SAFETY: We wrap the raw pointer in a Send-able struct. The spawned thread is
-        // always joined before this function returns, guaranteeing `self.device` outlives
-        // the thread. The mutable reference is not used elsewhere while the thread runs.
+        // SAFETY invariant: `SendPtr` wraps a raw pointer to `self.device`. This is sound
+        // because ALL match arms call `handle.join()` before returning, which guarantees:
+        //   1. The spawned thread has finished using the pointer before we return.
+        //   2. No other code can access `self` while this method holds `&mut self`.
+        //   3. The pointee (`self.device`) outlives the thread's access.
+        // Do NOT add early returns or code between the match and join calls.
         struct SendPtr(*mut dyn CaptureBackendTrait);
         unsafe impl Send for SendPtr {}
         impl SendPtr {
-            unsafe fn frame(&self) -> Result<Buffer, NokhwaError> {
-                unsafe { &mut *self.0 }.frame()
+            /// # Safety
+            /// The caller must ensure exclusive access to the pointee and that it is valid.
+            unsafe fn frame_timeout(&self, duration: Duration) -> Result<Buffer, NokhwaError> {
+                (&mut *self.0).frame_timeout(duration)
             }
         }
 
@@ -406,7 +418,8 @@ impl Camera {
             &mut *self.device,
         ));
         let handle = std::thread::spawn(move || {
-            let _ = tx.send(unsafe { ptr.frame() });
+            // SAFETY: We have exclusive access; see invariant above.
+            let _ = tx.send(unsafe { ptr.frame_timeout(duration) });
         });
         match rx.recv_timeout(duration) {
             Ok(result) => {
