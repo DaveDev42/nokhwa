@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 #[cfg(target_os = "macos")]
-use flume::{Receiver, Sender};
-#[cfg(target_os = "macos")]
 use nokhwa_bindings_macos::{
     callback::FrameData,
     session::{
@@ -40,6 +38,8 @@ use nokhwa_core::{
 #[cfg(target_os = "macos")]
 use nokhwa_core::{pixel_format::RgbFormat, types::RequestedFormatType};
 #[cfg(target_os = "macos")]
+use std::sync::mpsc::{Receiver, Sender};
+#[cfg(target_os = "macos")]
 use std::{ffi::CString, sync::Arc};
 
 use std::{borrow::Cow, collections::HashMap};
@@ -63,7 +63,7 @@ pub struct AVFoundationCaptureDevice {
     info: CameraInfo,
     buffer_name: CString,
     format: CameraFormat,
-    frame_buffer_receiver: Arc<Receiver<FrameData>>,
+    frame_buffer_receiver: Receiver<FrameData>,
     fbufsnd: Arc<Sender<FrameData>>,
 }
 
@@ -92,7 +92,7 @@ impl AVFoundationCaptureDevice {
                 }
             })?;
 
-        let (send, recv) = flume::unbounded();
+        let (send, recv) = std::sync::mpsc::channel();
         Ok(AVFoundationCaptureDevice {
             device,
             dev_input: None,
@@ -102,7 +102,7 @@ impl AVFoundationCaptureDevice {
             info: device_descriptor,
             buffer_name: buffername,
             format: camera_fmt,
-            frame_buffer_receiver: Arc::new(recv),
+            frame_buffer_receiver: recv,
             fbufsnd: Arc::new(send),
         })
     }
@@ -294,7 +294,7 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
             .recv()
             .map_err(|why| NokhwaError::ReadFrameError(why.to_string()))?;
         let buffer = Buffer::with_timestamp(cfmt.resolution(), &bytes, cfmt.format(), capture_ts);
-        let _ = self.frame_buffer_receiver.drain();
+        self.frame_buffer_receiver.try_iter().for_each(drop);
         Ok(buffer)
     }
 
@@ -335,7 +335,7 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
         session_remove_input(session, input);
         session_stop(session);
 
-        self.frame_buffer_receiver.try_iter();
+        self.frame_buffer_receiver.try_iter().for_each(drop);
         self.dev_input = None;
         self.session = None;
         self.data_collect = None;

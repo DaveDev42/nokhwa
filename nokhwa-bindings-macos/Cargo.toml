@@ -33,4 +33,3 @@ objc2-core-foundation = { version = "0.3", default-features = false, features = 
 objc2-core-media = { version = "0.3", default-features = false, features = ["CMSampleBuffer", "CMTime", "CMFormatDescription"] }
 objc2-core-video = { version = "0.3", default-features = false, features = ["CVPixelBuffer", "CVImageBuffer", "CVReturn"] }
 block2 = { version = "0.6", default-features = false, features = ["std"] }
-flume = { version = "0.11", default-features = false }
