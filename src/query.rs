@@ -295,14 +295,6 @@ fn query_avfoundation() -> Result<Vec<CameraInfo>, NokhwaError> {
     ))
 }
 
-// #[cfg(feature = "input-jscam")]
-// fn query_wasm() -> Result<Vec<CameraInfo>, NokhwaError> {
-//     use crate::js_camera::query_js_cameras;
-//     use wasm_rs_async_executor::single_threaded::block_on;
-
-//     block_on(query_js_cameras())
-// }
-
 fn query_wasm() -> Result<Vec<CameraInfo>, NokhwaError> {
     Err(NokhwaError::UnsupportedOperationError(ApiBackend::Browser))
 }
