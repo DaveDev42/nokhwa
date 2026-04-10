@@ -81,10 +81,11 @@ fn buffer_with_timestamp_zero_duration() {
 
 #[test]
 fn buffer_large_data() {
+    const FULL_HD_RGB_SIZE: usize = 1920 * 1080 * 3;
     let res = Resolution::new(1920, 1080);
-    let data = vec![128u8; 1920 * 1080 * 3]; // Full HD RGB
+    let data = vec![128u8; FULL_HD_RGB_SIZE];
     let buf = Buffer::new(res, &data, FrameFormat::RAWRGB);
-    assert_eq!(buf.buffer().len(), 1920 * 1080 * 3);
+    assert_eq!(buf.buffer().len(), FULL_HD_RGB_SIZE);
     assert_eq!(buf.resolution().width(), 1920);
     assert_eq!(buf.resolution().height(), 1080);
 }

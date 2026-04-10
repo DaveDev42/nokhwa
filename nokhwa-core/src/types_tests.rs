@@ -337,6 +337,17 @@ fn fulfill_exact_match() {
 }
 
 #[test]
+fn fulfill_exact_not_in_available_still_returns() {
+    // Exact does not check membership — it only validates the decoder match.
+    let target = CameraFormat::new_from(4096, 2160, FrameFormat::MJPEG, 120);
+    let available = vec![CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30)];
+    let req =
+        RequestedFormat::with_formats(RequestedFormatType::Exact(target), &[FrameFormat::MJPEG]);
+    let result = req.fulfill(&available).unwrap();
+    assert_eq!(result, target);
+}
+
+#[test]
 fn fulfill_exact_wrong_decoder() {
     let target = CameraFormat::new_from(1280, 720, FrameFormat::NV12, 30);
     let available = vec![target];
@@ -569,9 +580,12 @@ fn verify_setter_integer() {
     let desc = ControlValueDescription::Integer {
         value: 50,
         default: 50,
-        step: 1,
+        step: 5,
     };
-    assert!(desc.verify_setter(&ControlValueSetter::Integer(51)));
+    // (5 + 50) % 5 == 0 → aligned
+    assert!(desc.verify_setter(&ControlValueSetter::Integer(5)));
+    // (3 + 50) % 5 == 3 → not aligned
+    assert!(!desc.verify_setter(&ControlValueSetter::Integer(3)));
     assert!(!desc.verify_setter(&ControlValueSetter::Float(1.0)));
 }
 
@@ -598,12 +612,16 @@ fn verify_setter_float() {
     assert!(desc_zero_step.verify_setter(&ControlValueSetter::Float(0.75)));
     assert!(desc_zero_step.verify_setter(&ControlValueSetter::Integer(1)));
 
-    // With a non-zero step, wrong types are rejected.
+    // With a non-zero step, test alignment and type rejection.
     let desc_with_step = ControlValueDescription::Float {
         value: 0.5,
         default: 0.5,
-        step: 0.1,
+        step: 0.5,
     };
+    // (1.0 - 0.5).abs() % 0.5 == 0.0 → aligned
+    assert!(desc_with_step.verify_setter(&ControlValueSetter::Float(1.0)));
+    // (0.75 - 0.5).abs() % 0.5 == 0.25 → not aligned
+    assert!(!desc_with_step.verify_setter(&ControlValueSetter::Float(0.75)));
     assert!(!desc_with_step.verify_setter(&ControlValueSetter::Integer(1)));
 }
 
