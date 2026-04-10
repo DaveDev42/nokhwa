@@ -1,17 +1,8 @@
-use crate::ffi::{
-    AVCaptureExposureDurationCurrent, AVCaptureExposureTargetBiasCurrent, AVCaptureISOCurrent,
-    AVCaptureWhiteBalanceGains, CGFloat, CGPoint, CMVideoFormatDescriptionGetDimensions,
-    EncodableCMTime,
-};
-use crate::ffi::{
-    CMFormatDescriptionGetMediaSubType, CMFormatDescriptionRef, CMTime, CMVideoDimensions,
-};
-use crate::session::AVCaptureDeviceDiscoverySession;
-use crate::types::{AVCaptureDevicePosition, AVCaptureDeviceType, AVMediaType};
-use crate::util::{
-    create_boilerplate_impl, ns_arr_to_vec, nsstr_to_str, raw_fcc_to_frameformat, str_to_nsstr,
-    try_ns_arr_to_vec,
-};
+use crate::ffi::{CMFormatDescriptionGetMediaSubType, CMVideoFormatDescriptionGetDimensions};
+use crate::ffi::{CMFormatDescriptionRef, CMVideoDimensions};
+use crate::session::{discovery_session_devices, discovery_session_with_types};
+use crate::types::{AVCaptureDeviceTypeLocal, AVMediaTypeLocal};
+use crate::util::raw_fcc_to_frameformat;
 use nokhwa_core::{
     error::NokhwaError,
     types::{
@@ -19,94 +10,113 @@ use nokhwa_core::{
         ControlValueSetter, FrameFormat, KnownCameraControl, KnownCameraControlFlag, Resolution,
     },
 };
-use objc2::runtime::AnyObject;
-use std::{
-    cmp::Ordering,
-    collections::BTreeMap,
-    convert::TryFrom,
-    ffi::{c_float, c_void},
+use objc2::rc::Retained;
+use objc2::Message;
+use objc2_av_foundation::{
+    AVCaptureDevice, AVCaptureDeviceFormat, AVCaptureExposureDurationCurrent,
+    AVCaptureExposureMode, AVCaptureExposureTargetBiasCurrent, AVCaptureFocusMode,
+    AVCaptureISOCurrent, AVCaptureTorchMode, AVCaptureWhiteBalanceGains, AVCaptureWhiteBalanceMode,
+    AVFrameRateRange,
 };
+use objc2_core_foundation::{CGFloat, CGPoint};
+use objc2_core_media::CMTime;
+use std::{cmp::Ordering, collections::BTreeMap, convert::TryFrom, ffi::c_float};
 
-// fuck it, use deprecated APIs
 pub fn query_avfoundation() -> Result<Vec<CameraInfo>, NokhwaError> {
-    Ok(AVCaptureDeviceDiscoverySession::new(vec![
-        AVCaptureDeviceType::UltraWide,
-        AVCaptureDeviceType::WideAngle,
-        AVCaptureDeviceType::Telephoto,
-        AVCaptureDeviceType::TrueDepth,
-        AVCaptureDeviceType::External,
-    ])?
-    .devices())
+    let session = discovery_session_with_types(&[
+        AVCaptureDeviceTypeLocal::UltraWide,
+        AVCaptureDeviceTypeLocal::WideAngle,
+        AVCaptureDeviceTypeLocal::Telephoto,
+        AVCaptureDeviceTypeLocal::TrueDepth,
+        AVCaptureDeviceTypeLocal::External,
+    ])?;
+    Ok(discovery_session_devices(&session))
 }
 
-pub fn get_raw_device_info(index: CameraIndex, device: *mut AnyObject) -> CameraInfo {
-    let name = nsstr_to_str(unsafe { objc2::msg_send![device, localizedName] });
-    let manufacturer = nsstr_to_str(unsafe { objc2::msg_send![device, manufacturer] });
-    let position: AVCaptureDevicePosition = unsafe { objc2::msg_send![device, position] };
-    let lens_aperture: f64 = unsafe { objc2::msg_send![device, lensAperture] };
-    let device_type = nsstr_to_str(unsafe { objc2::msg_send![device, deviceType] });
-    let model_id = nsstr_to_str(unsafe { objc2::msg_send![device, modelID] });
+pub fn get_raw_device_info(index: CameraIndex, device: &AVCaptureDevice) -> CameraInfo {
+    let name = unsafe { device.localizedName() };
+    let manufacturer = unsafe { device.manufacturer() };
+    let position = unsafe { device.position() };
+    let lens_aperture: c_float = unsafe { device.lensAperture() };
+    let device_type = unsafe { device.deviceType() };
+    let model_id = unsafe { device.modelID() };
     let description = format!(
         "{}: {} - {}, {:?} f{}",
         manufacturer, model_id, device_type, position, lens_aperture
     );
-    let misc = nsstr_to_str(unsafe { objc2::msg_send![device, uniqueID] });
+    let misc = unsafe { device.uniqueID() };
 
-    CameraInfo::new(name.as_ref(), &description, misc.as_ref(), index)
+    CameraInfo::new(
+        name.to_string().as_ref(),
+        &description,
+        misc.to_string().as_ref(),
+        index,
+    )
 }
 
-create_boilerplate_impl! {
-    [pub AVFrameRateRange]
+/// Wrapper around `AVFrameRateRange` with a public `inner()` accessor.
+pub struct AVFrameRateRangeWrapper {
+    inner: Retained<AVFrameRateRange>,
 }
 
-impl AVFrameRateRange {
+impl AVFrameRateRangeWrapper {
+    pub fn new(inner: Retained<AVFrameRateRange>) -> Self {
+        Self { inner }
+    }
+
     pub fn max(&self) -> f64 {
-        unsafe { objc2::msg_send![self.inner, maxFrameRate] }
+        unsafe { self.inner.maxFrameRate() }
     }
 
     pub fn min(&self) -> f64 {
-        unsafe { objc2::msg_send![self.inner, minFrameRate] }
+        unsafe { self.inner.minFrameRate() }
+    }
+
+    pub fn inner(&self) -> &AVFrameRateRange {
+        &self.inner
     }
 }
 
 #[derive(Debug)]
-pub struct AVCaptureDeviceFormat {
-    pub(crate) internal: *mut AnyObject,
+pub struct AVCaptureDeviceFormatWrapper {
+    /// Retained to prevent deallocation while the wrapper is alive.
+    #[allow(dead_code)]
+    pub(crate) internal: Retained<AVCaptureDeviceFormat>,
     pub resolution: CMVideoDimensions,
     pub fps_list: Vec<f64>,
     pub fourcc: FrameFormat,
 }
 
-impl TryFrom<*mut AnyObject> for AVCaptureDeviceFormat {
-    type Error = NokhwaError;
-
-    fn try_from(value: *mut AnyObject) -> Result<Self, Self::Error> {
-        let media_type_raw: *mut AnyObject = unsafe { objc2::msg_send![value, mediaType] };
-        let media_type = AVMediaType::try_from(media_type_raw)?;
-        if media_type != AVMediaType::Video {
+impl AVCaptureDeviceFormatWrapper {
+    pub fn try_from_format(format: &AVCaptureDeviceFormat) -> Result<Self, NokhwaError> {
+        let media_type = unsafe { format.mediaType() };
+        let media_type_local = AVMediaTypeLocal::try_from(media_type.as_ref())?;
+        if media_type_local != AVMediaTypeLocal::Video {
             return Err(NokhwaError::StructureError {
                 structure: "AVMediaType".to_string(),
                 error: "Not Video".to_string(),
             });
         }
-        let mut fps_list = ns_arr_to_vec::<AVFrameRateRange>(unsafe {
-            objc2::msg_send![value, videoSupportedFrameRateRanges]
-        })
-        .into_iter()
-        .flat_map(|v| {
-            if v.min() != 0_f64 && v.min() != 1_f64 {
-                vec![v.min(), v.max()]
-            } else {
-                vec![v.max()] // this gets deduped!
+
+        let frame_rate_ranges = unsafe { format.videoSupportedFrameRateRanges() };
+        let mut fps_list: Vec<f64> = Vec::new();
+        for i in 0..frame_rate_ranges.count() {
+            let range = frame_rate_ranges.objectAtIndex(i);
+            let min_fps = unsafe { range.minFrameRate() };
+            let max_fps = unsafe { range.maxFrameRate() };
+            if min_fps != 0_f64 && min_fps != 1_f64 {
+                fps_list.push(min_fps);
             }
-        })
-        .collect::<Vec<f64>>();
+            fps_list.push(max_fps);
+        }
         fps_list.sort_by(|n, m| n.partial_cmp(m).unwrap_or(Ordering::Equal));
         fps_list.dedup();
-        let description_obj: *mut AnyObject = unsafe { objc2::msg_send![value, formatDescription] };
-        let resolution =
-            unsafe { CMVideoFormatDescriptionGetDimensions(description_obj as *mut c_void) };
-        let fcc_raw = unsafe { CMFormatDescriptionGetMediaSubType(description_obj as *mut c_void) };
+
+        let description_obj = unsafe { format.formatDescription() };
+        let description_ref = &*description_obj as *const _ as CMFormatDescriptionRef;
+        let resolution = unsafe { CMVideoFormatDescriptionGetDimensions(description_ref) };
+        let fcc_raw = unsafe { CMFormatDescriptionGetMediaSubType(description_ref) };
+
         #[allow(non_upper_case_globals)]
         let fourcc = match raw_fcc_to_frameformat(fcc_raw) {
             Some(fcc) => fcc,
@@ -118,8 +128,8 @@ impl TryFrom<*mut AnyObject> for AVCaptureDeviceFormat {
             }
         };
 
-        Ok(AVCaptureDeviceFormat {
-            internal: value,
+        Ok(AVCaptureDeviceFormatWrapper {
+            internal: format.retain(),
             resolution,
             fps_list,
             fourcc,
@@ -127,56 +137,53 @@ impl TryFrom<*mut AnyObject> for AVCaptureDeviceFormat {
     }
 }
 
-pub struct AVCaptureDevice {
-    inner: *mut AnyObject,
+pub struct AVCaptureDeviceWrapper {
+    inner: Retained<AVCaptureDevice>,
     device: CameraInfo,
     locked: bool,
 }
 
-impl AVCaptureDevice {
-    pub fn inner(&self) -> *mut AnyObject {
-        self.inner
+impl AVCaptureDeviceWrapper {
+    pub fn inner(&self) -> &AVCaptureDevice {
+        &self.inner
+    }
+
+    pub fn retained_inner(&self) -> &Retained<AVCaptureDevice> {
+        &self.inner
     }
 }
 
-impl AVCaptureDevice {
+impl AVCaptureDeviceWrapper {
     pub fn new(index: &CameraIndex) -> Result<Self, NokhwaError> {
         match &index {
             CameraIndex::Index(idx) => {
                 let devices = query_avfoundation()?;
 
                 match devices.get(*idx as usize) {
-                    Some(device) => Ok(AVCaptureDevice::from_id(
-                        &device.misc(),
-                        Some(index.clone()),
-                    )?),
+                    Some(device) => Ok(Self::from_id(&device.misc(), Some(index.clone()))?),
                     None => Err(NokhwaError::OpenDeviceError(
                         idx.to_string(),
                         "Not Found".to_string(),
                     )),
                 }
             }
-            CameraIndex::String(id) => Ok(AVCaptureDevice::from_id(id, None)?),
+            CameraIndex::String(id) => Ok(Self::from_id(id, None)?),
         }
     }
 
     pub fn from_id(id: &str, index_hint: Option<CameraIndex>) -> Result<Self, NokhwaError> {
-        let nsstr_id = str_to_nsstr(id);
-        let avfoundation_capture_cls = objc2::class!(AVCaptureDevice);
-        let capture: *mut AnyObject =
-            unsafe { objc2::msg_send![avfoundation_capture_cls, deviceWithUniqueID: nsstr_id] };
-        if capture.is_null() {
-            return Err(NokhwaError::OpenDeviceError(
-                id.to_string(),
-                "Device is null".to_string(),
-            ));
-        }
+        let nsstr_id = objc2_foundation::NSString::from_str(id);
+        let capture = unsafe { AVCaptureDevice::deviceWithUniqueID(&nsstr_id) };
+        let capture = capture.ok_or_else(|| {
+            NokhwaError::OpenDeviceError(id.to_string(), "Device is null".to_string())
+        })?;
+
         let camera_info = get_raw_device_info(
             index_hint.unwrap_or_else(|| CameraIndex::String(id.to_string())),
-            capture,
+            &capture,
         );
 
-        Ok(AVCaptureDevice {
+        Ok(AVCaptureDeviceWrapper {
             inner: capture,
             device: camera_info,
             locked: false,
@@ -187,10 +194,17 @@ impl AVCaptureDevice {
         &self.device
     }
 
-    pub fn supported_formats_raw(&self) -> Result<Vec<AVCaptureDeviceFormat>, NokhwaError> {
-        try_ns_arr_to_vec::<AVCaptureDeviceFormat, NokhwaError>(unsafe {
-            objc2::msg_send![self.inner, formats]
-        })
+    pub fn supported_formats_raw(&self) -> Result<Vec<AVCaptureDeviceFormatWrapper>, NokhwaError> {
+        let formats = unsafe { self.inner.formats() };
+        let mut result = Vec::new();
+        for i in 0..formats.count() {
+            let format = formats.objectAtIndex(i);
+            match AVCaptureDeviceFormatWrapper::try_from_format(&format) {
+                Ok(f) => result.push(f),
+                Err(_) => continue, // skip unsupported formats
+            }
+        }
+        Ok(result)
     }
 
     pub fn supported_formats(&self) -> Result<Vec<CameraFormat>, NokhwaError> {
@@ -201,9 +215,8 @@ impl AVCaptureDevice {
                 let resolution = av_fmt.resolution;
                 av_fmt.fps_list.iter().map(move |fps_f64| {
                     let fps = *fps_f64 as u32;
-
                     let resolution =
-                        Resolution::new(resolution.width as u32, resolution.height as u32); // FIXME: what the fuck?
+                        Resolution::new(resolution.width as u32, resolution.height as u32);
                     CameraFormat::new(resolution, av_fmt.fourcc, fps)
                 })
             })
@@ -212,17 +225,11 @@ impl AVCaptureDevice {
     }
 
     pub fn already_in_use(&self) -> bool {
-        unsafe {
-            let result: bool = objc2::msg_send![self.inner(), isInUseByAnotherApplication];
-            result
-        }
+        unsafe { self.inner.isInUseByAnotherApplication() }
     }
 
     pub fn is_suspended(&self) -> bool {
-        unsafe {
-            let result: bool = objc2::msg_send![self.inner, isSuspended];
-            result
-        }
+        unsafe { self.inner.isSuspended() }
     }
 
     pub fn lock(&mut self) -> Result<(), NokhwaError> {
@@ -235,21 +242,15 @@ impl AVCaptureDevice {
                 error: "Already in use".to_string(),
             });
         }
-        let mut err_ptr: *mut AnyObject = std::ptr::null_mut();
-        let accepted: bool =
-            unsafe { objc2::msg_send![self.inner, lockForConfiguration: &mut err_ptr as *mut _] };
-        if !accepted {
-            return Err(NokhwaError::SetPropertyError {
-                property: "lockForConfiguration".to_string(),
-                value: "Locked".to_string(),
-                error: if !err_ptr.is_null() {
-                    let desc: *mut AnyObject =
-                        unsafe { objc2::msg_send![err_ptr, localizedDescription] };
-                    nsstr_to_str(desc).into_owned()
-                } else {
-                    "Lock rejected".to_string()
-                },
-            });
+        unsafe {
+            self.inner.lockForConfiguration().map_err(|e| {
+                let desc = e.localizedDescription();
+                NokhwaError::SetPropertyError {
+                    property: "lockForConfiguration".to_string(),
+                    value: "Locked".to_string(),
+                    error: desc.to_string(),
+                }
+            })?;
         }
         self.locked = true;
         Ok(())
@@ -258,94 +259,80 @@ impl AVCaptureDevice {
     pub fn unlock(&mut self) {
         if self.locked {
             self.locked = false;
-            unsafe { objc2::msg_send![self.inner, unlockForConfiguration] }
+            unsafe { self.inner.unlockForConfiguration() }
         }
     }
 
-    // thank you ffmpeg
     pub fn set_all(&mut self, descriptor: CameraFormat) -> Result<(), NokhwaError> {
         self.lock()?;
-        let format_list = try_ns_arr_to_vec::<AVCaptureDeviceFormat, NokhwaError>(unsafe {
-            objc2::msg_send![self.inner, formats]
-        })?;
-        let format_description_sel = objc2::sel!(formatDescription);
+        let formats = unsafe { self.inner.formats() };
 
-        let mut selected_format: *mut AnyObject = std::ptr::null_mut();
-        let mut selected_range: *mut AnyObject = std::ptr::null_mut();
+        let mut selected_format: Option<Retained<AVCaptureDeviceFormat>> = None;
+        let mut selected_min_frame_duration: Option<CMTime> = None;
 
-        for format in format_list {
-            let format_desc_ref: CMFormatDescriptionRef = unsafe {
-                objc2::msg_send![format.internal, performSelector: format_description_sel]
-            };
-            let dimensions = unsafe { CMVideoFormatDescriptionGetDimensions(format_desc_ref) };
+        for i in 0..formats.count() {
+            let format = formats.objectAtIndex(i);
+            let fmt_desc = unsafe { format.formatDescription() };
+            let fmt_desc_ref = &*fmt_desc as *const _ as CMFormatDescriptionRef;
+            let dimensions = unsafe { CMVideoFormatDescriptionGetDimensions(fmt_desc_ref) };
 
             if dimensions.height == descriptor.resolution().height() as i32
                 && dimensions.width == descriptor.resolution().width() as i32
             {
-                selected_format = format.internal;
-
-                for range in ns_arr_to_vec::<AVFrameRateRange>(unsafe {
-                    objc2::msg_send![format.internal, videoSupportedFrameRateRanges]
-                }) {
-                    let max_fps: f64 = unsafe { objc2::msg_send![range.inner, maxFrameRate] };
-                    // Older Apple cameras (i.e. iMac 2013) return 29.97000002997 as FPS.
+                let ranges = unsafe { format.videoSupportedFrameRateRanges() };
+                for j in 0..ranges.count() {
+                    let range = ranges.objectAtIndex(j);
+                    let max_fps = unsafe { range.maxFrameRate() };
                     if (f64::from(descriptor.frame_rate()) - max_fps).abs() < 0.999 {
-                        selected_range = range.inner;
+                        selected_format = Some(format.clone());
+                        selected_min_frame_duration = Some(unsafe { range.minFrameDuration() });
                         break;
                     }
                 }
+                if selected_format.is_some() {
+                    break;
+                }
             }
         }
-        if selected_range.is_null() || selected_format.is_null() {
-            return Err(NokhwaError::SetPropertyError {
-                property: "CameraFormat".to_string(),
-                value: descriptor.to_string(),
-                error: "Not Found/Rejected/Unsupported".to_string(),
-            });
-        }
 
-        let activefmtkey = str_to_nsstr("activeFormat");
-        let min_frame_duration = str_to_nsstr("minFrameDuration");
-        let active_video_min_frame_duration = str_to_nsstr("activeVideoMinFrameDuration");
-        let active_video_max_frame_duration = str_to_nsstr("activeVideoMaxFrameDuration");
-        let _: () =
-            unsafe { objc2::msg_send![self.inner, setValue:selected_format, forKey:activefmtkey] };
-        let min_frame_duration: *mut AnyObject =
-            unsafe { objc2::msg_send![selected_range, valueForKey: min_frame_duration] };
-        let _: () = unsafe {
-            objc2::msg_send![self.inner, setValue:min_frame_duration, forKey:active_video_min_frame_duration]
+        let (format, min_duration) = match (selected_format, selected_min_frame_duration) {
+            (Some(f), Some(d)) => (f, d),
+            _ => {
+                return Err(NokhwaError::SetPropertyError {
+                    property: "CameraFormat".to_string(),
+                    value: descriptor.to_string(),
+                    error: "Not Found/Rejected/Unsupported".to_string(),
+                });
+            }
         };
-        let _: () = unsafe {
-            objc2::msg_send![self.inner, setValue:min_frame_duration, forKey:active_video_max_frame_duration]
-        };
+
+        unsafe {
+            self.inner.setActiveFormat(&format);
+            self.inner.setActiveVideoMinFrameDuration(min_duration);
+            self.inner.setActiveVideoMaxFrameDuration(min_duration);
+        }
         self.unlock();
         Ok(())
     }
 
-    // 0 => Focus POI
-    // 1 => Focus Manual Setting
-    // 2 => Exposure POI
-    // 3 => Exposure Face Driven
-    // 4 => Exposure Target Bias
-    // 5 => Exposure ISO
-    // 6 => Exposure Duration
     pub fn get_controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
-        let active_format: *mut AnyObject = unsafe { objc2::msg_send![self.inner, activeFormat] };
-
+        let active_format = unsafe { self.inner.activeFormat() };
         let mut controls = vec![];
-        // get focus modes
 
-        let focus_current: isize = unsafe { objc2::msg_send![self.inner, focusMode] };
-        let focus_locked: bool =
-            unsafe { objc2::msg_send![self.inner, isFocusModeSupported: 0_isize] };
-        let focus_auto: bool =
-            unsafe { objc2::msg_send![self.inner, isFocusModeSupported: 1_isize] };
-        let focus_continuous: bool =
-            unsafe { objc2::msg_send![self.inner, isFocusModeSupported: 2_isize] };
+        // Focus modes
+        let focus_current = unsafe { self.inner.focusMode() };
+        let focus_locked = unsafe { self.inner.isFocusModeSupported(AVCaptureFocusMode::Locked) };
+        let focus_auto = unsafe {
+            self.inner
+                .isFocusModeSupported(AVCaptureFocusMode::AutoFocus)
+        };
+        let focus_continuous = unsafe {
+            self.inner
+                .isFocusModeSupported(AVCaptureFocusMode::ContinuousAutoFocus)
+        };
 
         {
             let mut supported_focus_values = vec![];
-
             if focus_locked {
                 supported_focus_values.push(0)
             }
@@ -360,18 +347,17 @@ impl AVCaptureDevice {
                 KnownCameraControl::Focus,
                 "FocusMode".to_string(),
                 ControlValueDescription::Enum {
-                    value: focus_current as i64,
+                    value: focus_current.0 as i64,
                     possible: supported_focus_values,
-                    default: focus_current as i64,
+                    default: focus_current.0 as i64,
                 },
                 vec![],
                 true,
             ));
         }
 
-        let focus_poi_supported: bool =
-            unsafe { objc2::msg_send![self.inner, isFocusPointOfInterestSupported] };
-        let focus_poi: CGPoint = unsafe { objc2::msg_send![self.inner, focusPointOfInterest] };
+        let focus_poi_supported = unsafe { self.inner.isFocusPointOfInterestSupported() };
+        let focus_poi = unsafe { self.inner.focusPointOfInterest() };
 
         controls.push(CameraControl::new(
             KnownCameraControl::Other(0),
@@ -391,9 +377,8 @@ impl AVCaptureDevice {
             focus_auto || focus_continuous,
         ));
 
-        let focus_manual: bool =
-            unsafe { objc2::msg_send![self.inner, isLockingFocusWithCustomLensPositionSupported] };
-        let focus_lenspos: f32 = unsafe { objc2::msg_send![self.inner, lensPosition] };
+        let focus_manual = unsafe { self.inner.isLockingFocusWithCustomLensPositionSupported() };
+        let focus_lenspos: c_float = unsafe { self.inner.lensPosition() };
 
         controls.push(CameraControl::new(
             KnownCameraControl::Other(1),
@@ -416,20 +401,27 @@ impl AVCaptureDevice {
             focus_manual,
         ));
 
-        // get exposures
-        let exposure_current: isize = unsafe { objc2::msg_send![self.inner, exposureMode] };
-        let exposure_locked: bool =
-            unsafe { objc2::msg_send![self.inner, isExposureModeSupported: 0_isize] };
-        let exposure_auto: bool =
-            unsafe { objc2::msg_send![self.inner, isExposureModeSupported: 1_isize] };
-        let exposure_continuous: bool =
-            unsafe { objc2::msg_send![self.inner, isExposureModeSupported: 2_isize] };
-        let exposure_custom: bool =
-            unsafe { objc2::msg_send![self.inner, isExposureModeSupported: 3_isize] };
+        // Exposure modes
+        let exposure_current = unsafe { self.inner.exposureMode() };
+        let exposure_locked = unsafe {
+            self.inner
+                .isExposureModeSupported(AVCaptureExposureMode::Locked)
+        };
+        let exposure_auto = unsafe {
+            self.inner
+                .isExposureModeSupported(AVCaptureExposureMode::AutoExpose)
+        };
+        let exposure_continuous = unsafe {
+            self.inner
+                .isExposureModeSupported(AVCaptureExposureMode::ContinuousAutoExposure)
+        };
+        let exposure_custom = unsafe {
+            self.inner
+                .isExposureModeSupported(AVCaptureExposureMode::Custom)
+        };
 
         {
             let mut supported_exposure_values = vec![];
-
             if exposure_locked {
                 supported_exposure_values.push(0);
             }
@@ -447,19 +439,17 @@ impl AVCaptureDevice {
                 KnownCameraControl::Exposure,
                 "ExposureMode".to_string(),
                 ControlValueDescription::Enum {
-                    value: exposure_current as i64,
+                    value: exposure_current.0 as i64,
                     possible: supported_exposure_values,
-                    default: exposure_current as i64,
+                    default: exposure_current.0 as i64,
                 },
                 vec![],
                 true,
             ));
         }
 
-        let exposure_poi_supported: bool =
-            unsafe { objc2::msg_send![self.inner, isExposurePointOfInterestSupported] };
-        let exposure_poi: CGPoint =
-            unsafe { objc2::msg_send![self.inner, exposurePointOfInterest] };
+        let exposure_poi_supported = unsafe { self.inner.isExposurePointOfInterestSupported() };
+        let exposure_poi = unsafe { self.inner.exposurePointOfInterest() };
 
         controls.push(CameraControl::new(
             KnownCameraControl::Other(2),
@@ -479,13 +469,11 @@ impl AVCaptureDevice {
             focus_auto || focus_continuous,
         ));
 
-        let exposure_face_driven_supported: bool =
-            unsafe { objc2::msg_send![self.inner, isFaceDrivenAutoExposureEnabled] };
-        let exposure_face_driven: bool = unsafe {
-            objc2::msg_send![
-                self.inner,
-                automaticallyAdjustsFaceDrivenAutoExposureEnabled
-            ]
+        let exposure_face_driven_supported =
+            unsafe { self.inner.isFaceDrivenAutoExposureEnabled() };
+        let exposure_face_driven = unsafe {
+            self.inner
+                .automaticallyAdjustsFaceDrivenAutoExposureEnabled()
         };
 
         controls.push(CameraControl::new(
@@ -506,9 +494,9 @@ impl AVCaptureDevice {
             exposure_poi_supported,
         ));
 
-        let exposure_bias: f32 = unsafe { objc2::msg_send![self.inner, exposureTargetBias] };
-        let exposure_bias_min: f32 = unsafe { objc2::msg_send![self.inner, minExposureTargetBias] };
-        let exposure_bias_max: f32 = unsafe { objc2::msg_send![self.inner, maxExposureTargetBias] };
+        let exposure_bias: c_float = unsafe { self.inner.exposureTargetBias() };
+        let exposure_bias_min: c_float = unsafe { self.inner.minExposureTargetBias() };
+        let exposure_bias_max: c_float = unsafe { self.inner.maxExposureTargetBias() };
 
         controls.push(CameraControl::new(
             KnownCameraControl::Other(4),
@@ -524,18 +512,9 @@ impl AVCaptureDevice {
             true,
         ));
 
-        let exposure_duration: CMTime = unsafe {
-            let t: EncodableCMTime = objc2::msg_send![self.inner, exposureDuration];
-            t.0
-        };
-        let exposure_duration_min: CMTime = unsafe {
-            let t: EncodableCMTime = objc2::msg_send![active_format, minExposureDuration];
-            t.0
-        };
-        let exposure_duration_max: CMTime = unsafe {
-            let t: EncodableCMTime = objc2::msg_send![active_format, maxExposureDuration];
-            t.0
-        };
+        let exposure_duration = unsafe { self.inner.exposureDuration() };
+        let exposure_duration_min = unsafe { active_format.minExposureDuration() };
+        let exposure_duration_max = unsafe { active_format.maxExposureDuration() };
 
         controls.push(CameraControl::new(
             KnownCameraControl::Gamma,
@@ -558,9 +537,9 @@ impl AVCaptureDevice {
             exposure_custom,
         ));
 
-        let exposure_iso: f32 = unsafe { objc2::msg_send![self.inner, ISO] };
-        let exposure_iso_min: f32 = unsafe { objc2::msg_send![active_format, minISO] };
-        let exposure_iso_max: f32 = unsafe { objc2::msg_send![active_format, maxISO] };
+        let exposure_iso: c_float = unsafe { self.inner.ISO() };
+        let exposure_iso_min: c_float = unsafe { active_format.minISO() };
+        let exposure_iso_max: c_float = unsafe { active_format.maxISO() };
 
         controls.push(CameraControl::new(
             KnownCameraControl::Brightness,
@@ -583,7 +562,7 @@ impl AVCaptureDevice {
             exposure_custom,
         ));
 
-        let lens_aperture: f32 = unsafe { objc2::msg_send![self.inner, lensAperture] };
+        let lens_aperture: c_float = unsafe { self.inner.lensAperture() };
 
         controls.push(CameraControl::new(
             KnownCameraControl::Iris,
@@ -597,19 +576,23 @@ impl AVCaptureDevice {
             false,
         ));
 
-        // get white balance
-        let white_balance_current: isize =
-            unsafe { objc2::msg_send![self.inner, whiteBalanceMode] };
-        let white_balance_manual: bool =
-            unsafe { objc2::msg_send![self.inner, isWhiteBalanceModeSupported: 0_isize] };
-        let white_balance_auto: bool =
-            unsafe { objc2::msg_send![self.inner, isWhiteBalanceModeSupported: 1_isize] };
-        let white_balance_continuous: bool =
-            unsafe { objc2::msg_send![self.inner, isWhiteBalanceModeSupported: 2_isize] };
+        // White balance
+        let white_balance_current = unsafe { self.inner.whiteBalanceMode() };
+        let white_balance_manual = unsafe {
+            self.inner
+                .isWhiteBalanceModeSupported(AVCaptureWhiteBalanceMode::Locked)
+        };
+        let white_balance_auto = unsafe {
+            self.inner
+                .isWhiteBalanceModeSupported(AVCaptureWhiteBalanceMode::AutoWhiteBalance)
+        };
+        let white_balance_continuous = unsafe {
+            self.inner
+                .isWhiteBalanceModeSupported(AVCaptureWhiteBalanceMode::ContinuousAutoWhiteBalance)
+        };
 
         {
             let mut possible = vec![];
-
             if white_balance_manual {
                 possible.push(0);
             }
@@ -624,7 +607,7 @@ impl AVCaptureDevice {
                 KnownCameraControl::WhiteBalance,
                 "WhiteBalanceMode".to_string(),
                 ControlValueDescription::Enum {
-                    value: white_balance_current as i64,
+                    value: white_balance_current.0 as i64,
                     possible,
                     default: 0,
                 },
@@ -633,22 +616,17 @@ impl AVCaptureDevice {
             ));
         }
 
-        let white_balance_gains: AVCaptureWhiteBalanceGains =
-            unsafe { objc2::msg_send![self.inner, deviceWhiteBalanceGains] };
-        let white_balance_default: AVCaptureWhiteBalanceGains =
-            unsafe { objc2::msg_send![self.inner, grayWorldDeviceWhiteBalanceGains] };
-        let white_balance_max_scalar: f32 =
-            unsafe { objc2::msg_send![self.inner, maxWhiteBalanceGain] };
+        let white_balance_gains = unsafe { self.inner.deviceWhiteBalanceGains() };
+        let white_balance_default = unsafe { self.inner.grayWorldDeviceWhiteBalanceGains() };
+        let white_balance_max_scalar: c_float = unsafe { self.inner.maxWhiteBalanceGain() };
         let white_balance_max = AVCaptureWhiteBalanceGains {
             redGain: white_balance_max_scalar,
             greenGain: white_balance_max_scalar,
             blueGain: white_balance_max_scalar,
         };
-        let white_balance_gain_supported: bool = unsafe {
-            objc2::msg_send![
-                self.inner,
-                isLockingWhiteBalanceWithCustomDeviceGainsSupported
-            ]
+        let white_balance_gain_supported = unsafe {
+            self.inner
+                .isLockingWhiteBalanceWithCustomDeviceGainsSupported()
         };
 
         controls.push(CameraControl::new(
@@ -682,17 +660,14 @@ impl AVCaptureDevice {
             white_balance_gain_supported,
         ));
 
-        // get flash
-        let has_torch: bool = unsafe { objc2::msg_send![self.inner, isTorchAvailable] };
-        let torch_off: bool =
-            unsafe { objc2::msg_send![self.inner, isTorchModeSupported: 0_isize] };
-        let torch_on: bool = unsafe { objc2::msg_send![self.inner, isTorchModeSupported: 1_isize] };
-        let torch_auto: bool =
-            unsafe { objc2::msg_send![self.inner, isTorchModeSupported: 2_isize] };
+        // Torch
+        let has_torch = unsafe { self.inner.isTorchAvailable() };
+        let torch_off = unsafe { self.inner.isTorchModeSupported(AVCaptureTorchMode::Off) };
+        let torch_on = unsafe { self.inner.isTorchModeSupported(AVCaptureTorchMode::On) };
+        let torch_auto = unsafe { self.inner.isTorchModeSupported(AVCaptureTorchMode::Auto) };
 
         {
             let mut possible = vec![];
-
             if torch_off {
                 possible.push(0);
             }
@@ -703,13 +678,13 @@ impl AVCaptureDevice {
                 possible.push(2);
             }
 
-            let torch_mode_current: isize = unsafe { objc2::msg_send![self.inner, torchMode] };
+            let torch_mode_current = unsafe { self.inner.torchMode() };
 
             controls.push(CameraControl::new(
                 KnownCameraControl::Other(5),
                 "TorchMode".to_string(),
                 ControlValueDescription::Enum {
-                    value: torch_mode_current as i64,
+                    value: torch_mode_current.0 as i64,
                     possible,
                     default: 0,
                 },
@@ -725,9 +700,9 @@ impl AVCaptureDevice {
             ));
         }
 
-        // get low light boost
-        let has_llb: bool = unsafe { objc2::msg_send![self.inner, isLowLightBoostSupported] };
-        let llb_enabled: bool = unsafe { objc2::msg_send![self.inner, isLowLightBoostEnabled] };
+        // Low light boost
+        let has_llb = unsafe { self.inner.isLowLightBoostSupported() };
+        let llb_enabled = unsafe { self.inner.isLowLightBoostEnabled() };
 
         {
             controls.push(CameraControl::new(
@@ -749,12 +724,10 @@ impl AVCaptureDevice {
             ));
         }
 
-        // get zoom factor
-        let zoom_current: CGFloat = unsafe { objc2::msg_send![self.inner, videoZoomFactor] };
-        let zoom_min: CGFloat =
-            unsafe { objc2::msg_send![self.inner, minAvailableVideoZoomFactor] };
-        let zoom_max: CGFloat =
-            unsafe { objc2::msg_send![self.inner, maxAvailableVideoZoomFactor] };
+        // Zoom
+        let zoom_current: CGFloat = unsafe { self.inner.videoZoomFactor() };
+        let zoom_min: CGFloat = unsafe { self.inner.minAvailableVideoZoomFactor() };
+        let zoom_max: CGFloat = unsafe { self.inner.maxAvailableVideoZoomFactor() };
 
         controls.push(CameraControl::new(
             KnownCameraControl::Zoom,
@@ -770,11 +743,11 @@ impl AVCaptureDevice {
             true,
         ));
 
-        // zoom distortion correction
-        let distortion_correction_supported: bool =
-            unsafe { objc2::msg_send![self.inner, isGeometricDistortionCorrectionSupported] };
-        let distortion_correction_current_value: bool =
-            unsafe { objc2::msg_send![self.inner, isGeometricDistortionCorrectionEnabled] };
+        // Geometric distortion correction
+        let distortion_correction_supported =
+            unsafe { self.inner.isGeometricDistortionCorrectionSupported() };
+        let distortion_correction_current_value =
+            unsafe { self.inner.isGeometricDistortionCorrectionEnabled() };
 
         controls.push(CameraControl::new(
             KnownCameraControl::Other(6),
@@ -808,8 +781,6 @@ impl AVCaptureDevice {
             .map(|cc| (cc.control(), cc))
             .collect::<BTreeMap<_, _>>();
 
-        let null_handler: *mut AnyObject = std::ptr::null_mut();
-
         match id {
             KnownCameraControl::Brightness => {
                 let isoctrl = controls.get(&id).ok_or(NokhwaError::SetPropertyError {
@@ -818,29 +789,14 @@ impl AVCaptureDevice {
                     error: "Control does not exist".to_string(),
                 })?;
 
-                if isoctrl.flag().contains(&KnownCameraControlFlag::ReadOnly) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Exposure is in improper state to set ISO (Please set to `custom`!)"
-                            .to_string(),
-                    });
-                }
-
-                if isoctrl.flag().contains(&KnownCameraControlFlag::Disabled) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Disabled".to_string(),
-                    });
-                }
+                check_control_flags(isoctrl, &id, &value)?;
 
                 let current_duration = unsafe { AVCaptureExposureDurationCurrent };
                 let new_iso = *value.as_float().ok_or(NokhwaError::SetPropertyError {
                     property: id.to_string(),
                     value: value.to_string(),
                     error: "Expected float".to_string(),
-                })? as f32;
+                })? as c_float;
 
                 if !isoctrl.description().verify_setter(&value) {
                     return Err(NokhwaError::SetPropertyError {
@@ -850,9 +806,14 @@ impl AVCaptureDevice {
                     });
                 }
 
-                let _: () = unsafe {
-                    objc2::msg_send![self.inner, setExposureModeCustomWithDuration:EncodableCMTime(current_duration), ISO:new_iso, completionHandler:null_handler]
-                };
+                unsafe {
+                    self.inner
+                        .setExposureModeCustomWithDuration_ISO_completionHandler(
+                            current_duration,
+                            new_iso,
+                            None,
+                        );
+                }
 
                 Ok(())
             }
@@ -863,33 +824,9 @@ impl AVCaptureDevice {
                     error: "Control does not exist".to_string(),
                 })?;
 
-                if duration_ctrl
-                    .flag()
-                    .contains(&KnownCameraControlFlag::ReadOnly)
-                {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Exposure is in improper state to set Duration (Please set to `custom`!)"
-                            .to_string(),
-                    });
-                }
+                check_control_flags(duration_ctrl, &id, &value)?;
 
-                if duration_ctrl
-                    .flag()
-                    .contains(&KnownCameraControlFlag::Disabled)
-                {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Disabled".to_string(),
-                    });
-                }
-                let current_duration: CMTime = unsafe {
-                    let t: EncodableCMTime = objc2::msg_send![self.inner, exposureDuration];
-                    t.0
-                };
-
+                let current_duration = unsafe { self.inner.exposureDuration() };
                 let current_iso = unsafe { AVCaptureISOCurrent };
                 let new_duration = CMTime {
                     value: *value.as_integer().ok_or(NokhwaError::SetPropertyError {
@@ -910,9 +847,14 @@ impl AVCaptureDevice {
                     });
                 }
 
-                let _: () = unsafe {
-                    objc2::msg_send![self.inner, setExposureModeCustomWithDuration:EncodableCMTime(new_duration), ISO:current_iso, completionHandler:null_handler]
-                };
+                unsafe {
+                    self.inner
+                        .setExposureModeCustomWithDuration_ISO_completionHandler(
+                            new_duration,
+                            current_iso,
+                            None,
+                        );
+                }
 
                 Ok(())
             }
@@ -923,32 +865,13 @@ impl AVCaptureDevice {
                     error: "Control does not exist".to_string(),
                 })?;
 
-                if wb_enum_value
-                    .flag()
-                    .contains(&KnownCameraControlFlag::ReadOnly)
-                {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Read Only".to_string(),
-                    });
-                }
+                check_control_flags(wb_enum_value, &id, &value)?;
 
-                if wb_enum_value
-                    .flag()
-                    .contains(&KnownCameraControlFlag::Disabled)
-                {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Disabled".to_string(),
-                    });
-                }
                 let setter = *value.as_enum().ok_or(NokhwaError::SetPropertyError {
                     property: id.to_string(),
                     value: value.to_string(),
                     error: "Expected Enum".to_string(),
-                })? as isize;
+                })?;
 
                 if !wb_enum_value.description().verify_setter(&value) {
                     return Err(NokhwaError::SetPropertyError {
@@ -958,7 +881,10 @@ impl AVCaptureDevice {
                     });
                 }
 
-                let _: () = unsafe { objc2::msg_send![self.inner, whiteBalanceMode: setter] };
+                unsafe {
+                    self.inner
+                        .setWhiteBalanceMode(AVCaptureWhiteBalanceMode(setter as isize));
+                }
 
                 Ok(())
             }
@@ -969,21 +895,7 @@ impl AVCaptureDevice {
                     error: "Control does not exist".to_string(),
                 })?;
 
-                if ctrlvalue.flag().contains(&KnownCameraControlFlag::ReadOnly) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Read Only".to_string(),
-                    });
-                }
-
-                if ctrlvalue.flag().contains(&KnownCameraControlFlag::Disabled) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Disabled".to_string(),
-                    });
-                }
+                check_control_flags(ctrlvalue, &id, &value)?;
 
                 let setter = *value.as_boolean().ok_or(NokhwaError::SetPropertyError {
                     property: id.to_string(),
@@ -999,12 +911,10 @@ impl AVCaptureDevice {
                     });
                 }
 
-                let _: () = unsafe {
-                    objc2::msg_send![
-                        self.inner,
-                        setAutomaticallyEnablesLowLightBoostWhenAvailable: setter
-                    ]
-                };
+                unsafe {
+                    self.inner
+                        .setAutomaticallyEnablesLowLightBoostWhenAvailable(setter);
+                }
 
                 Ok(())
             }
@@ -1015,21 +925,7 @@ impl AVCaptureDevice {
                     error: "Control does not exist".to_string(),
                 })?;
 
-                if ctrlvalue.flag().contains(&KnownCameraControlFlag::ReadOnly) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Read Only".to_string(),
-                    });
-                }
-
-                if ctrlvalue.flag().contains(&KnownCameraControlFlag::Disabled) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Disabled".to_string(),
-                    });
-                }
+                check_control_flags(ctrlvalue, &id, &value)?;
 
                 let (r, g, b) = value.as_rgb().ok_or(NokhwaError::SetPropertyError {
                     property: id.to_string(),
@@ -1046,18 +942,16 @@ impl AVCaptureDevice {
                 }
 
                 let gains = AVCaptureWhiteBalanceGains {
-                    redGain: *r as f32,
-                    greenGain: *g as f32,
-                    blueGain: *b as f32,
+                    redGain: *r as c_float,
+                    greenGain: *g as c_float,
+                    blueGain: *b as c_float,
                 };
-                let null_handler: *mut AnyObject = std::ptr::null_mut();
-                let _: () = unsafe {
-                    objc2::msg_send![
-                        self.inner,
-                        setWhiteBalanceModeLockedWithDeviceWhiteBalanceGains: gains,
-                        completionHandler: null_handler
-                    ]
-                };
+                unsafe {
+                    self.inner
+                        .setWhiteBalanceModeLockedWithDeviceWhiteBalanceGains_completionHandler(
+                            gains, None,
+                        );
+                }
 
                 Ok(())
             }
@@ -1068,21 +962,7 @@ impl AVCaptureDevice {
                     error: "Control does not exist".to_string(),
                 })?;
 
-                if ctrlvalue.flag().contains(&KnownCameraControlFlag::ReadOnly) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Read Only".to_string(),
-                    });
-                }
-
-                if ctrlvalue.flag().contains(&KnownCameraControlFlag::Disabled) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Disabled".to_string(),
-                    });
-                }
+                check_control_flags(ctrlvalue, &id, &value)?;
 
                 let setter = *value.as_float().ok_or(NokhwaError::SetPropertyError {
                     property: id.to_string(),
@@ -1098,9 +978,9 @@ impl AVCaptureDevice {
                     });
                 }
 
-                let _: () = unsafe {
-                    objc2::msg_send![self.inner, rampToVideoZoomFactor: setter, withRate: 1.0_f32]
-                };
+                unsafe {
+                    self.inner.rampToVideoZoomFactor_withRate(setter, 1.0_f32);
+                }
 
                 Ok(())
             }
@@ -1111,27 +991,13 @@ impl AVCaptureDevice {
                     error: "Control does not exist".to_string(),
                 })?;
 
-                if ctrlvalue.flag().contains(&KnownCameraControlFlag::ReadOnly) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Read Only".to_string(),
-                    });
-                }
-
-                if ctrlvalue.flag().contains(&KnownCameraControlFlag::Disabled) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Disabled".to_string(),
-                    });
-                }
+                check_control_flags(ctrlvalue, &id, &value)?;
 
                 let setter = *value.as_enum().ok_or(NokhwaError::SetPropertyError {
                     property: id.to_string(),
                     value: value.to_string(),
                     error: "Expected Enum".to_string(),
-                })? as isize;
+                })?;
 
                 if !ctrlvalue.description().verify_setter(&value) {
                     return Err(NokhwaError::SetPropertyError {
@@ -1141,7 +1007,10 @@ impl AVCaptureDevice {
                     });
                 }
 
-                let _: () = unsafe { objc2::msg_send![self.inner, exposureMode: setter] };
+                unsafe {
+                    self.inner
+                        .setExposureMode(AVCaptureExposureMode(setter as isize));
+                }
 
                 Ok(())
             }
@@ -1157,27 +1026,13 @@ impl AVCaptureDevice {
                     error: "Control does not exist".to_string(),
                 })?;
 
-                if ctrlvalue.flag().contains(&KnownCameraControlFlag::ReadOnly) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Read Only".to_string(),
-                    });
-                }
-
-                if ctrlvalue.flag().contains(&KnownCameraControlFlag::Disabled) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Disabled".to_string(),
-                    });
-                }
+                check_control_flags(ctrlvalue, &id, &value)?;
 
                 let setter = *value.as_enum().ok_or(NokhwaError::SetPropertyError {
                     property: id.to_string(),
                     value: value.to_string(),
                     error: "Expected Enum".to_string(),
-                })? as isize;
+                })?;
 
                 if !ctrlvalue.description().verify_setter(&value) {
                     return Err(NokhwaError::SetPropertyError {
@@ -1187,33 +1042,16 @@ impl AVCaptureDevice {
                     });
                 }
 
-                let _: () = unsafe { objc2::msg_send![self.inner, focusMode: setter] };
+                unsafe {
+                    self.inner.setFocusMode(AVCaptureFocusMode(setter as isize));
+                }
 
                 Ok(())
             }
             KnownCameraControl::Other(i) => match i {
                 0 => {
-                    let ctrlvalue = controls.get(&id).ok_or(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Control does not exist".to_string(),
-                    })?;
-
-                    if ctrlvalue.flag().contains(&KnownCameraControlFlag::ReadOnly) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Read Only".to_string(),
-                        });
-                    }
-
-                    if ctrlvalue.flag().contains(&KnownCameraControlFlag::Disabled) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Disabled".to_string(),
-                        });
-                    }
+                    // Focus point of interest
+                    let ctrlvalue = get_and_check_control(&controls, &id, &value)?;
 
                     let setter = value
                         .as_point()
@@ -1235,33 +1073,13 @@ impl AVCaptureDevice {
                         });
                     }
 
-                    let _: () =
-                        unsafe { objc2::msg_send![self.inner, focusPointOfInterest: setter] };
+                    unsafe { self.inner.setFocusPointOfInterest(setter) };
 
                     Ok(())
                 }
                 1 => {
-                    let ctrlvalue = controls.get(&id).ok_or(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Control does not exist".to_string(),
-                    })?;
-
-                    if ctrlvalue.flag().contains(&KnownCameraControlFlag::ReadOnly) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Read Only".to_string(),
-                        });
-                    }
-
-                    if ctrlvalue.flag().contains(&KnownCameraControlFlag::Disabled) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Disabled".to_string(),
-                        });
-                    }
+                    // Focus manual lens position
+                    let ctrlvalue = get_and_check_control(&controls, &id, &value)?;
 
                     let setter = *value.as_float().ok_or(NokhwaError::SetPropertyError {
                         property: id.to_string(),
@@ -1277,34 +1095,16 @@ impl AVCaptureDevice {
                         });
                     }
 
-                    let _: () = unsafe {
-                        objc2::msg_send![self.inner, setFocusModeLockedWithLensPosition: setter, handler: null_handler]
-                    };
+                    unsafe {
+                        self.inner
+                            .setFocusModeLockedWithLensPosition_completionHandler(setter, None);
+                    }
 
                     Ok(())
                 }
                 2 => {
-                    let ctrlvalue = controls.get(&id).ok_or(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Control does not exist".to_string(),
-                    })?;
-
-                    if ctrlvalue.flag().contains(&KnownCameraControlFlag::ReadOnly) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Read Only".to_string(),
-                        });
-                    }
-
-                    if ctrlvalue.flag().contains(&KnownCameraControlFlag::Disabled) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Disabled".to_string(),
-                        });
-                    }
+                    // Exposure point of interest
+                    let ctrlvalue = get_and_check_control(&controls, &id, &value)?;
 
                     let setter = value
                         .as_point()
@@ -1326,33 +1126,13 @@ impl AVCaptureDevice {
                         });
                     }
 
-                    let _: () =
-                        unsafe { objc2::msg_send![self.inner, exposurePointOfInterest: setter] };
+                    unsafe { self.inner.setExposurePointOfInterest(setter) };
 
                     Ok(())
                 }
                 3 => {
-                    let ctrlvalue = controls.get(&id).ok_or(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Control does not exist".to_string(),
-                    })?;
-
-                    if ctrlvalue.flag().contains(&KnownCameraControlFlag::ReadOnly) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Read Only".to_string(),
-                        });
-                    }
-
-                    if ctrlvalue.flag().contains(&KnownCameraControlFlag::Disabled) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Disabled".to_string(),
-                        });
-                    }
+                    // Face-driven auto exposure
+                    let ctrlvalue = get_and_check_control(&controls, &id, &value)?;
 
                     let setter: bool =
                         *value.as_boolean().ok_or(NokhwaError::SetPropertyError {
@@ -1369,43 +1149,22 @@ impl AVCaptureDevice {
                         });
                     }
 
-                    let _: () = unsafe {
-                        objc2::msg_send![
-                            self.inner,
-                            automaticallyAdjustsFaceDrivenAutoExposureEnabled: setter
-                        ]
-                    };
+                    unsafe {
+                        self.inner
+                            .setAutomaticallyAdjustsFaceDrivenAutoExposureEnabled(setter);
+                    }
 
                     Ok(())
                 }
                 4 => {
-                    let ctrlvalue = controls.get(&id).ok_or(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Control does not exist".to_string(),
-                    })?;
-
-                    if ctrlvalue.flag().contains(&KnownCameraControlFlag::ReadOnly) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Read Only".to_string(),
-                        });
-                    }
-
-                    if ctrlvalue.flag().contains(&KnownCameraControlFlag::Disabled) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Disabled".to_string(),
-                        });
-                    }
+                    // Exposure target bias
+                    let ctrlvalue = get_and_check_control(&controls, &id, &value)?;
 
                     let setter = *value.as_float().ok_or(NokhwaError::SetPropertyError {
                         property: id.to_string(),
                         value: value.to_string(),
                         error: "Expected Float".to_string(),
-                    })? as f32;
+                    })? as c_float;
 
                     if !ctrlvalue.description().verify_setter(&value) {
                         return Err(NokhwaError::SetPropertyError {
@@ -1415,40 +1174,22 @@ impl AVCaptureDevice {
                         });
                     }
 
-                    let _: () = unsafe {
-                        objc2::msg_send![self.inner, setExposureTargetBias: setter, handler: null_handler]
-                    };
+                    unsafe {
+                        self.inner
+                            .setExposureTargetBias_completionHandler(setter, None);
+                    }
 
                     Ok(())
                 }
                 5 => {
-                    let ctrlvalue = controls.get(&id).ok_or(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Control does not exist".to_string(),
-                    })?;
-
-                    if ctrlvalue.flag().contains(&KnownCameraControlFlag::ReadOnly) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Read Only".to_string(),
-                        });
-                    }
-
-                    if ctrlvalue.flag().contains(&KnownCameraControlFlag::Disabled) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Disabled".to_string(),
-                        });
-                    }
+                    // Torch mode
+                    let ctrlvalue = get_and_check_control(&controls, &id, &value)?;
 
                     let setter = *value.as_enum().ok_or(NokhwaError::SetPropertyError {
                         property: id.to_string(),
                         value: value.to_string(),
                         error: "Expected Enum".to_string(),
-                    })? as isize;
+                    })?;
 
                     if !ctrlvalue.description().verify_setter(&value) {
                         return Err(NokhwaError::SetPropertyError {
@@ -1458,32 +1199,15 @@ impl AVCaptureDevice {
                         });
                     }
 
-                    let _: () = unsafe { objc2::msg_send![self.inner, torchMode: setter] };
+                    unsafe {
+                        self.inner.setTorchMode(AVCaptureTorchMode(setter as isize));
+                    }
 
                     Ok(())
                 }
                 6 => {
-                    let ctrlvalue = controls.get(&id).ok_or(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Control does not exist".to_string(),
-                    })?;
-
-                    if ctrlvalue.flag().contains(&KnownCameraControlFlag::ReadOnly) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Read Only".to_string(),
-                        });
-                    }
-
-                    if ctrlvalue.flag().contains(&KnownCameraControlFlag::Disabled) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Disabled".to_string(),
-                        });
-                    }
+                    // Geometric distortion correction
+                    let ctrlvalue = get_and_check_control(&controls, &id, &value)?;
 
                     let setter: bool =
                         *value.as_boolean().ok_or(NokhwaError::SetPropertyError {
@@ -1500,9 +1224,9 @@ impl AVCaptureDevice {
                         });
                     }
 
-                    let _: () = unsafe {
-                        objc2::msg_send![self.inner, geometricDistortionCorrectionEnabled: setter]
-                    };
+                    unsafe {
+                        self.inner.setGeometricDistortionCorrectionEnabled(setter);
+                    }
 
                     Ok(())
                 }
@@ -1521,8 +1245,8 @@ impl AVCaptureDevice {
     }
 
     pub fn active_format(&self) -> Result<CameraFormat, NokhwaError> {
-        let af: *mut AnyObject = unsafe { objc2::msg_send![self.inner, activeFormat] };
-        let avf_format = AVCaptureDeviceFormat::try_from(af)?;
+        let af = unsafe { self.inner.activeFormat() };
+        let avf_format = AVCaptureDeviceFormatWrapper::try_from_format(&af)?;
         let resolution = avf_format.resolution;
         let fourcc = avf_format.fourcc;
         let mut a = avf_format
@@ -1530,8 +1254,7 @@ impl AVCaptureDevice {
             .into_iter()
             .map(move |fps_f64| {
                 let fps = fps_f64 as u32;
-
-                let resolution = Resolution::new(resolution.width as u32, resolution.height as u32); // FIXME: what the fuck?
+                let resolution = Resolution::new(resolution.width as u32, resolution.height as u32);
                 CameraFormat::new(resolution, fourcc, fps)
             })
             .collect::<Vec<_>>();
@@ -1546,4 +1269,40 @@ impl AVCaptureDevice {
             })
         }
     }
+}
+
+fn check_control_flags(
+    ctrl: &CameraControl,
+    id: &KnownCameraControl,
+    value: &ControlValueSetter,
+) -> Result<(), NokhwaError> {
+    if ctrl.flag().contains(&KnownCameraControlFlag::ReadOnly) {
+        return Err(NokhwaError::SetPropertyError {
+            property: id.to_string(),
+            value: value.to_string(),
+            error: "Read Only".to_string(),
+        });
+    }
+    if ctrl.flag().contains(&KnownCameraControlFlag::Disabled) {
+        return Err(NokhwaError::SetPropertyError {
+            property: id.to_string(),
+            value: value.to_string(),
+            error: "Disabled".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn get_and_check_control<'a>(
+    controls: &'a BTreeMap<KnownCameraControl, &'a CameraControl>,
+    id: &KnownCameraControl,
+    value: &ControlValueSetter,
+) -> Result<&'a CameraControl, NokhwaError> {
+    let ctrlvalue = controls.get(id).ok_or(NokhwaError::SetPropertyError {
+        property: id.to_string(),
+        value: value.to_string(),
+        error: "Control does not exist".to_string(),
+    })?;
+    check_control_flags(ctrlvalue, id, value)?;
+    Ok(ctrlvalue)
 }

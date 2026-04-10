@@ -1,11 +1,15 @@
-// Local FFI declarations for CoreMedia and CoreVideo types.
-// These replace the `core-media-sys` and `core-video-sys` crate dependencies
-// to eliminate their legacy transitive deps (objc 0.2, metal 0.18).
+// Local FFI declarations for CoreMedia and CoreVideo C functions.
+// Types like AVCaptureDevice, AVCaptureSession, CMTime etc. now come from
+// objc2-av-foundation / objc2-core-media / objc2-core-video typed crates.
+// This module retains only:
+//   - C function bindings not provided by the typed crates
+//   - Pixel format / codec constants (not exported as named constants by typed crates)
+//   - GCD dispatch_queue helpers (not ObjC objects)
 
 use objc2::encode::{Encode, Encoding};
 use objc2::runtime::AnyObject;
 
-// --- CoreMedia types ---
+// --- CoreMedia types (used in C function signatures) ---
 
 pub type FourCharCode = u32;
 
@@ -58,30 +62,7 @@ pub const kCVPixelFormatType_420YpCbCr8BiPlanarFullRange: FourCharCode = fourcc(
 #[allow(non_upper_case_globals)]
 pub const kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange: FourCharCode = fourcc(b"x420");
 
-// CGFloat is f64 on 64-bit Apple platforms (all modern macOS/iOS)
-pub type CGFloat = std::ffi::c_double;
-
 pub type Id = *mut AnyObject;
-
-#[repr(transparent)]
-#[derive(Clone)]
-pub struct NSObject(pub Id);
-
-// SAFETY: NSObject is repr(transparent) over *mut AnyObject, which is a pointer.
-unsafe impl Encode for NSObject {
-    const ENCODING: Encoding = Encoding::Object;
-}
-
-#[repr(transparent)]
-#[derive(Clone)]
-pub struct NSString(pub Id);
-
-// SAFETY: NSString is repr(transparent) over *mut AnyObject, which is a pointer.
-unsafe impl Encode for NSString {
-    const ENCODING: Encoding = Encoding::Object;
-}
-
-pub type AVMediaTypeRaw = NSString;
 
 #[allow(non_snake_case)]
 #[link(name = "CoreMedia", kind = "framework")]
@@ -131,6 +112,21 @@ extern "C" {
     pub fn dispatch_release(object: DispatchQueue);
 }
 
+// --- CoreVideo C function bindings ---
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct __CVBuffer {
+    _unused: [u8; 0],
+}
+
+pub type CVBufferRef = *mut __CVBuffer;
+pub type CVImageBufferRef = CVBufferRef;
+pub type CVPixelBufferRef = CVImageBufferRef;
+pub type CVPixelBufferLockFlags = u64;
+pub type CVReturn = i32;
+pub type OSType = FourCharCode;
+
 #[allow(non_snake_case)]
 #[link(name = "CoreVideo", kind = "framework")]
 extern "C" {
@@ -152,117 +148,4 @@ extern "C" {
 
     /// CFStringRef in Apple headers; cast to `*mut AnyObject` at usage site.
     pub static kCVPixelBufferPixelFormatTypeKey: *const std::ffi::c_void;
-}
-
-#[repr(C)]
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
-pub struct CGPoint {
-    pub x: CGFloat,
-    pub y: CGFloat,
-}
-
-// SAFETY: CGPoint is repr(C) with two CGFloat (f64) fields, matching {dd} encoding.
-unsafe impl Encode for CGPoint {
-    const ENCODING: Encoding = Encoding::Struct("CGPoint", &[Encoding::Double, Encoding::Double]);
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct __CVBuffer {
-    _unused: [u8; 0],
-}
-
-#[allow(non_snake_case)]
-#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
-#[repr(C)]
-pub struct AVCaptureWhiteBalanceGains {
-    pub blueGain: f32,
-    pub greenGain: f32,
-    pub redGain: f32,
-}
-
-// SAFETY: AVCaptureWhiteBalanceGains is repr(C) with three f32 fields.
-unsafe impl Encode for AVCaptureWhiteBalanceGains {
-    const ENCODING: Encoding = Encoding::Struct(
-        "AVCaptureWhiteBalanceGains",
-        &[Encoding::Float, Encoding::Float, Encoding::Float],
-    );
-}
-
-/// Newtype wrapper around `CMTime` that implements `Encode` for ObjC messaging.
-#[repr(transparent)]
-#[derive(Debug, Copy, Clone)]
-pub struct EncodableCMTime(pub CMTime);
-
-// SAFETY: EncodableCMTime is repr(transparent) over CMTime which is repr(C) with fields {i64, i32, u32, i64}.
-unsafe impl Encode for EncodableCMTime {
-    const ENCODING: Encoding = Encoding::Struct(
-        "CMTime",
-        &[
-            Encoding::LongLong,
-            Encoding::Int,
-            Encoding::UInt,
-            Encoding::LongLong,
-        ],
-    );
-}
-
-impl From<EncodableCMTime> for CMTime {
-    fn from(e: EncodableCMTime) -> CMTime {
-        e.0
-    }
-}
-
-impl From<CMTime> for EncodableCMTime {
-    fn from(t: CMTime) -> EncodableCMTime {
-        EncodableCMTime(t)
-    }
-}
-
-pub type CVBufferRef = *mut __CVBuffer;
-
-pub type CVImageBufferRef = CVBufferRef;
-pub type CVPixelBufferRef = CVImageBufferRef;
-pub type CVPixelBufferLockFlags = u64;
-pub type CVReturn = i32;
-
-pub type OSType = FourCharCode;
-pub type AVVideoCodecType = NSString;
-
-#[link(name = "AVFoundation", kind = "framework")]
-extern "C" {
-    pub static AVVideoCodecKey: NSString;
-    pub static AVVideoCodecTypeHEVC: AVVideoCodecType;
-    pub static AVVideoCodecTypeH264: AVVideoCodecType;
-    pub static AVVideoCodecTypeJPEG: AVVideoCodecType;
-    pub static AVVideoCodecTypeAppleProRes4444: AVVideoCodecType;
-    pub static AVVideoCodecTypeAppleProRes422: AVVideoCodecType;
-    pub static AVVideoCodecTypeAppleProRes422HQ: AVVideoCodecType;
-    pub static AVVideoCodecTypeAppleProRes422LT: AVVideoCodecType;
-    pub static AVVideoCodecTypeAppleProRes422Proxy: AVVideoCodecType;
-    pub static AVVideoCodecTypeHEVCWithAlpha: AVVideoCodecType;
-    pub static AVVideoCodecHEVC: NSString;
-    pub static AVVideoCodecH264: NSString;
-    pub static AVVideoCodecJPEG: NSString;
-    pub static AVVideoCodecAppleProRes4444: NSString;
-    pub static AVVideoCodecAppleProRes422: NSString;
-    pub static AVVideoWidthKey: NSString;
-    pub static AVVideoHeightKey: NSString;
-    pub static AVVideoExpectedSourceFrameRateKey: NSString;
-
-    pub static AVMediaTypeVideo: AVMediaTypeRaw;
-    pub static AVMediaTypeAudio: AVMediaTypeRaw;
-    pub static AVMediaTypeText: AVMediaTypeRaw;
-    pub static AVMediaTypeClosedCaption: AVMediaTypeRaw;
-    pub static AVMediaTypeSubtitle: AVMediaTypeRaw;
-    pub static AVMediaTypeTimecode: AVMediaTypeRaw;
-    pub static AVMediaTypeMetadata: AVMediaTypeRaw;
-    pub static AVMediaTypeMuxed: AVMediaTypeRaw;
-    pub static AVMediaTypeMetadataObject: AVMediaTypeRaw;
-    pub static AVMediaTypeDepthData: AVMediaTypeRaw;
-
-    pub static AVCaptureLensPositionCurrent: f32;
-    pub static AVCaptureExposureTargetBiasCurrent: f32;
-    pub static AVCaptureExposureDurationCurrent: CMTime;
-    pub static AVCaptureISOCurrent: f32;
 }

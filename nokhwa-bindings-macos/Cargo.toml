@@ -17,5 +17,20 @@ path = "../nokhwa-core"
 
 [target.'cfg(any(target_os="macos",target_os="ios"))'.dependencies]
 objc2 = { version = "0.6", default-features = false, features = ["std"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["NSArray", "NSDictionary", "NSString", "NSSet", "NSValue", "NSError"] }
+objc2-av-foundation = { version = "0.3", default-features = false, features = [
+    "AVCaptureDevice",
+    "AVCaptureSession",
+    "AVCaptureInput",
+    "AVCaptureOutputBase",
+    "AVCaptureVideoDataOutput",
+    "AVMediaFormat",
+    "block2",
+    "objc2-core-foundation",
+    "objc2-core-media",
+] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["CFCGTypes"] }
+objc2-core-media = { version = "0.3", default-features = false, features = ["CMSampleBuffer", "CMTime", "CMFormatDescription"] }
+objc2-core-video = { version = "0.3", default-features = false, features = ["CVPixelBuffer", "CVImageBuffer", "CVReturn"] }
 block2 = { version = "0.6", default-features = false, features = ["std"] }
 flume = { version = "0.11", default-features = false }

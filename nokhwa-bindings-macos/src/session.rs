@@ -1,242 +1,232 @@
 use crate::callback::AVCaptureVideoCallback;
-use crate::device::{get_raw_device_info, AVCaptureDevice};
-use crate::ffi::AVMediaTypeVideo;
+use crate::device::get_raw_device_info;
 use crate::ffi::{
     kCMPixelFormat_24RGB, kCMPixelFormat_422YpCbCr8_yuvs, kCMPixelFormat_8IndexedGray_WhiteIsZero,
-    kCMVideoCodecType_JPEG, kCVPixelBufferPixelFormatTypeKey,
-    kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+    kCMVideoCodecType_JPEG, kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
 };
-use crate::types::AVCaptureDeviceType;
-use crate::util::{create_boilerplate_impl, vec_to_ns_arr};
+use crate::types::AVCaptureDeviceTypeLocal;
 use nokhwa_core::{
     error::NokhwaError,
     types::{CameraIndex, CameraInfo, FrameFormat},
 };
+use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
+use objc2_av_foundation::{
+    AVCaptureDevice, AVCaptureDeviceDiscoverySession, AVCaptureDeviceInput,
+    AVCaptureDevicePosition, AVCaptureInput, AVCaptureOutput, AVCaptureSession,
+    AVCaptureVideoDataOutput, AVMediaTypeVideo,
+};
+use objc2_foundation::{NSArray, NSString};
 
-create_boilerplate_impl! {
-    [pub AVCaptureDeviceDiscoverySession],
-    [pub AVCaptureDeviceInput],
-    [pub AVCaptureSession]
+pub fn discovery_session_with_types(
+    device_types: &[AVCaptureDeviceTypeLocal],
+) -> Result<Retained<AVCaptureDeviceDiscoverySession>, NokhwaError> {
+    let refs: Vec<&NSString> = device_types
+        .iter()
+        .map(|dt| dt.as_av_capture_device_type())
+        .collect();
+    let device_types_arr = NSArray::from_slice(&refs);
+
+    let media_type_video = unsafe { AVMediaTypeVideo.unwrap() };
+
+    let session = unsafe {
+        AVCaptureDeviceDiscoverySession::discoverySessionWithDeviceTypes_mediaType_position(
+            &device_types_arr,
+            Some(media_type_video),
+            AVCaptureDevicePosition::Unspecified,
+        )
+    };
+
+    Ok(session)
 }
 
-impl AVCaptureDeviceDiscoverySession {
-    pub fn new(device_types: Vec<AVCaptureDeviceType>) -> Result<Self, NokhwaError> {
-        let device_types = vec_to_ns_arr(device_types);
-        let position: isize = 0;
+pub fn discovery_session_default() -> Result<Retained<AVCaptureDeviceDiscoverySession>, NokhwaError>
+{
+    discovery_session_with_types(&[
+        AVCaptureDeviceTypeLocal::UltraWide,
+        AVCaptureDeviceTypeLocal::Telephoto,
+        AVCaptureDeviceTypeLocal::External,
+        AVCaptureDeviceTypeLocal::Dual,
+        AVCaptureDeviceTypeLocal::DualWide,
+        AVCaptureDeviceTypeLocal::Triple,
+    ])
+}
 
-        let media_type_video = unsafe { AVMediaTypeVideo.clone() }.0;
+pub fn discovery_session_devices(session: &AVCaptureDeviceDiscoverySession) -> Vec<CameraInfo> {
+    let devices = unsafe { session.devices() };
+    let count = devices.count();
+    let mut result = Vec::with_capacity(count);
+    for index in 0..count {
+        let device = devices.objectAtIndex(index);
+        result.push(get_raw_device_info(
+            CameraIndex::Index(index as u32),
+            &device,
+        ));
+    }
+    result
+}
 
-        let discovery_session_cls = objc2::class!(AVCaptureDeviceDiscoverySession);
-        let discovery_session: *mut AnyObject = unsafe {
-            objc2::msg_send![discovery_session_cls, discoverySessionWithDeviceTypes:device_types, mediaType:media_type_video, position:position]
-        };
-
-        Ok(AVCaptureDeviceDiscoverySession {
-            inner: discovery_session,
+pub fn create_device_input(
+    capture_device: &AVCaptureDevice,
+) -> Result<Retained<AVCaptureDeviceInput>, NokhwaError> {
+    unsafe {
+        AVCaptureDeviceInput::deviceInputWithDevice_error(capture_device).map_err(|e| {
+            let desc = e.localizedDescription();
+            NokhwaError::InitializeError {
+                backend: nokhwa_core::types::ApiBackend::AVFoundation,
+                error: format!("Failed to create input: {desc}"),
+            }
         })
     }
-
-    pub fn with_default_types() -> Result<Self, NokhwaError> {
-        AVCaptureDeviceDiscoverySession::new(vec![
-            AVCaptureDeviceType::UltraWide,
-            AVCaptureDeviceType::Telephoto,
-            AVCaptureDeviceType::External,
-            AVCaptureDeviceType::Dual,
-            AVCaptureDeviceType::DualWide,
-            AVCaptureDeviceType::Triple,
-        ])
-    }
-
-    pub fn devices(&self) -> Vec<CameraInfo> {
-        let device_ns_array: *mut AnyObject = unsafe { objc2::msg_send![self.inner, devices] };
-        let objects_len: usize = unsafe { objc2::msg_send![device_ns_array, count] };
-        let mut devices = Vec::with_capacity(objects_len);
-        for index in 0..objects_len {
-            let device: *mut AnyObject =
-                unsafe { objc2::msg_send![device_ns_array, objectAtIndex: index] };
-            devices.push(get_raw_device_info(
-                CameraIndex::Index(index as u32),
-                device,
-            ));
-        }
-
-        devices
-    }
 }
 
-impl AVCaptureDeviceInput {
-    pub fn new(capture_device: &AVCaptureDevice) -> Result<Self, NokhwaError> {
-        let cls = objc2::class!(AVCaptureDeviceInput);
-        let err_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
-        let capture_input: *mut AnyObject = unsafe {
-            let allocated: *mut AnyObject = objc2::msg_send![cls, alloc];
-            objc2::msg_send![allocated, initWithDevice:capture_device.inner(), error:err_ptr]
-        };
-        if !err_ptr.is_null() {
-            return Err(NokhwaError::InitializeError {
-                backend: nokhwa_core::types::ApiBackend::AVFoundation,
-                error: "Failed to create input".to_string(),
+pub fn create_video_data_output() -> Retained<AVCaptureVideoDataOutput> {
+    unsafe { AVCaptureVideoDataOutput::new() }
+}
+
+pub fn output_add_delegate(
+    output: &AVCaptureVideoDataOutput,
+    delegate: &AVCaptureVideoCallback,
+) -> Result<(), NokhwaError> {
+    // setSampleBufferDelegate:queue: requires dispatch2 feature which brings in
+    // a separate DispatchQueue type. We keep using msg_send! with our own DispatchQueue wrapper.
+    unsafe {
+        let _: () = objc2::msg_send![
+            output,
+            setSampleBufferDelegate: delegate.delegate,
+            queue: delegate.queue().0
+        ];
+    };
+    Ok(())
+}
+
+pub fn output_set_frame_format(
+    output: &AVCaptureVideoDataOutput,
+    format: FrameFormat,
+) -> Result<(), NokhwaError> {
+    let cmpixelfmt = match format {
+        FrameFormat::YUYV => kCMPixelFormat_422YpCbCr8_yuvs,
+        FrameFormat::MJPEG => kCMVideoCodecType_JPEG,
+        FrameFormat::GRAY => kCMPixelFormat_8IndexedGray_WhiteIsZero,
+        FrameFormat::NV12 => kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+        FrameFormat::RAWRGB => kCMPixelFormat_24RGB,
+        FrameFormat::RAWBGR => {
+            return Err(NokhwaError::SetPropertyError {
+                property: "setVideoSettings".to_string(),
+                value: "set frame format".to_string(),
+                error: "Unsupported frame format BGR".to_string(),
             });
         }
+    };
 
-        Ok(AVCaptureDeviceInput {
-            inner: capture_input,
-        })
-    }
+    // Build NSDictionary via msg_send! since the typed NSDictionary API
+    // requires complex generics. The key is a CFString (toll-free bridged with NSString).
+    let ns_number_cls = objc2::class!(NSNumber);
+    let obj: *mut AnyObject =
+        unsafe { objc2::msg_send![ns_number_cls, numberWithInt: cmpixelfmt as i32] };
+    let key = unsafe { crate::ffi::kCVPixelBufferPixelFormatTypeKey } as *mut AnyObject;
+
+    let dict_cls = objc2::class!(NSDictionary);
+    let dict: *mut AnyObject =
+        unsafe { objc2::msg_send![dict_cls, dictionaryWithObject:obj, forKey:key] };
+
+    // Cast raw pointer dict to the expected typed reference
+    let dict_ref: &objc2_foundation::NSDictionary<NSString, AnyObject> =
+        unsafe { &*(dict as *const _) };
+    unsafe { output.setVideoSettings(Some(dict_ref)) };
+    Ok(())
 }
 
-pub struct AVCaptureVideoDataOutput {
-    inner: *mut AnyObject,
+// -- AVCaptureSession wrapper functions --
+
+pub fn session_new() -> Retained<AVCaptureSession> {
+    unsafe { AVCaptureSession::new() }
 }
 
-impl AVCaptureVideoDataOutput {
-    pub fn new() -> Self {
-        AVCaptureVideoDataOutput::default()
-    }
-
-    pub fn add_delegate(&self, delegate: &AVCaptureVideoCallback) -> Result<(), NokhwaError> {
-        unsafe {
-            let _: () = objc2::msg_send![
-                self.inner,
-                setSampleBufferDelegate: delegate.delegate,
-                queue: delegate.queue().0
-            ];
-        };
-        Ok(())
-    }
-
-    pub fn set_frame_format(&self, format: FrameFormat) -> Result<(), NokhwaError> {
-        let cmpixelfmt = match format {
-            FrameFormat::YUYV => kCMPixelFormat_422YpCbCr8_yuvs,
-            FrameFormat::MJPEG => kCMVideoCodecType_JPEG,
-            FrameFormat::GRAY => kCMPixelFormat_8IndexedGray_WhiteIsZero,
-            FrameFormat::NV12 => kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
-            FrameFormat::RAWRGB => kCMPixelFormat_24RGB,
-            FrameFormat::RAWBGR => {
-                return Err(NokhwaError::SetPropertyError {
-                    property: "setVideoSettings".to_string(),
-                    value: "set frame format".to_string(),
-                    error: "Unsupported frame format BGR".to_string(),
-                });
-            }
-        };
-
-        // Create NSNumber from the pixel format value
-        let ns_number_cls = objc2::class!(NSNumber);
-        let obj: *mut AnyObject =
-            unsafe { objc2::msg_send![ns_number_cls, numberWithInt: cmpixelfmt as i32] };
-        let key = unsafe { kCVPixelBufferPixelFormatTypeKey } as *mut AnyObject;
-
-        // Create NSDictionary with the single key-value pair
-        let dict_cls = objc2::class!(NSDictionary);
-        let dict: *mut AnyObject =
-            unsafe { objc2::msg_send![dict_cls, dictionaryWithObject:obj, forKey:key] };
-        let _: () = unsafe { objc2::msg_send![self.inner, setVideoSettings:dict] };
-        Ok(())
-    }
+pub fn session_begin_configuration(session: &AVCaptureSession) {
+    unsafe { session.beginConfiguration() }
 }
 
-impl Default for AVCaptureVideoDataOutput {
-    fn default() -> Self {
-        let cls = objc2::class!(AVCaptureVideoDataOutput);
-        let inner: *mut AnyObject = unsafe { objc2::msg_send![cls, new] };
-
-        AVCaptureVideoDataOutput { inner }
-    }
+pub fn session_commit_configuration(session: &AVCaptureSession) {
+    unsafe { session.commitConfiguration() }
 }
 
-impl AVCaptureSession {
-    pub fn new() -> Self {
-        AVCaptureSession::default()
-    }
-
-    pub fn begin_configuration(&self) {
-        unsafe { objc2::msg_send![self.inner, beginConfiguration] }
-    }
-
-    pub fn commit_configuration(&self) {
-        unsafe { objc2::msg_send![self.inner, commitConfiguration] }
-    }
-
-    pub fn can_add_input(&self, input: &AVCaptureDeviceInput) -> bool {
-        let result: bool = unsafe { objc2::msg_send![self.inner, canAddInput:input.inner] };
-        result
-    }
-
-    pub fn add_input(&self, input: &AVCaptureDeviceInput) -> Result<(), NokhwaError> {
-        if self.can_add_input(input) {
-            let _: () = unsafe { objc2::msg_send![self.inner, addInput:input.inner] };
-            return Ok(());
-        }
-        Err(NokhwaError::SetPropertyError {
-            property: "AVCaptureDeviceInput".to_string(),
-            value: "add new input".to_string(),
-            error: "Rejected".to_string(),
-        })
-    }
-
-    pub fn remove_input(&self, input: &AVCaptureDeviceInput) {
-        unsafe { objc2::msg_send![self.inner, removeInput:input.inner] }
-    }
-
-    pub fn can_add_output(&self, output: &AVCaptureVideoDataOutput) -> bool {
-        let result: bool = unsafe { objc2::msg_send![self.inner, canAddOutput:output.inner] };
-        result
-    }
-
-    pub fn add_output(&self, output: &AVCaptureVideoDataOutput) -> Result<(), NokhwaError> {
-        if self.can_add_output(output) {
-            let _: () = unsafe { objc2::msg_send![self.inner, addOutput:output.inner] };
-            return Ok(());
-        }
-        Err(NokhwaError::SetPropertyError {
-            property: "AVCaptureVideoDataOutput".to_string(),
-            value: "add new output".to_string(),
-            error: "Rejected".to_string(),
-        })
-    }
-
-    pub fn remove_output(&self, output: &AVCaptureVideoDataOutput) {
-        unsafe { objc2::msg_send![self.inner, removeOutput:output.inner] }
-    }
-
-    pub fn is_running(&self) -> bool {
-        let running: bool = unsafe { objc2::msg_send![self.inner, isRunning] };
-        running
-    }
-
-    pub fn start(&self) -> Result<(), NokhwaError> {
-        let inner = self.inner;
-        let start_stream_fn = std::panic::AssertUnwindSafe(move || {
-            let _: () = unsafe { objc2::msg_send![inner, startRunning] };
-        });
-
-        if std::panic::catch_unwind(start_stream_fn).is_err() {
-            return Err(NokhwaError::OpenStreamError(
-                "Cannot run AVCaptureSession".to_string(),
-            ));
-        }
-        Ok(())
-    }
-
-    pub fn stop(&self) {
-        unsafe { objc2::msg_send![self.inner, stopRunning] }
-    }
-
-    pub fn is_interrupted(&self) -> bool {
-        let interrupted: bool = unsafe { objc2::msg_send![self.inner, isInterrupted] };
-        interrupted
-    }
+pub fn session_can_add_input(session: &AVCaptureSession, input: &AVCaptureDeviceInput) -> bool {
+    let input_ref: &AVCaptureInput = input;
+    unsafe { session.canAddInput(input_ref) }
 }
 
-impl Default for AVCaptureSession {
-    fn default() -> Self {
-        let cls = objc2::class!(AVCaptureSession);
-        let session: *mut AnyObject = {
-            let alloc: *mut AnyObject = unsafe { objc2::msg_send![cls, alloc] };
-            unsafe { objc2::msg_send![alloc, init] }
-        };
-        AVCaptureSession { inner: session }
+pub fn session_add_input(
+    session: &AVCaptureSession,
+    input: &AVCaptureDeviceInput,
+) -> Result<(), NokhwaError> {
+    let input_ref: &AVCaptureInput = input;
+    if unsafe { session.canAddInput(input_ref) } {
+        unsafe { session.addInput(input_ref) };
+        return Ok(());
     }
+    Err(NokhwaError::SetPropertyError {
+        property: "AVCaptureDeviceInput".to_string(),
+        value: "add new input".to_string(),
+        error: "Rejected".to_string(),
+    })
+}
+
+pub fn session_remove_input(session: &AVCaptureSession, input: &AVCaptureDeviceInput) {
+    let input_ref: &AVCaptureInput = input;
+    unsafe { session.removeInput(input_ref) }
+}
+
+pub fn session_can_add_output(
+    session: &AVCaptureSession,
+    output: &AVCaptureVideoDataOutput,
+) -> bool {
+    let output_ref: &AVCaptureOutput = output;
+    unsafe { session.canAddOutput(output_ref) }
+}
+
+pub fn session_add_output(
+    session: &AVCaptureSession,
+    output: &AVCaptureVideoDataOutput,
+) -> Result<(), NokhwaError> {
+    let output_ref: &AVCaptureOutput = output;
+    if unsafe { session.canAddOutput(output_ref) } {
+        unsafe { session.addOutput(output_ref) };
+        return Ok(());
+    }
+    Err(NokhwaError::SetPropertyError {
+        property: "AVCaptureVideoDataOutput".to_string(),
+        value: "add new output".to_string(),
+        error: "Rejected".to_string(),
+    })
+}
+
+pub fn session_remove_output(session: &AVCaptureSession, output: &AVCaptureVideoDataOutput) {
+    let output_ref: &AVCaptureOutput = output;
+    unsafe { session.removeOutput(output_ref) }
+}
+
+pub fn session_is_running(session: &AVCaptureSession) -> bool {
+    unsafe { session.isRunning() }
+}
+
+pub fn session_start(session: &AVCaptureSession) -> Result<(), NokhwaError> {
+    let start_stream_fn = std::panic::AssertUnwindSafe(|| {
+        unsafe { session.startRunning() };
+    });
+
+    if std::panic::catch_unwind(start_stream_fn).is_err() {
+        return Err(NokhwaError::OpenStreamError(
+            "Cannot run AVCaptureSession".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+pub fn session_stop(session: &AVCaptureSession) {
+    unsafe { session.stopRunning() }
+}
+
+pub fn session_is_interrupted(session: &AVCaptureSession) -> bool {
+    unsafe { session.isInterrupted() }
 }
