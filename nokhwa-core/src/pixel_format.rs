@@ -48,9 +48,16 @@ pub trait FormatDecoder: Clone + Sized + Send + Sync {
 
 /// A Zero-Size-Type that contains the definition to convert a given image stream to an RGB888 in the [`Buffer`](crate::buffer::Buffer)'s [`.decode_image()`](crate::buffer::Buffer::decode_image)
 ///
-/// ```ignore
-/// use image::{ImageBuffer, Rgb};
-/// let image: ImageBuffer<Rgb<u8>, Vec<u8>> = buffer.to_image::<RgbFormat>();
+/// ```
+/// use nokhwa_core::buffer::Buffer;
+/// use nokhwa_core::pixel_format::RgbFormat;
+/// use nokhwa_core::types::{FrameFormat, Resolution};
+///
+/// // Create a 2x2 RAWRGB buffer (2*2*3 = 12 bytes)
+/// let raw = vec![255u8; 12];
+/// let buffer = Buffer::new(Resolution::new(2, 2), &raw, FrameFormat::RAWRGB);
+/// let image = buffer.decode_image::<RgbFormat>().unwrap();
+/// assert_eq!(image.width(), 2);
 /// ```
 #[derive(Copy, Clone, Debug, Default, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub struct RgbFormat;
@@ -129,9 +136,16 @@ impl FormatDecoder for RgbFormat {
 
 /// A Zero-Size-Type that contains the definition to convert a given image stream to an RGBA8888 in the [`Buffer`](crate::buffer::Buffer)'s [`.decode_image()`](crate::buffer::Buffer::decode_image)
 ///
-/// ```ignore
-/// use image::{ImageBuffer, Rgba};
-/// let image: ImageBuffer<Rgba<u8>, Vec<u8>> = buffer.to_image::<RgbAFormat>();
+/// ```
+/// use nokhwa_core::buffer::Buffer;
+/// use nokhwa_core::pixel_format::RgbAFormat;
+/// use nokhwa_core::types::{FrameFormat, Resolution};
+///
+/// // Create a 2x2 RAWRGB buffer (2*2*3 = 12 bytes), decode to RGBA
+/// let raw = vec![255u8; 12];
+/// let buffer = Buffer::new(Resolution::new(2, 2), &raw, FrameFormat::RAWRGB);
+/// let image = buffer.decode_image::<RgbAFormat>().unwrap();
+/// assert_eq!(image.width(), 2);
 /// ```
 #[derive(Copy, Clone, Debug, Default, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub struct RgbAFormat;
@@ -225,9 +239,16 @@ impl FormatDecoder for RgbAFormat {
 
 /// A Zero-Size-Type that contains the definition to convert a given image stream to an Luma8(Grayscale 8-bit) in the [`Buffer`](crate::buffer::Buffer)'s [`.decode_image()`](crate::buffer::Buffer::decode_image)
 ///
-/// ```ignore
-/// use image::{ImageBuffer, Luma};
-/// let image: ImageBuffer<Luma<u8>, Vec<u8>> = buffer.to_image::<LumaFormat>();
+/// ```
+/// use nokhwa_core::buffer::Buffer;
+/// use nokhwa_core::pixel_format::LumaFormat;
+/// use nokhwa_core::types::{FrameFormat, Resolution};
+///
+/// // Create a 2x2 grayscale buffer (2*2 = 4 bytes)
+/// let raw = vec![128u8; 4];
+/// let buffer = Buffer::new(Resolution::new(2, 2), &raw, FrameFormat::GRAY);
+/// let image = buffer.decode_image::<LumaFormat>().unwrap();
+/// assert_eq!(image.width(), 2);
 /// ```
 #[derive(Copy, Clone, Debug, Default, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub struct LumaFormat;
@@ -329,9 +350,16 @@ impl FormatDecoder for LumaFormat {
 
 /// A Zero-Size-Type that contains the definition to convert a given image stream to an LumaA8(Grayscale 8-bit with 8-bit alpha) in the [`Buffer`](crate::buffer::Buffer)'s [`.decode_image()`](crate::buffer::Buffer::decode_image)
 ///
-/// ```ignore
-/// use image::{ImageBuffer, LumaA};
-/// let image: ImageBuffer<LumaA<u8>, Vec<u8>> = buffer.to_image::<LumaAFormat>();
+/// ```
+/// use nokhwa_core::buffer::Buffer;
+/// use nokhwa_core::pixel_format::LumaAFormat;
+/// use nokhwa_core::types::{FrameFormat, Resolution};
+///
+/// // Create a 2x2 grayscale buffer (2*2 = 4 bytes), decode to LumaA
+/// let raw = vec![128u8; 4];
+/// let buffer = Buffer::new(Resolution::new(2, 2), &raw, FrameFormat::GRAY);
+/// let image = buffer.decode_image::<LumaAFormat>().unwrap();
+/// assert_eq!(image.width(), 2);
 /// ```
 #[derive(Copy, Clone, Debug, Default, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub struct LumaAFormat;
