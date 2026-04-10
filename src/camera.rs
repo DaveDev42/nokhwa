@@ -409,10 +409,11 @@ impl Camera {
             /// # Safety
             /// The caller must ensure exclusive access to the pointee and that it is valid.
             unsafe fn frame_timeout(&self, duration: Duration) -> Result<Buffer, NokhwaError> {
-                (&mut *self.0).frame_timeout(duration)
+                unsafe { (&mut *self.0).frame_timeout(duration) }
             }
         }
 
+        let start = std::time::Instant::now();
         let (tx, rx) = std::sync::mpsc::channel();
         let ptr = SendPtr(std::ptr::from_mut::<dyn CaptureBackendTrait>(
             &mut *self.device,
@@ -421,7 +422,8 @@ impl Camera {
             // SAFETY: We have exclusive access; see invariant above.
             let _ = tx.send(unsafe { ptr.frame_timeout(duration) });
         });
-        match rx.recv_timeout(duration) {
+        let remaining = duration.saturating_sub(start.elapsed());
+        match rx.recv_timeout(remaining) {
             Ok(result) => {
                 let _ = handle.join();
                 result
