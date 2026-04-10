@@ -22,6 +22,8 @@ pub type CMSampleBufferRef = *mut std::ffi::c_void;
 pub type CMBlockBufferRef = *mut std::ffi::c_void;
 pub type CMFormatDescriptionRef = *mut std::ffi::c_void;
 
+/// Local CMTime definition for C FFI function signatures.
+/// Layout-compatible with `objc2_core_media::CMTime` (both `#[repr(C)]`).
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct CMTime {
@@ -30,6 +32,11 @@ pub struct CMTime {
     pub flags: u32,
     pub epoch: i64,
 }
+
+const _: () = assert!(
+    std::mem::size_of::<CMTime>() == 24,
+    "CMTime size mismatch — must match Apple's CMTime layout (24 bytes)"
+);
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]

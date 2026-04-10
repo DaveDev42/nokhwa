@@ -19,7 +19,7 @@ members = [
 
 [workspace.package]
 version    = "0.11.0"
-authors    = [ "l1npengtul <l1npengtul@protonmail.com>" ]
+authors    = [ "l1npengtul <l1npengtul@protonmail.com>", "Dave Choi <dave.dev@icloud.com>" ]
 edition    = "2021"
 license    = "Apache-2.0"
 repository = "https://github.com/DaveDev42/nokhwa"

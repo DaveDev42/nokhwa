@@ -137,7 +137,7 @@ impl CallbackCamera {
     /// This will reset the current stream if used while stream is opened.
     /// # Errors
     /// If you started the stream and the camera rejects the new camera format, this will return an error.
-    #[deprecated(since = "0.10.0", note = "please use `set_camera_requset` instead.")]
+    #[deprecated(since = "0.10.0", note = "please use `set_camera_request` instead.")]
     pub fn set_camera_format(&mut self, new_fmt: CameraFormat) -> Result<(), NokhwaError> {
         *self
             .last_frame_captured
@@ -146,7 +146,7 @@ impl CallbackCamera {
             Buffer::new(new_fmt.resolution(), &[], self.camera_format()?.format());
         let formats = vec![new_fmt.format()];
         let request = RequestedFormat::with_formats(RequestedFormatType::Exact(new_fmt), &formats);
-        let set_fmt = self.camera.lock().set_camera_requset(request)?;
+        let set_fmt = self.camera.lock().set_camera_request(request)?;
         if new_fmt != set_fmt {
             return Err(NokhwaError::SetPropertyError {
                 property: "CameraFormat".to_string(),
@@ -165,11 +165,11 @@ impl CallbackCamera {
     /// This will return the new [`CameraFormat`]
     /// # Errors
     /// If nothing fits the requested criteria, this will return an error.
-    pub fn set_camera_requset(
+    pub fn set_camera_request(
         &mut self,
         request: RequestedFormat,
     ) -> Result<CameraFormat, NokhwaError> {
-        self.camera.lock().set_camera_requset(request)
+        self.camera.lock().set_camera_request(request)
     }
     /// A hashmap of [`Resolution`]s mapped to framerates
     /// # Errors
@@ -388,23 +388,26 @@ impl CallbackCamera {
         Ok(self.camera.lock().is_stream_open())
     }
 
-    /// Will drop the stream.
+    /// Stops the stream and the background capture thread.
+    /// The camera can be reopened after stopping.
     /// # Errors
     /// Please check the `Quirks` section of each backend.
     pub fn stop_stream(&mut self) -> Result<(), NokhwaError> {
-        self.camera.lock().stop_stream()
-    }
-}
-
-impl Drop for CallbackCamera {
-    fn drop(&mut self) {
         self.die_bool.store(true, Ordering::Release);
-        let _ = self.stop_stream();
+        let result = self.camera.lock().stop_stream();
         if let Ok(mut handle) = self.handle.lock() {
             if let Some(h) = handle.take() {
                 let _ = h.join();
             }
         }
+        self.die_bool.store(false, Ordering::Release);
+        result
+    }
+}
+
+impl Drop for CallbackCamera {
+    fn drop(&mut self) {
+        let _ = self.stop_stream();
     }
 }
 
