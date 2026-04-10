@@ -24,6 +24,7 @@ use nokhwa_core::{
     },
 };
 use std::thread::JoinHandle;
+use std::time::Duration;
 use std::{
     collections::HashMap,
     sync::{
@@ -339,6 +340,23 @@ impl CallbackCamera {
     /// This will error if the camera fails to capture a frame.
     pub fn poll_frame(&mut self) -> Result<Buffer, NokhwaError> {
         let frame = self.camera.lock().frame()?;
+        *self
+            .last_frame_captured
+            .lock()
+            .map_err(|why| NokhwaError::GeneralError(why.to_string()))? = frame.clone();
+        Ok(frame)
+    }
+
+    /// Polls the camera for a frame with a timeout, analogous to
+    /// [`Camera::frame_timeout`](crate::Camera::frame_timeout).
+    ///
+    /// **Note:** The internal camera mutex is held for the entire duration of the call,
+    /// which may block the background capture loop and other camera operations.
+    ///
+    /// # Errors
+    /// This will error if the camera fails to capture a frame or the timeout elapses.
+    pub fn poll_frame_timeout(&mut self, duration: Duration) -> Result<Buffer, NokhwaError> {
+        let frame = self.camera.lock().frame_timeout(duration)?;
         *self
             .last_frame_captured
             .lock()

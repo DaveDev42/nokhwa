@@ -25,7 +25,7 @@ use nokhwa_core::{
         FrameFormat, KnownCameraControl, RequestedFormat, Resolution,
     },
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, time::Duration};
 #[cfg(feature = "output-wgpu")]
 use wgpu::{Device as WgpuDevice, Queue as WgpuQueue, Texture as WgpuTexture};
 
@@ -347,6 +347,67 @@ impl Camera {
     /// this will error.
     pub fn frame(&mut self) -> Result<Buffer, NokhwaError> {
         self.device.frame()
+    }
+
+    /// Will get a frame from the camera as a [`Buffer`], but with a timeout. If the frame is not
+    /// received within the given `duration`, this will return a [`TimeoutError`](NokhwaError::TimeoutError).
+    ///
+    /// This spawns the backend's [`frame_timeout()`](CaptureBackendTrait::frame_timeout) on a
+    /// background thread and waits with a timeout. If the backend overrides `frame_timeout`
+    /// with a platform-specific implementation, that implementation is used.
+    ///
+    /// **Note:** If the backend's frame capture blocks indefinitely, this method will also
+    /// block beyond the requested `duration` while waiting for the background thread to join.
+    /// The timeout is best-effort: it detects when the deadline has passed, but cannot
+    /// cancel an in-progress backend call. This method spawns a new thread per call and is
+    /// not suited for high-frequency capture loops. A zero `duration` will return
+    /// [`TimeoutError`](NokhwaError::TimeoutError) immediately.
+    ///
+    /// # Errors
+    /// If the backend fails to get the frame within the timeout, or if the underlying
+    /// [`frame()`](CaptureBackendTrait::frame()) call fails, this will error.
+    pub fn frame_timeout(&mut self, duration: Duration) -> Result<Buffer, NokhwaError> {
+        // SAFETY invariant: `SendPtr` wraps a raw pointer to `self.device`. This is sound
+        // because we always call `handle.join()` before returning, which guarantees:
+        //   1. The spawned thread has finished using the pointer before we return.
+        //   2. No other code can access `self` while this method holds `&mut self`.
+        //   3. The pointee (`self.device`) outlives the thread's access.
+        // Do NOT add early returns after the thread is spawned.
+        struct SendPtr(*mut dyn CaptureBackendTrait);
+        unsafe impl Send for SendPtr {}
+        impl SendPtr {
+            /// # Safety
+            /// The caller must ensure exclusive access to the pointee and that it is valid.
+            unsafe fn frame_timeout(&self, duration: Duration) -> Result<Buffer, NokhwaError> {
+                unsafe { (&mut *self.0).frame_timeout(duration) }
+            }
+        }
+
+        if duration.is_zero() {
+            return Err(NokhwaError::TimeoutError(duration));
+        }
+
+        let start = std::time::Instant::now();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let ptr = SendPtr(std::ptr::from_mut::<dyn CaptureBackendTrait>(
+            &mut *self.device,
+        ));
+        let handle = std::thread::spawn(move || {
+            // SAFETY: We have exclusive access; see invariant above.
+            let _ = tx.send(unsafe { ptr.frame_timeout(duration) });
+        });
+        let remaining = duration.saturating_sub(start.elapsed());
+        let result = match rx.recv_timeout(remaining) {
+            Ok(result) => result,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                Err(NokhwaError::TimeoutError(duration))
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(
+                NokhwaError::ReadFrameError("frame capture thread panicked".to_string()),
+            ),
+        };
+        let _ = handle.join();
+        result
     }
 
     /// Will get a frame from the camera **without** any processing applied, meaning you will usually get a frame you need to decode yourself.

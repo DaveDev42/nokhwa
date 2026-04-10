@@ -22,7 +22,7 @@ use crate::{
         KnownCameraControl, Resolution,
     },
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, time::Duration};
 #[cfg(feature = "wgpu-types")]
 use wgpu::{
     Device as WgpuDevice, Extent3d, Queue as WgpuQueue, TexelCopyBufferLayout,
@@ -159,6 +159,23 @@ pub trait CaptureBackendTrait {
     /// If the backend fails to get the frame (e.g. already taken, busy, doesn't exist anymore), the decoding fails (e.g. MJPEG -> u8), or [`open_stream()`](CaptureBackendTrait::open_stream()) has not been called yet,
     /// this will error.
     fn frame(&mut self) -> Result<Buffer, NokhwaError>;
+
+    /// Will get a frame from the camera as a [`Buffer`], but with a timeout. If the frame is not
+    /// received within the given `duration`, this will return a [`TimeoutError`](crate::error::NokhwaError::TimeoutError).
+    ///
+    /// The default implementation simply delegates to [`frame()`](CaptureBackendTrait::frame())
+    /// without enforcing the timeout. The [`Camera`] wrapper provides a threaded timeout
+    /// mechanism. Backends should override this for more efficient platform-specific timeout
+    /// support.
+    ///
+    /// # Errors
+    /// If the backend fails to get the frame within the timeout, or if the underlying
+    /// [`frame()`](CaptureBackendTrait::frame()) call fails, this will error.
+    fn frame_timeout(&mut self, _duration: Duration) -> Result<Buffer, NokhwaError> {
+        // NOTE: timeout is intentionally ignored in the default impl; the Camera
+        // wrapper provides threaded timeout enforcement.
+        self.frame()
+    }
 
     /// Will get a frame from the camera **without** any processing applied, meaning you will usually get a frame you need to decode yourself.
     /// # Errors

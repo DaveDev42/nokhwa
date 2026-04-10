@@ -15,6 +15,7 @@
  */
 
 use crate::types::{ApiBackend, FrameFormat};
+use std::time::Duration;
 use thiserror::Error;
 
 /// All errors in `nokhwa`.
@@ -57,4 +58,6 @@ pub enum NokhwaError {
     UnsupportedOperationError(ApiBackend),
     #[error("This operation is not implemented yet: {0}")]
     NotImplementedError(String),
+    #[error("Frame capture timed out after {0:?}")]
+    TimeoutError(Duration),
 }
