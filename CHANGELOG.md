@@ -19,6 +19,10 @@
   - Windows: `IMFSample::GetSampleTime` → wall clock conversion
 
 ## Bug Fixes
+- Fixed NV12 pixel formats (420 biplanar YCbCr) incorrectly mapped to `FrameFormat::YUYV` instead of `FrameFormat::NV12` in macOS bindings
+- Fixed `lockForConfiguration:` error pointer passed by value (NSError** must be pointer-to-pointer) — ObjC runtime could never write back errors
+- Fixed NV12 output format requesting 10-bit variant instead of 8-bit in `AVCaptureVideoDataOutput::set_frame_format`
+- Fixed `AVCaptureVideoCallback` leaking ObjC delegate and GCD dispatch queue (added `Drop` impl)
 - Fixed `wanted_decoder` filter inconsistently applied in `HighestResolution`/`HighestFrameRate` format selection
 - Fixed several macOS AVFoundation bugs discovered during objc2 migration:
   - `maxWhiteBalanceGain` read as wrong type (UB)
@@ -36,6 +40,7 @@
 - Clippy pedantic: 30 errors → 0
 
 ## Cleanup
+- Replaced `core-media-sys` / `core-video-sys` crate dependencies with direct FFI declarations in `ffi.rs`, eliminating legacy `objc 0.2` and `metal 0.18` transitive dependencies
 - Removed unused dependencies: `usb_enumeration`, `regex`, `cocoa-foundation`, `core-foundation`, `once_cell`
 - Removed dead code: empty `VirtualBackendTrait`, commented-out module declarations, obsolete code blocks
 - Removed obsolete `make-npm.sh` (JS bindings removed in 0.10.0)

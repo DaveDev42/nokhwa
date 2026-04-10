@@ -16,8 +16,6 @@ version = "0.1"
 path = "../nokhwa-core"
 
 [target.'cfg(any(target_os="macos",target_os="ios"))'.dependencies]
-core-media-sys = { version = "0.1", default-features = false }
-core-video-sys = { version = "0.1", default-features = false }
 objc2 = { version = "0.6", default-features = false, features = ["std"] }
 block2 = { version = "0.6", default-features = false, features = ["std"] }
 flume = { version = "0.11", default-features = false }

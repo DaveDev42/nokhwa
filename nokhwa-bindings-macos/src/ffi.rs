@@ -1,11 +1,62 @@
-// all of this is stolen from bindgen
-// steal it idc
-use core_media_sys::{
-    CMBlockBufferRef, CMFormatDescriptionRef, CMSampleBufferRef, CMTime, CMVideoDimensions,
-    FourCharCode,
-};
+// Local FFI declarations for CoreMedia and CoreVideo types.
+// These replace the `core-media-sys` and `core-video-sys` crate dependencies
+// to eliminate their legacy transitive deps (objc 0.2, metal 0.18).
+
 use objc2::encode::{Encode, Encoding};
 use objc2::runtime::AnyObject;
+
+// --- CoreMedia types ---
+
+pub type FourCharCode = u32;
+
+pub type CMSampleBufferRef = *mut std::ffi::c_void;
+pub type CMBlockBufferRef = *mut std::ffi::c_void;
+pub type CMFormatDescriptionRef = *mut std::ffi::c_void;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct CMTime {
+    pub value: i64,
+    pub timescale: i32,
+    pub flags: u32,
+    pub epoch: i64,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct CMVideoDimensions {
+    pub width: i32,
+    pub height: i32,
+}
+
+// CoreMedia pixel format / codec constants (FourCharCode values)
+const fn fourcc(bytes: &[u8; 4]) -> FourCharCode {
+    ((bytes[0] as u32) << 24)
+        | ((bytes[1] as u32) << 16)
+        | ((bytes[2] as u32) << 8)
+        | (bytes[3] as u32)
+}
+
+#[allow(non_upper_case_globals)]
+pub const kCMPixelFormat_24RGB: FourCharCode = 24;
+#[allow(non_upper_case_globals)]
+pub const kCMPixelFormat_422YpCbCr8_yuvs: FourCharCode = fourcc(b"yuvs");
+#[allow(non_upper_case_globals)]
+pub const kCMPixelFormat_8IndexedGray_WhiteIsZero: FourCharCode = 0x0000_0028;
+#[allow(non_upper_case_globals)]
+pub const kCMVideoCodecType_422YpCbCr8: FourCharCode = fourcc(b"2vuy");
+#[allow(non_upper_case_globals)]
+pub const kCMVideoCodecType_JPEG: FourCharCode = fourcc(b"jpeg");
+#[allow(non_upper_case_globals)]
+pub const kCMVideoCodecType_JPEG_OpenDML: FourCharCode = fourcc(b"dmb1");
+
+// CoreVideo pixel format constants
+#[allow(non_upper_case_globals)]
+pub const kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange: FourCharCode = fourcc(b"420v");
+#[allow(non_upper_case_globals)]
+pub const kCVPixelFormatType_420YpCbCr8BiPlanarFullRange: FourCharCode = fourcc(b"420f");
+#[allow(non_upper_case_globals)]
+pub const kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange: FourCharCode = fourcc(b"x420");
 
 // CGFloat is f64 on 64-bit Apple platforms (all modern macOS/iOS)
 pub type CGFloat = std::ffi::c_double;
@@ -55,15 +106,29 @@ extern "C" {
     pub fn CMSampleBufferGetPresentationTimeStamp(sbuf: CMSampleBufferRef) -> CMTime;
 
     pub fn CMSampleBufferGetImageBuffer(sbuf: CMSampleBufferRef) -> CVImageBufferRef;
+
+    pub fn CMFormatDescriptionGetMediaSubType(desc: CMFormatDescriptionRef) -> FourCharCode;
+}
+
+/// Opaque wrapper for GCD dispatch objects (not ObjC NSObjects).
+#[repr(transparent)]
+#[derive(Clone)]
+pub struct DispatchQueue(pub Id);
+
+// SAFETY: DispatchQueue is repr(transparent) over a raw pointer.
+unsafe impl Encode for DispatchQueue {
+    const ENCODING: Encoding = Encoding::Object;
 }
 
 // dispatch_queue_create / dispatch_release are libdispatch (GCD) symbols,
 // part of libSystem which is always linked on Apple platforms.
-#[allow(non_snake_case)]
 extern "C" {
-    pub fn dispatch_queue_create(label: *const std::os::raw::c_char, attr: NSObject) -> NSObject;
+    pub fn dispatch_queue_create(
+        label: *const std::os::raw::c_char,
+        attr: *const std::ffi::c_void,
+    ) -> DispatchQueue;
 
-    pub fn dispatch_release(object: NSObject);
+    pub fn dispatch_release(object: DispatchQueue);
 }
 
 #[allow(non_snake_case)]
@@ -84,6 +149,9 @@ extern "C" {
     pub fn CVPixelBufferGetBaseAddress(pixelBuffer: CVPixelBufferRef) -> *mut std::os::raw::c_void;
 
     pub fn CVPixelBufferGetPixelFormatType(pixelBuffer: CVPixelBufferRef) -> OSType;
+
+    /// CFStringRef in Apple headers; cast to `*mut AnyObject` at usage site.
+    pub static kCVPixelBufferPixelFormatTypeKey: *const std::ffi::c_void;
 }
 
 #[repr(C)]
@@ -121,8 +189,7 @@ unsafe impl Encode for AVCaptureWhiteBalanceGains {
     );
 }
 
-/// A local newtype wrapper around `CMTime` to implement `Encode`.
-/// This is needed because both `CMTime` and `Encode` are from external crates.
+/// Newtype wrapper around `CMTime` that implements `Encode` for ObjC messaging.
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone)]
 pub struct EncodableCMTime(pub CMTime);
