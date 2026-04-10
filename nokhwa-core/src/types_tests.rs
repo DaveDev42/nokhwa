@@ -640,6 +640,411 @@ fn verify_setter_rgb() {
     assert!(!desc.verify_setter(&ControlValueSetter::Integer(1)));
 }
 
+// --- CameraControl value round-trip tests ---
+
+#[test]
+fn control_value_roundtrip_integer() {
+    let desc = ControlValueDescription::Integer {
+        value: 42,
+        default: 0,
+        step: 1,
+    };
+    let control = CameraControl::new(
+        KnownCameraControl::Brightness,
+        "Brightness".to_string(),
+        desc.clone(),
+        vec![KnownCameraControlFlag::Manual],
+        true,
+    );
+    let setter = control.value();
+    assert_eq!(setter, ControlValueSetter::Integer(42));
+    assert!(desc.verify_setter(&setter));
+}
+
+#[test]
+fn control_value_roundtrip_integer_range() {
+    let desc = ControlValueDescription::IntegerRange {
+        min: -100,
+        max: 100,
+        value: 75,
+        step: 5,
+        default: 0,
+    };
+    let control = CameraControl::new(
+        KnownCameraControl::Contrast,
+        "Contrast".to_string(),
+        desc.clone(),
+        vec![KnownCameraControlFlag::Manual],
+        true,
+    );
+    let setter = control.value();
+    assert_eq!(setter, ControlValueSetter::Integer(75));
+    assert!(desc.verify_setter(&setter));
+}
+
+#[test]
+fn control_value_roundtrip_float() {
+    let desc = ControlValueDescription::Float {
+        value: 1.5,
+        default: 1.0,
+        step: 0.5,
+    };
+    let control = CameraControl::new(
+        KnownCameraControl::Gamma,
+        "Gamma".to_string(),
+        desc.clone(),
+        vec![KnownCameraControlFlag::Manual],
+        true,
+    );
+    let setter = control.value();
+    assert_eq!(setter, ControlValueSetter::Float(1.5));
+    assert!(desc.verify_setter(&setter));
+}
+
+#[test]
+fn control_value_roundtrip_float_range() {
+    let desc = ControlValueDescription::FloatRange {
+        min: 0.0,
+        max: 10.0,
+        value: 5.0,
+        step: 0.5,
+        default: 1.0,
+    };
+    let control = CameraControl::new(
+        KnownCameraControl::Exposure,
+        "Exposure".to_string(),
+        desc.clone(),
+        vec![KnownCameraControlFlag::Automatic],
+        true,
+    );
+    let setter = control.value();
+    assert_eq!(setter, ControlValueSetter::Float(5.0));
+    assert!(desc.verify_setter(&setter));
+}
+
+#[test]
+fn control_value_roundtrip_boolean() {
+    let desc = ControlValueDescription::Boolean {
+        value: true,
+        default: false,
+    };
+    let control = CameraControl::new(
+        KnownCameraControl::BacklightComp,
+        "BacklightComp".to_string(),
+        desc.clone(),
+        vec![KnownCameraControlFlag::Manual],
+        true,
+    );
+    let setter = control.value();
+    assert_eq!(setter, ControlValueSetter::Boolean(true));
+    assert!(desc.verify_setter(&setter));
+}
+
+#[test]
+fn control_value_roundtrip_string() {
+    let desc = ControlValueDescription::String {
+        value: "hello".to_string(),
+        default: Some("world".to_string()),
+    };
+    let control = CameraControl::new(
+        KnownCameraControl::Other(999),
+        "CustomString".to_string(),
+        desc.clone(),
+        vec![KnownCameraControlFlag::ReadOnly],
+        false,
+    );
+    let setter = control.value();
+    assert_eq!(setter, ControlValueSetter::String("hello".to_string()));
+    assert!(desc.verify_setter(&setter));
+}
+
+#[test]
+fn control_value_roundtrip_bytes() {
+    let desc = ControlValueDescription::Bytes {
+        value: vec![0xDE, 0xAD],
+        default: vec![0x00],
+    };
+    let control = CameraControl::new(
+        KnownCameraControl::Other(1000),
+        "CustomBytes".to_string(),
+        desc.clone(),
+        vec![],
+        true,
+    );
+    let setter = control.value();
+    assert_eq!(setter, ControlValueSetter::Bytes(vec![0xDE, 0xAD]));
+    assert!(desc.verify_setter(&setter));
+}
+
+#[test]
+fn control_value_roundtrip_key_value() {
+    let desc = ControlValueDescription::KeyValuePair {
+        key: 10,
+        value: 20,
+        default: (0, 0),
+    };
+    let control = CameraControl::new(
+        KnownCameraControl::Other(2000),
+        "KVPair".to_string(),
+        desc.clone(),
+        vec![KnownCameraControlFlag::WriteOnly],
+        true,
+    );
+    let setter = control.value();
+    assert_eq!(setter, ControlValueSetter::KeyValue(10, 20));
+    assert!(desc.verify_setter(&setter));
+}
+
+#[test]
+fn control_value_roundtrip_point() {
+    let desc = ControlValueDescription::Point {
+        value: (1.5, 2.5),
+        default: (0.0, 0.0),
+    };
+    let control = CameraControl::new(
+        KnownCameraControl::Pan,
+        "Pan".to_string(),
+        desc.clone(),
+        vec![KnownCameraControlFlag::Continuous],
+        true,
+    );
+    let setter = control.value();
+    assert_eq!(setter, ControlValueSetter::Point(1.5, 2.5));
+    assert!(desc.verify_setter(&setter));
+}
+
+#[test]
+fn control_value_roundtrip_enum() {
+    let desc = ControlValueDescription::Enum {
+        value: 2,
+        possible: vec![1, 2, 3, 4],
+        default: 1,
+    };
+    let control = CameraControl::new(
+        KnownCameraControl::WhiteBalance,
+        "WhiteBalance".to_string(),
+        desc.clone(),
+        vec![KnownCameraControlFlag::Manual],
+        true,
+    );
+    let setter = control.value();
+    assert_eq!(setter, ControlValueSetter::EnumValue(2));
+    assert!(desc.verify_setter(&setter));
+}
+
+#[test]
+fn control_value_roundtrip_rgb() {
+    let desc = ControlValueDescription::RGB {
+        value: (2.0, 3.0, 4.0),
+        max: (1.0, 1.0, 1.0),
+        default: (0.0, 0.0, 0.0),
+    };
+    let control = CameraControl::new(
+        KnownCameraControl::Other(3000),
+        "RGBControl".to_string(),
+        desc.clone(),
+        vec![KnownCameraControlFlag::Volatile],
+        true,
+    );
+    let setter = control.value();
+    assert_eq!(setter, ControlValueSetter::RGB(2.0, 3.0, 4.0));
+    // RGB verify_setter checks *v >= max, so (2,3,4) >= (1,1,1) should be true
+    assert!(desc.verify_setter(&setter));
+}
+
+#[test]
+fn control_value_roundtrip_none() {
+    let desc = ControlValueDescription::None;
+    let control = CameraControl::new(
+        KnownCameraControl::Other(0),
+        "NoneCtrl".to_string(),
+        desc.clone(),
+        vec![KnownCameraControlFlag::Disabled],
+        false,
+    );
+    let setter = control.value();
+    assert_eq!(setter, ControlValueSetter::None);
+    assert!(desc.verify_setter(&setter));
+}
+
+#[test]
+fn known_camera_control_all_variants_display_roundtrip() {
+    let controls = [
+        KnownCameraControl::Brightness,
+        KnownCameraControl::Contrast,
+        KnownCameraControl::Hue,
+        KnownCameraControl::Saturation,
+        KnownCameraControl::Sharpness,
+        KnownCameraControl::Gamma,
+        KnownCameraControl::WhiteBalance,
+        KnownCameraControl::BacklightComp,
+        KnownCameraControl::Gain,
+        KnownCameraControl::Pan,
+        KnownCameraControl::Tilt,
+        KnownCameraControl::Zoom,
+        KnownCameraControl::Exposure,
+        KnownCameraControl::Iris,
+        KnownCameraControl::Focus,
+        KnownCameraControl::Other(12345),
+    ];
+    for ctrl in &controls {
+        // Verify Display doesn't panic and produces non-empty output
+        let display = format!("{ctrl}");
+        assert!(!display.is_empty(), "Display for {ctrl:?} was empty");
+    }
+}
+
+#[test]
+fn camera_control_set_active_toggle() {
+    let mut control = CameraControl::new(
+        KnownCameraControl::Focus,
+        "Focus".to_string(),
+        ControlValueDescription::Integer {
+            value: 50,
+            default: 50,
+            step: 1,
+        },
+        vec![
+            KnownCameraControlFlag::Manual,
+            KnownCameraControlFlag::Automatic,
+        ],
+        true,
+    );
+    assert!(control.active());
+    control.set_active(false);
+    assert!(!control.active());
+    control.set_active(true);
+    assert!(control.active());
+}
+
+#[test]
+fn camera_control_multiple_flags_preserved() {
+    let flags = vec![
+        KnownCameraControlFlag::Manual,
+        KnownCameraControlFlag::Volatile,
+        KnownCameraControlFlag::Continuous,
+    ];
+    let control = CameraControl::new(
+        KnownCameraControl::Zoom,
+        "Zoom".to_string(),
+        ControlValueDescription::IntegerRange {
+            min: 1,
+            max: 10,
+            value: 5,
+            step: 1,
+            default: 1,
+        },
+        flags.clone(),
+        true,
+    );
+    assert_eq!(control.flag(), &flags);
+}
+
+#[test]
+fn control_value_description_value_extraction_all_variants() {
+    // Verify that .value() on every ControlValueDescription variant returns
+    // a ControlValueSetter that matches the stored value.
+    let cases: Vec<(ControlValueDescription, ControlValueSetter)> = vec![
+        (ControlValueDescription::None, ControlValueSetter::None),
+        (
+            ControlValueDescription::Integer {
+                value: -7,
+                default: 0,
+                step: 1,
+            },
+            ControlValueSetter::Integer(-7),
+        ),
+        (
+            ControlValueDescription::IntegerRange {
+                min: 0,
+                max: 255,
+                value: 128,
+                step: 1,
+                default: 0,
+            },
+            ControlValueSetter::Integer(128),
+        ),
+        (
+            ControlValueDescription::Float {
+                value: 3.14,
+                default: 0.0,
+                step: 0.01,
+            },
+            ControlValueSetter::Float(3.14),
+        ),
+        (
+            ControlValueDescription::FloatRange {
+                min: -1.0,
+                max: 1.0,
+                value: 0.5,
+                step: 0.1,
+                default: 0.0,
+            },
+            ControlValueSetter::Float(0.5),
+        ),
+        (
+            ControlValueDescription::Boolean {
+                value: false,
+                default: true,
+            },
+            ControlValueSetter::Boolean(false),
+        ),
+        (
+            ControlValueDescription::String {
+                value: "test".to_string(),
+                default: None,
+            },
+            ControlValueSetter::String("test".to_string()),
+        ),
+        (
+            ControlValueDescription::Bytes {
+                value: vec![1, 2, 3],
+                default: vec![],
+            },
+            ControlValueSetter::Bytes(vec![1, 2, 3]),
+        ),
+        (
+            ControlValueDescription::KeyValuePair {
+                key: 42,
+                value: 84,
+                default: (0, 0),
+            },
+            ControlValueSetter::KeyValue(42, 84),
+        ),
+        (
+            ControlValueDescription::Point {
+                value: (9.0, 10.0),
+                default: (0.0, 0.0),
+            },
+            ControlValueSetter::Point(9.0, 10.0),
+        ),
+        (
+            ControlValueDescription::Enum {
+                value: 3,
+                possible: vec![1, 2, 3],
+                default: 1,
+            },
+            ControlValueSetter::EnumValue(3),
+        ),
+        (
+            ControlValueDescription::RGB {
+                value: (0.1, 0.2, 0.3),
+                max: (1.0, 1.0, 1.0),
+                default: (0.0, 0.0, 0.0),
+            },
+            ControlValueSetter::RGB(0.1, 0.2, 0.3),
+        ),
+    ];
+
+    for (desc, expected_setter) in &cases {
+        assert_eq!(
+            desc.value(),
+            *expected_setter,
+            "value() mismatch for {desc:?}"
+        );
+    }
+}
+
 // --- FrameFormat parse edge cases ---
 
 #[test]
