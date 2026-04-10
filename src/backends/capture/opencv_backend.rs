@@ -111,7 +111,7 @@ impl OpenCvCaptureDevice {
             CameraIndex::String(ip) => VideoCapture::from_file(ip.as_str(), api_pref),
         }
         .map_err(|why| NokhwaError::OpenDeviceError {
-            device: format!("Failed to open {index}"),
+            device: index.to_string(),
             error: why.to_string(),
         })?;
 
@@ -515,8 +515,8 @@ impl CaptureBackendTrait for OpenCvCaptureDevice {
                     }),
                 }
             }
-            CameraIndex::String(_) => Err(NokhwaError::OpenDeviceError {
-                device: "Cannot open".to_string(),
+            CameraIndex::String(s) => Err(NokhwaError::OpenDeviceError {
+                device: s.to_string(),
                 error: "String index not supported (try NetworkCamera instead)".to_string(),
             }),
         }?;
