@@ -20,7 +20,7 @@ use nokhwa_core::{
     error::NokhwaError,
     types::{
         ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo, ControlValueSetter,
-        FrameFormat, KnownCameraControl, RequestedFormat, RequestedFormatType, Resolution,
+        FrameFormat, KnownCameraControl, RequestedFormat, Resolution,
     },
 };
 use std::thread::JoinHandle;
@@ -131,30 +131,6 @@ impl CallbackCamera {
     /// This wraps an infallible call and should not return an error.
     pub fn camera_format(&self) -> Result<CameraFormat, NokhwaError> {
         Ok(self.camera.lock().camera_format())
-    }
-
-    /// Will set the current [`CameraFormat`]
-    /// This will reset the current stream if used while stream is opened.
-    /// # Errors
-    /// If you started the stream and the camera rejects the new camera format, this will return an error.
-    #[deprecated(since = "0.10.0", note = "please use `set_camera_request` instead.")]
-    pub fn set_camera_format(&mut self, new_fmt: CameraFormat) -> Result<(), NokhwaError> {
-        *self
-            .last_frame_captured
-            .lock()
-            .map_err(|why| NokhwaError::GeneralError(why.to_string()))? =
-            Buffer::new(new_fmt.resolution(), &[], self.camera_format()?.format());
-        let formats = vec![new_fmt.format()];
-        let request = RequestedFormat::with_formats(RequestedFormatType::Exact(new_fmt), &formats);
-        let set_fmt = self.camera.lock().set_camera_request(request)?;
-        if new_fmt != set_fmt {
-            return Err(NokhwaError::SetPropertyError {
-                property: "CameraFormat".to_string(),
-                value: "CameraFormat".to_string(),
-                error: "Requested Format Not Consistant".to_string(),
-            });
-        }
-        Ok(())
     }
 
     /// Will set the current [`CameraFormat`], using a [`RequestedFormat.`]
