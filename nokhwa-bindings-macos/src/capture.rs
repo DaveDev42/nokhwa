@@ -13,36 +13,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#[cfg(target_os = "macos")]
-use nokhwa_bindings_macos::{
-    callback::FrameData,
-    session::{
-        create_device_input, create_video_data_output, output_add_delegate,
-        output_set_frame_format, session_add_input, session_add_output,
-        session_begin_configuration, session_commit_configuration, session_is_interrupted,
-        session_is_running, session_new, session_remove_input, session_remove_output,
-        session_start, session_stop,
-    },
-    AVCaptureDeviceInput, AVCaptureDeviceWrapper, AVCaptureSession, AVCaptureVideoCallback,
-    AVCaptureVideoDataOutput, Retained,
+use crate::callback::{AVCaptureVideoCallback, FrameData};
+use crate::device::AVCaptureDeviceWrapper;
+use crate::session::{
+    create_device_input, create_video_data_output, output_add_delegate, output_set_frame_format,
+    session_add_input, session_add_output, session_begin_configuration,
+    session_commit_configuration, session_is_interrupted, session_is_running, session_new,
+    session_remove_input, session_remove_output, session_start, session_stop,
 };
 use nokhwa_core::{
     buffer::Buffer,
     error::NokhwaError,
+    pixel_format::RgbFormat,
     traits::CaptureBackendTrait,
     types::{
         ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo, ControlValueSetter,
-        FrameFormat, KnownCameraControl, RequestedFormat, Resolution,
+        FrameFormat, KnownCameraControl, RequestedFormat, RequestedFormatType, Resolution,
     },
 };
-#[cfg(target_os = "macos")]
-use nokhwa_core::{pixel_format::RgbFormat, types::RequestedFormatType};
-#[cfg(target_os = "macos")]
+use objc2::rc::Retained;
+use objc2_av_foundation::{AVCaptureDeviceInput, AVCaptureSession, AVCaptureVideoDataOutput};
 use std::sync::mpsc::{Receiver, Sender};
-#[cfg(target_os = "macos")]
-use std::{ffi::CString, sync::Arc};
-
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, ffi::CString, sync::Arc};
 
 /// The backend struct that interfaces with `AVFoundation`.
 /// To see what this does, please see [`CaptureBackendTrait`].
@@ -52,8 +44,6 @@ use std::{borrow::Cow, collections::HashMap};
 /// - This only works on 64 bit platforms.
 /// - FPS adjustment does not work.
 /// - If permission has not been granted and you call `init()` it will error.
-#[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-avfoundation")))]
-#[cfg(target_os = "macos")]
 pub struct AVFoundationCaptureDevice {
     device: AVCaptureDeviceWrapper,
     dev_input: Option<Retained<AVCaptureDeviceInput>>,
@@ -67,7 +57,6 @@ pub struct AVFoundationCaptureDevice {
     fbufsnd: Arc<Sender<FrameData>>,
 }
 
-#[cfg(target_os = "macos")]
 impl AVFoundationCaptureDevice {
     /// Creates a new capture device using the `AVFoundation` backend. Indexes are gives to devices by the OS, and usually numbered by order of discovery.
     ///
@@ -128,7 +117,6 @@ impl AVFoundationCaptureDevice {
     }
 }
 
-#[cfg(target_os = "macos")]
 impl CaptureBackendTrait for AVFoundationCaptureDevice {
     fn backend(&self) -> ApiBackend {
         ApiBackend::AVFoundation
@@ -345,155 +333,9 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
     }
 }
 
-#[cfg(target_os = "macos")]
 impl Drop for AVFoundationCaptureDevice {
     fn drop(&mut self) {
         let _ = self.stop_stream();
         self.device.unlock();
-    }
-}
-
-/// The backend struct that interfaces with `AVFoundation`.
-/// To see what this does, please see [`CaptureBackendTrait`].
-/// # Quirks
-/// - While working with `iOS` is allowed, it is not officially supported and may not work.
-/// - You **must** call [`nokhwa_initialize`](crate::nokhwa_initialize) **before** doing anything with `AVFoundation`.
-/// - This only works on 64 bit platforms.
-/// - FPS adjustment does not work.
-/// - If permission has not been granted and you call `init()` it will error.
-#[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-avfoundation")))]
-#[cfg(not(target_os = "macos"))]
-pub struct AVFoundationCaptureDevice {}
-
-#[cfg(not(target_os = "macos"))]
-#[allow(unused_variables)]
-#[allow(unreachable_code)]
-impl AVFoundationCaptureDevice {
-    /// Creates a new capture device using the `AVFoundation` backend. Indexes are gives to devices by the OS, and usually numbered by order of discovery.
-    ///
-    /// If `camera_format` is `None`, it will be spawned with with 640x480@15 FPS, MJPEG [`CameraFormat`] default.
-    /// # Errors
-    /// This function will error if the camera is currently busy or if `AVFoundation` can't read device information, or permission was not given by the user.
-    pub fn new(index: &CameraIndex, req_fmt: RequestedFormat) -> Result<Self, NokhwaError> {
-        todo!()
-    }
-
-    /// Creates a new capture device using the `AVFoundation` backend with desired settings.
-    ///
-    /// # Errors
-    /// This function will error if the camera is currently busy or if `AVFoundation` can't read device information, or permission was not given by the user.
-    #[deprecated(since = "0.10.0", note = "please use `new` instead.")]
-    #[allow(clippy::cast_possible_truncation)]
-    pub fn new_with(
-        index: usize,
-        width: u32,
-        height: u32,
-        fps: u32,
-        fourcc: FrameFormat,
-    ) -> Result<Self, NokhwaError> {
-        todo!()
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-#[allow(unreachable_code)]
-impl CaptureBackendTrait for AVFoundationCaptureDevice {
-    fn backend(&self) -> ApiBackend {
-        todo!()
-    }
-
-    fn camera_info(&self) -> &CameraInfo {
-        todo!()
-    }
-
-    fn refresh_camera_format(&mut self) -> Result<(), NokhwaError> {
-        todo!()
-    }
-
-    fn camera_format(&self) -> CameraFormat {
-        todo!()
-    }
-
-    fn set_camera_format(&mut self, _: CameraFormat) -> Result<(), NokhwaError> {
-        todo!()
-    }
-
-    fn compatible_list_by_resolution(
-        &mut self,
-        _: FrameFormat,
-    ) -> Result<HashMap<Resolution, Vec<u32>>, NokhwaError> {
-        todo!()
-    }
-
-    fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
-        todo!()
-    }
-
-    fn resolution(&self) -> Resolution {
-        todo!()
-    }
-
-    fn set_resolution(&mut self, _: Resolution) -> Result<(), NokhwaError> {
-        todo!()
-    }
-
-    fn frame_rate(&self) -> u32 {
-        todo!()
-    }
-
-    fn set_frame_rate(&mut self, _: u32) -> Result<(), NokhwaError> {
-        todo!()
-    }
-
-    fn frame_format(&self) -> FrameFormat {
-        todo!()
-    }
-
-    fn set_frame_format(&mut self, _: FrameFormat) -> Result<(), NokhwaError> {
-        todo!()
-    }
-
-    fn camera_control(&self, _: KnownCameraControl) -> Result<CameraControl, NokhwaError> {
-        todo!()
-    }
-
-    fn camera_controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
-        todo!()
-    }
-
-    fn set_camera_control(
-        &mut self,
-        _: KnownCameraControl,
-        _: ControlValueSetter,
-    ) -> Result<(), NokhwaError> {
-        todo!()
-    }
-
-    fn open_stream(&mut self) -> Result<(), NokhwaError> {
-        todo!()
-    }
-
-    fn is_stream_open(&self) -> bool {
-        todo!()
-    }
-
-    fn frame(&mut self) -> Result<Buffer, NokhwaError> {
-        todo!()
-    }
-
-    fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
-        todo!()
-    }
-
-    fn stop_stream(&mut self) -> Result<(), NokhwaError> {
-        todo!()
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-#[allow(unreachable_code)]
-impl Drop for AVFoundationCaptureDevice {
-    fn drop(&mut self) {
-        todo!()
     }
 }
