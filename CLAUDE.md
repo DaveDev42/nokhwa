@@ -88,4 +88,4 @@ All workspace crates use a **unified version number** (e.g. `0.11.0`). When bump
 - `clippy::module_name_repetitions` is allowed
 - Run `cargo fmt` before committing
 - Minimize use of `unsafe`
-- Apache 2.0 license
+- **Apache 2.0 license** — This project is licensed under Apache-2.0 by the original author (`l1npengtul`). Always respect this license: preserve license headers in source files, include the license in distributions, and never relicense or change the license terms.

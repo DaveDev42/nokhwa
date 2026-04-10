@@ -151,7 +151,7 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
             .device
             .supported_formats()?
             .into_iter()
-            .filter(|x: &CameraFormat| x.format() != fourcc);
+            .filter(|x: &CameraFormat| x.format() == fourcc);
         let mut res_list = HashMap::new();
         for format in supported_cfmt {
             match res_list.get_mut(&format.resolution()) {
@@ -261,16 +261,16 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
     }
 
     fn is_stream_open(&self) -> bool {
-        if self.session.is_some()
-            && self.data_out.is_some()
-            && self.data_collect.is_some()
-            && self.dev_input.is_some()
-        {
-            return true;
-        }
-        match &self.session {
-            Some(session) => (!session_is_interrupted(session)) && session_is_running(session),
-            None => false,
+        match (
+            &self.session,
+            &self.data_out,
+            &self.data_collect,
+            &self.dev_input,
+        ) {
+            (Some(session), Some(_), Some(_), Some(_)) => {
+                !session_is_interrupted(session) && session_is_running(session)
+            }
+            _ => false,
         }
     }
 
