@@ -233,10 +233,10 @@ fn closest_format_when_exact_resolution_unavailable() {
     );
 
     let result = result.unwrap();
-    // 1920x1080 is closer to 1280x720 than 640x480 by Euclidean distance:
-    // dist(1280,720 -> 1920,1080) = sqrt(640^2 + 360^2) = sqrt(539200) ≈ 734
-    // dist(1280,720 -> 640,480)   = sqrt(640^2 + 240^2) = sqrt(467200) ≈ 683
-    // So 640x480 is actually closer; either way, the bug was returning None.
+    // 640x480 is the closest by Euclidean distance:
+    // dist(1280,720 -> 640,480)   = sqrt(640^2 + 240^2) ≈ 683
+    // dist(1280,720 -> 1920,1080) = sqrt(640^2 + 360^2) ≈ 734
+    assert_eq!(result.resolution(), Resolution::new(640, 480));
     assert_eq!(result.format(), FrameFormat::MJPEG);
-    assert!(result.frame_rate() > 0);
+    assert_eq!(result.frame_rate(), 30);
 }
