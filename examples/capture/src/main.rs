@@ -37,11 +37,10 @@ use nokhwa::{
     Buffer, CallbackCamera, Camera,
 };
 use std::str::FromStr;
-use std::sync::Arc;
 use std::time::Duration;
 
 struct CaptureState {
-    receiver: Arc<Receiver<Buffer>>,
+    receiver: Receiver<Buffer>,
     buffer: Vec<u8>,
     format: CameraFormat,
 }
@@ -337,11 +336,9 @@ fn nokhwa_main() {
 
             if display {
                 let (sender, receiver) = std::sync::mpsc::channel();
-                let receiver = Arc::new(receiver);
-                let sender_clone = sender.clone();
 
                 let mut camera = CallbackCamera::new(index, requested, move |buf| {
-                    sender_clone.send(buf).expect("Error sending frame!!!!");
+                    sender.send(buf).expect("Error sending frame!!!!");
                 })
                 .unwrap();
 

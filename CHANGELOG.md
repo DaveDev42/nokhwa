@@ -40,6 +40,7 @@
 - Clippy pedantic: 30 errors → 0
 
 ## Cleanup
+- Replaced `flume` crate with `std::sync::mpsc` to reduce external dependencies (all channel usages migrated in library and examples)
 - Replaced `core-media-sys` / `core-video-sys` crate dependencies with direct FFI declarations in `ffi.rs`, eliminating legacy `objc 0.2` and `metal 0.18` transitive dependencies
 - Removed unused dependencies: `usb_enumeration`, `regex`, `cocoa-foundation`, `core-foundation`, `once_cell`
 - Removed dead code: empty `VirtualBackendTrait`, commented-out module declarations, obsolete code blocks
