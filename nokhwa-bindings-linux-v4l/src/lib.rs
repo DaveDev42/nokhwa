@@ -455,7 +455,7 @@ mod internal {
         fn lock_device(&self) -> Result<std::sync::MutexGuard<'_, Device>, NokhwaError> {
             self.device
                 .lock()
-                .map_err(|e| NokhwaError::GeneralError(format!("Failed to lock device: {}", e)))
+                .map_err(|e| NokhwaError::general(format!("Failed to lock device: {}", e)))
         }
 
         fn get_resolution_list(&self, fourcc: FrameFormat) -> Result<Vec<Resolution>, NokhwaError> {
@@ -857,7 +857,7 @@ mod internal {
             let mut stream =
                 match MmapStream::new(&*self.lock_device()?, v4l::buffer::Type::VideoCapture) {
                     Ok(s) => s,
-                    Err(why) => return Err(NokhwaError::OpenStreamError(why.to_string())),
+                    Err(why) => return Err(NokhwaError::open_stream(why.to_string())),
                 };
 
             // Explicitly start now, or won't work with the RPi. As a consequence, buffers will only be used as required.
@@ -865,7 +865,7 @@ mod internal {
             #[cfg(feature = "no-arena-buffer")]
             match stream.start() {
                 Ok(s) => s,
-                Err(why) => return Err(NokhwaError::OpenStreamError(why.to_string())),
+                Err(why) => return Err(NokhwaError::open_stream(why.to_string())),
             }
             self.stream_handle = Some(stream);
             Ok(())
@@ -888,11 +888,9 @@ mod internal {
                             wall_ts.map(|ts| (ts, TimestampKind::WallClock)),
                         ))
                     }
-                    Err(why) => Err(NokhwaError::ReadFrameError(why.to_string())),
+                    Err(why) => Err(NokhwaError::read_frame(why.to_string())),
                 },
-                None => Err(NokhwaError::ReadFrameError(
-                    "Stream Not Started".to_string(),
-                )),
+                None => Err(NokhwaError::read_frame("Stream Not Started")),
             }
         }
 
@@ -900,11 +898,9 @@ mod internal {
             match &mut self.stream_handle {
                 Some(sh) => match sh.next() {
                     Ok((data, _)) => Ok(Cow::Borrowed(data)),
-                    Err(why) => Err(NokhwaError::ReadFrameError(why.to_string())),
+                    Err(why) => Err(NokhwaError::read_frame(why.to_string())),
                 },
-                None => Err(NokhwaError::ReadFrameError(
-                    "Stream Not Started".to_string(),
-                )),
+                None => Err(NokhwaError::read_frame("Stream Not Started")),
             }
         }
 

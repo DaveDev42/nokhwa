@@ -280,7 +280,7 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
         let (bytes, _fmt, capture_ts) = self
             .frame_buffer_receiver
             .recv()
-            .map_err(|why| NokhwaError::ReadFrameError(why.to_string()))?;
+            .map_err(|why| NokhwaError::read_frame(why.to_string()))?;
         let buffer = Buffer::with_timestamp(
             cfmt.resolution(),
             &bytes,
@@ -294,7 +294,7 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
     fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
         match self.frame_buffer_receiver.recv() {
             Ok(recv) => Ok(Cow::from(recv.0)),
-            Err(why) => Err(NokhwaError::ReadFrameError(why.to_string())),
+            Err(why) => Err(NokhwaError::read_frame(why.to_string())),
         }
     }
 

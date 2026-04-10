@@ -1063,7 +1063,7 @@ pub mod wmf {
                 self.source_reader
                     .SetStreamSelection(MEDIA_FOUNDATION_FIRST_VIDEO_STREAM, true)
             } {
-                return Err(NokhwaError::OpenStreamError(why.to_string()));
+                return Err(NokhwaError::open_stream(why.to_string()));
             }
 
             self.stream_epoch = std::time::SystemTime::now()
@@ -1077,7 +1077,7 @@ pub mod wmf {
             let mut imf_sample: Option<IMFSample> = match unsafe { MFCreateSample() } {
                 Ok(sample) => Some(sample),
                 Err(why) => {
-                    return Err(NokhwaError::ReadFrameError(why.to_string()));
+                    return Err(NokhwaError::read_frame(why.to_string()));
                 }
             };
             let mut stream_flags = 0;
@@ -1094,7 +1094,7 @@ pub mod wmf {
                             Some(&mut imf_sample),
                         )
                     } {
-                        return Err(NokhwaError::ReadFrameError(why.to_string()));
+                        return Err(NokhwaError::read_frame(why.to_string()));
                     }
 
                     if imf_sample.is_some() {
@@ -1107,7 +1107,7 @@ pub mod wmf {
                 Some(sample) => sample,
                 None => {
                     // shouldn't happen
-                    return Err(NokhwaError::ReadFrameError("No sample".to_string()));
+                    return Err(NokhwaError::read_frame("No sample"));
                 }
             };
 
@@ -1122,7 +1122,7 @@ pub mod wmf {
 
             let buffer = match unsafe { imf_sample.ConvertToContiguousBuffer() } {
                 Ok(buf) => buf,
-                Err(why) => return Err(NokhwaError::ReadFrameError(why.to_string())),
+                Err(why) => return Err(NokhwaError::read_frame(why.to_string())),
             };
 
             let mut buffer_valid_length = 0;
@@ -1131,17 +1131,15 @@ pub mod wmf {
             if let Err(why) =
                 unsafe { buffer.Lock(&mut buffer_start_ptr, None, Some(&mut buffer_valid_length)) }
             {
-                return Err(NokhwaError::ReadFrameError(why.to_string()));
+                return Err(NokhwaError::read_frame(why.to_string()));
             }
 
             if buffer_start_ptr.is_null() {
-                return Err(NokhwaError::ReadFrameError(
-                    "Buffer Pointer Null".to_string(),
-                ));
+                return Err(NokhwaError::read_frame("Buffer Pointer Null"));
             }
 
             if buffer_valid_length == 0 {
-                return Err(NokhwaError::ReadFrameError("Buffer Size is 0".to_string()));
+                return Err(NokhwaError::read_frame("Buffer Size is 0"));
             }
 
             let mut data_slice = Vec::with_capacity(buffer_valid_length as usize);

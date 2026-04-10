@@ -206,9 +206,7 @@ pub fn session_start(session: &AVCaptureSession) -> Result<(), NokhwaError> {
     });
 
     if std::panic::catch_unwind(start_stream_fn).is_err() {
-        return Err(NokhwaError::OpenStreamError(
-            "Cannot run AVCaptureSession".to_string(),
-        ));
+        return Err(NokhwaError::open_stream("Cannot run AVCaptureSession"));
     }
     Ok(())
 }
