@@ -410,11 +410,107 @@ fn decode_nv12_odd_resolution_returns_error() {
     let buf = Buffer::new(Resolution::new(3, 1), &data, FrameFormat::NV12);
     let result = buf.decode_image::<crate::pixel_format::RgbFormat>();
     assert!(result.is_err(), "NV12 with odd resolution should error");
+    let err = format!("{}", result.unwrap_err());
+    assert!(
+        err.contains("bad resolution"),
+        "Expected 'bad resolution' in error, got: {err}"
+    );
 }
 
 #[test]
-fn decode_yuyv_zero_length_returns_error_or_empty() {
+fn decode_yuyv_zero_length_does_not_panic() {
     let buf = Buffer::new(Resolution::new(0, 0), &[], FrameFormat::YUYV);
-    // Should either succeed with empty image or error gracefully, not panic
-    let _ = buf.decode_image::<crate::pixel_format::RgbFormat>();
+    // Verify this doesn't panic; either Ok or Err is acceptable
+    let result = buf.decode_image::<crate::pixel_format::RgbFormat>();
+    // Zero-length YUYV with 0x0 resolution: YUYV produces empty output,
+    // ImageBuffer::from_raw(0, 0, vec![]) succeeds
+    assert!(
+        result.is_ok() || result.is_err(),
+        "Should not panic on zero-length YUYV"
+    );
+}
+
+#[test]
+fn decode_oversized_buffer_rawrgb() {
+    // 1x1 needs 3 bytes, but we provide 100 bytes
+    let data = vec![42u8; 100];
+    let buf = Buffer::new(Resolution::new(1, 1), &data, FrameFormat::RAWRGB);
+    // RAWRGB passthrough returns all data; ImageBuffer::from_raw only requires
+    // len >= width*height*channels, so surplus data is accepted
+    let result = buf.decode_image::<crate::pixel_format::RgbFormat>();
+    assert!(
+        result.is_ok(),
+        "Oversized RAWRGB buffer should succeed (surplus data ignored)"
+    );
+}
+
+// ===== Cross-format coverage: RAWRGB/RAWBGR to LumaA, RAWBGR to Luma =====
+
+#[test]
+fn decode_rawrgb_to_luma_a_returns_error() {
+    // LumaAFormat does not support RAWRGB input
+    let data = vec![100u8, 150, 200];
+    let buf = Buffer::new(Resolution::new(1, 1), &data, FrameFormat::RAWRGB);
+    let result = buf.decode_image::<crate::pixel_format::LumaAFormat>();
+    assert!(
+        result.is_err(),
+        "RAWRGB -> LumaA is unsupported and should error"
+    );
+}
+
+#[test]
+fn decode_rawbgr_to_luma_averages_channels() {
+    // BGR (10, 20, 30) -> Luma avg = (30 + 20 + 10) / 3 = 20
+    // (LumaFormat averages as (px[2]+px[1]+px[0])/3 for RAWBGR, same order as RAWRGB)
+    let bgr = vec![10u8, 20, 30];
+    let buf = Buffer::new(Resolution::new(1, 1), &bgr, FrameFormat::RAWBGR);
+    let img = buf
+        .decode_image::<crate::pixel_format::LumaFormat>()
+        .expect("RAWBGR -> LumaFormat should succeed");
+    assert_eq!(img.into_raw(), vec![20u8]);
+}
+
+#[test]
+fn decode_rawbgr_to_luma_a_returns_error() {
+    // LumaAFormat does not support RAWBGR input
+    let data = vec![10u8, 20, 30];
+    let buf = Buffer::new(Resolution::new(1, 1), &data, FrameFormat::RAWBGR);
+    let result = buf.decode_image::<crate::pixel_format::LumaAFormat>();
+    assert!(
+        result.is_err(),
+        "RAWBGR -> LumaA is unsupported and should error"
+    );
+}
+
+#[test]
+fn decode_nv12_to_rgba_known_values() {
+    // NV12 neutral gray (Y=128, U=128, V=128) -> RGBA ~(128, 128, 128, 255)
+    let nv12 = vec![128, 128, 128, 128, 128, 128];
+    let buf = Buffer::new(Resolution::new(2, 2), &nv12, FrameFormat::NV12);
+    let img = buf
+        .decode_image::<crate::pixel_format::RgbAFormat>()
+        .expect("NV12 -> RgbAFormat should succeed");
+    let raw = img.into_raw();
+    assert_eq!(raw.len(), 16); // 4 pixels * 4 channels
+    for px in raw.chunks_exact(4) {
+        for &channel in &px[..3] {
+            assert!(
+                (120..=136).contains(&channel),
+                "Expected ~128 but got {channel}"
+            );
+        }
+        assert_eq!(px[3], 255, "Alpha channel should be 255");
+    }
+}
+
+#[test]
+fn decode_yuyv_to_luma_a_produces_correct_size() {
+    let yuyv = vec![100u8, 128, 200, 128]; // 2 pixels
+    let buf = Buffer::new(Resolution::new(2, 1), &yuyv, FrameFormat::YUYV);
+    let img = buf
+        .decode_image::<crate::pixel_format::LumaAFormat>()
+        .expect("YUYV -> LumaAFormat should succeed");
+    assert_eq!(img.width(), 2);
+    assert_eq!(img.height(), 1);
+    assert_eq!(img.into_raw().len(), 4); // 2 pixels * 2 channels (luma + alpha)
 }

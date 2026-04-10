@@ -582,11 +582,25 @@ fn verify_setter_integer() {
         default: 50,
         step: 5,
     };
-    // (5 + 50) % 5 == 0 → aligned
+    // Alignment check uses OR logic: (i + default) % step == 0 || (i + value) % step == 0
+    // Here value == default == 50, so both paths are equivalent: (5 + 50) % 5 == 0 → aligned
     assert!(desc.verify_setter(&ControlValueSetter::Integer(5)));
-    // (3 + 50) % 5 == 3 → not aligned
+    // (3 + 50) % 5 == 3 → not aligned via either path
     assert!(!desc.verify_setter(&ControlValueSetter::Integer(3)));
     assert!(!desc.verify_setter(&ControlValueSetter::Float(1.0)));
+
+    // Test OR-logic: value and default differ so both alignment paths are distinct
+    let desc_diff = ControlValueDescription::Integer {
+        value: 7,
+        default: 3,
+        step: 5,
+    };
+    // i=2: (2+3)%5==0 → passes via default path (but (2+7)%5==4 → fails via value path)
+    assert!(desc_diff.verify_setter(&ControlValueSetter::Integer(2)));
+    // i=3: (3+3)%5==1 fails, (3+7)%5==0 → passes via value path
+    assert!(desc_diff.verify_setter(&ControlValueSetter::Integer(3)));
+    // i=1: (1+3)%5==4 fails, (1+7)%5==3 fails → both paths fail
+    assert!(!desc_diff.verify_setter(&ControlValueSetter::Integer(1)));
 }
 
 #[test]
@@ -627,8 +641,9 @@ fn verify_setter_float() {
 
 #[test]
 fn verify_setter_rgb() {
-    // RGB verify_setter checks *v >= max for each channel.
-    // This documents the actual implementation behavior.
+    // FIXME: RGB verify_setter checks *v >= max for each channel, which appears inverted.
+    // It likely should be *v <= max (values within range), but currently only values
+    // AT or ABOVE max pass. This test documents the actual (buggy?) behavior.
     let desc = ControlValueDescription::RGB {
         value: (0.5, 0.5, 0.5),
         max: (1.0, 1.0, 1.0),
