@@ -20,7 +20,7 @@
 //! - **BGR-to-RGB**: NEON on aarch64, SSSE3 on `x86_64`, scalar fallback
 //! - **YUYV-to-RGB/RGBA**: NEON on aarch64, scalar fallback on other architectures
 
-use crate::types::yuyv444_to_rgb;
+use crate::types::{yuyv444_to_rgb, yuyv444_to_rgba};
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::{int16x8_t, int32x4_t, uint8x8_t};
 
@@ -31,9 +31,9 @@ use std::arch::aarch64::{int16x8_t, int32x4_t, uint8x8_t};
 /// Swap BGR to RGB using SIMD where available.
 /// `src` and `dst` must be the same length and a multiple of 3.
 #[inline]
-pub fn bgr_to_rgb_simd(src: &[u8], dst: &mut [u8]) {
-    debug_assert_eq!(src.len(), dst.len());
-    debug_assert!(src.len().is_multiple_of(3));
+pub(crate) fn bgr_to_rgb_simd(src: &[u8], dst: &mut [u8]) {
+    assert_eq!(src.len(), dst.len());
+    assert!(src.len().is_multiple_of(3));
 
     #[cfg(target_arch = "aarch64")]
     bgr_to_rgb_neon(src, dst);
@@ -110,7 +110,8 @@ unsafe fn bgr_to_rgb_ssse3(src: &[u8], dst: &mut [u8]) {
     let mut idx = 0;
 
     while idx < simd_end {
-        // Load 16 bytes (we only use 15)
+        // Load 16 bytes via _mm_loadu_si128 (we only use 15). The guard
+        // ensures idx+16 <= len so the read stays within the slice bounds.
         if idx + 16 <= len {
             let vec = _mm_loadu_si128(src.as_ptr().add(idx).cast());
             let shuffled = _mm_shuffle_epi8(vec, shuffle);
@@ -136,9 +137,9 @@ unsafe fn bgr_to_rgb_ssse3(src: &[u8], dst: &mut [u8]) {
 /// Processes `src` (YUYV 4:2:2, 4 bytes per 2 pixels) into `dst` (RGB888, 3 bytes per pixel).
 /// `dst` must be `(src.len() / 4) * 6` bytes.
 #[inline]
-pub fn yuyv_to_rgb_simd(src: &[u8], dst: &mut [u8]) {
-    debug_assert!(src.len().is_multiple_of(4));
-    debug_assert_eq!(dst.len(), (src.len() / 4) * 6);
+pub(crate) fn yuyv_to_rgb_simd(src: &[u8], dst: &mut [u8]) {
+    assert!(src.len().is_multiple_of(4));
+    assert_eq!(dst.len(), (src.len() / 4) * 6);
 
     #[cfg(target_arch = "aarch64")]
     yuyv_to_rgb_neon(src, dst);
@@ -150,9 +151,9 @@ pub fn yuyv_to_rgb_simd(src: &[u8], dst: &mut [u8]) {
 /// Convert YUYV to RGBA using SIMD where available.
 /// `dst` must be `(src.len() / 4) * 8` bytes.
 #[inline]
-pub fn yuyv_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
-    debug_assert!(src.len().is_multiple_of(4));
-    debug_assert_eq!(dst.len(), (src.len() / 4) * 8);
+pub(crate) fn yuyv_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
+    assert!(src.len().is_multiple_of(4));
+    assert_eq!(dst.len(), (src.len() / 4) * 8);
 
     #[cfg(target_arch = "aarch64")]
     yuyv_to_rgba_neon(src, dst);
@@ -191,17 +192,11 @@ fn yuyv_to_rgba_scalar(src: &[u8], dst: &mut [u8]) {
         let luma1 = i32::from(chunk[2]);
         let cr = i32::from(chunk[3]);
 
-        let px0 = yuyv444_to_rgb(luma0, cb, cr);
-        let px1 = yuyv444_to_rgb(luma1, cb, cr);
+        let px0 = yuyv444_to_rgba(luma0, cb, cr);
+        let px1 = yuyv444_to_rgba(luma1, cb, cr);
 
-        out[0] = px0[0];
-        out[1] = px0[1];
-        out[2] = px0[2];
-        out[3] = 255;
-        out[4] = px1[0];
-        out[5] = px1[1];
-        out[6] = px1[2];
-        out[7] = 255;
+        out[..4].copy_from_slice(&px0);
+        out[4..8].copy_from_slice(&px1);
     }
 }
 
@@ -449,6 +444,23 @@ mod tests {
     fn bgr_to_rgb_large_buffer() {
         // Test with a buffer large enough to exercise SIMD paths (>24 bytes for NEON)
         let pixel_count = 100;
+        let bgr: Vec<u8> = (0..pixel_count * 3).map(|i| (i % 256) as u8).collect();
+        let mut rgb = vec![0u8; bgr.len()];
+        bgr_to_rgb_simd(&bgr, &mut rgb);
+
+        for i in 0..pixel_count {
+            let si = i * 3;
+            assert_eq!(rgb[si], bgr[si + 2], "R mismatch at pixel {i}");
+            assert_eq!(rgb[si + 1], bgr[si + 1], "G mismatch at pixel {i}");
+            assert_eq!(rgb[si + 2], bgr[si], "B mismatch at pixel {i}");
+        }
+    }
+
+    #[test]
+    fn bgr_to_rgb_non_aligned_exercises_tail() {
+        // 103 pixels = 309 bytes, not a multiple of 15 (SSSE3) or 24 (NEON),
+        // so the tail path is exercised on both architectures.
+        let pixel_count = 103;
         let bgr: Vec<u8> = (0..pixel_count * 3).map(|i| (i % 256) as u8).collect();
         let mut rgb = vec![0u8; bgr.len()];
         bgr_to_rgb_simd(&bgr, &mut rgb);
