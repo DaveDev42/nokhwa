@@ -1,3 +1,11 @@
+//! Thin free-function wrappers around typed `objc2-av-foundation` session APIs.
+//!
+//! These are free functions (not methods on a wrapper struct) because the typed
+//! `AVCaptureSession`, `AVCaptureDeviceInput`, and `AVCaptureVideoDataOutput` types
+//! from `objc2-av-foundation` are already safe, well-typed, and reference-counted via
+//! `Retained<T>`. No additional state needs to be tracked, unlike `AVCaptureDeviceWrapper`
+//! in `device.rs` which maintains a `locked` flag.
+
 use crate::callback::AVCaptureVideoCallback;
 use crate::device::get_raw_device_info;
 use crate::ffi::{
@@ -18,6 +26,8 @@ use objc2_av_foundation::{
 };
 use objc2_foundation::{NSArray, NSString};
 
+/// Returns `Result` for API consistency with callers that propagate `NokhwaError`,
+/// even though the current implementation is infallible.
 pub fn discovery_session_with_types(
     device_types: &[AVCaptureDeviceTypeLocal],
 ) -> Result<Retained<AVCaptureDeviceDiscoverySession>, NokhwaError> {
@@ -130,7 +140,9 @@ pub fn output_set_frame_format(
     let dict: *mut AnyObject =
         unsafe { objc2::msg_send![dict_cls, dictionaryWithObject:obj, forKey:key] };
 
-    // Cast raw pointer dict to the expected typed reference
+    // SAFETY: `dict` is a non-null pointer just returned by +[NSDictionary dictionaryWithObject:forKey:].
+    // The object is an NSDictionary whose single key is an NSString (kCVPixelBufferPixelFormatTypeKey,
+    // a CFString that is toll-free bridged to NSString) and whose value is an NSNumber (AnyObject).
     let dict_ref: &objc2_foundation::NSDictionary<NSString, AnyObject> =
         unsafe { &*(dict as *const _) };
     unsafe { output.setVideoSettings(Some(dict_ref)) };
@@ -211,6 +223,9 @@ pub fn session_is_running(session: &AVCaptureSession) -> bool {
 }
 
 pub fn session_start(session: &AVCaptureSession) -> Result<(), NokhwaError> {
+    // AssertUnwindSafe: startRunning may trigger ObjC exceptions translated to panics.
+    // The &AVCaptureSession reference is not invalidated by a panic — the session object
+    // remains in a consistent (non-running) state if startRunning fails.
     let start_stream_fn = std::panic::AssertUnwindSafe(|| {
         unsafe { session.startRunning() };
     });

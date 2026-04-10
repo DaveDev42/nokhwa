@@ -111,19 +111,6 @@ impl TryFrom<&NSString> for AVMediaTypeLocal {
 
 #[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
 #[repr(isize)]
-pub enum AVCaptureDevicePosition {
-    Unspecified = 0,
-    Back = 1,
-    Front = 2,
-}
-
-// SAFETY: AVCaptureDevicePosition is repr(isize), same encoding as NSInteger.
-unsafe impl Encode for AVCaptureDevicePosition {
-    const ENCODING: Encoding = isize::ENCODING;
-}
-
-#[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
-#[repr(isize)]
 pub enum AVAuthorizationStatus {
     NotDetermined = 0,
     Restricted = 1,

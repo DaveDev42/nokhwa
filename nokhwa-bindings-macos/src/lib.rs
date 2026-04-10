@@ -53,8 +53,6 @@ pub use objc2::rc::Retained;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use objc2_av_foundation::{AVCaptureDeviceInput, AVCaptureSession, AVCaptureVideoDataOutput};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-pub use types::{
-    AVAuthorizationStatus, AVCaptureDevicePosition, AVCaptureDeviceTypeLocal, AVMediaTypeLocal,
-};
+pub use types::{AVAuthorizationStatus, AVCaptureDeviceTypeLocal, AVMediaTypeLocal};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use util::{CompressionData, DataPipe};

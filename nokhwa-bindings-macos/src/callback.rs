@@ -204,7 +204,9 @@ pub fn request_permission_with_callback(callback: impl Fn(bool) + Send + Sync + 
 pub fn current_authorization_status() -> AVAuthorizationStatus {
     let media_type = AVMediaTypeLocal::Video.to_av_media_type();
     let status = unsafe { AVCaptureDevice::authorizationStatusForMediaType(media_type) };
-    // The typed API returns AVAuthorizationStatus (NSInteger). Map to our local enum.
+    // Map from objc2_av_foundation::AVAuthorizationStatus(NSInteger) to our local enum.
+    // Values match Apple's AVAuthorizationStatus enum:
+    // https://developer.apple.com/documentation/avfoundation/avauthorizationstatus
     match status.0 {
         0 => AVAuthorizationStatus::NotDetermined,
         1 => AVAuthorizationStatus::Restricted,
