@@ -254,8 +254,10 @@ impl Drop for AVCaptureVideoCallback {
                 let _: () = objc2::msg_send![self.delegate, release];
             }
         }
-        unsafe {
-            dispatch_release(NSObject(self.queue.0));
+        if !self.queue.0.is_null() {
+            unsafe {
+                dispatch_release(NSObject(self.queue.0));
+            }
         }
     }
 }

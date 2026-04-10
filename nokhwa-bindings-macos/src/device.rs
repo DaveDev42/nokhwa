@@ -243,7 +243,9 @@ impl AVCaptureDevice {
                 property: "lockForConfiguration".to_string(),
                 value: "Locked".to_string(),
                 error: if !err_ptr.is_null() {
-                    "Cannot lock for configuration (NSError returned)".to_string()
+                    let desc: *mut AnyObject =
+                        unsafe { objc2::msg_send![err_ptr, localizedDescription] };
+                    nsstr_to_str(desc).into_owned()
                 } else {
                     "Lock rejected".to_string()
                 },
