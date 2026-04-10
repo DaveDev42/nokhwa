@@ -1,24 +1,33 @@
-[![cargo version](https://img.shields.io/crates/v/nokhwa.svg)](https://crates.io/crates/nokhwa) [![docs.rs version](https://img.shields.io/docsrs/nokhwa)](https://docs.rs/nokhwa/latest/nokhwa/)
+[![CI](https://github.com/DaveDev42/nokhwa/actions/workflows/lint.yml/badge.svg)](https://github.com/DaveDev42/nokhwa/actions/workflows/lint.yml) [![Build](https://github.com/DaveDev42/nokhwa/actions/workflows/build-matrix.yml/badge.svg)](https://github.com/DaveDev42/nokhwa/actions/workflows/build-matrix.yml) [![docs.rs](https://img.shields.io/docsrs/nokhwa)](https://docs.rs/nokhwa/latest/nokhwa/)
 # nokhwa
 Nokhwa(녹화): Korean word meaning "to record".
 
 A Simple-to-use, cross-platform Rust Webcam Capture Library
 
+> **Note:** This is a maintained fork of [l1npengtul/nokhwa](https://github.com/l1npengtul/nokhwa) with modernized macOS bindings (objc2), performance improvements, and CI infrastructure.
+
 ## Using nokhwa
-Nokhwa can be added to your crate by adding it to your `Cargo.toml`:
+
+Since this fork is not published to crates.io, add it as a git dependency:
 ```toml
 [dependencies.nokhwa]
-version = "0.10.0"
-# Use the native input backends, enable WGPU integration
-features = ["input-native", "output-wgpu"]
+git = "https://github.com/DaveDev42/nokhwa.git"
+branch = "main"
+# Use the native input backend for your platform
+features = ["input-native"]
 ```
 
-Most likely, you will only use functionality provided by the `Camera` struct. If you need lower-level access, you may instead opt to use the raw capture backends found at `nokhwa::backends::capture::*`.
+To use a specific backend instead of `input-native`:
+```toml
+features = ["input-avfoundation"]  # macOS
+features = ["input-v4l"]           # Linux
+features = ["input-msmf"]          # Windows
+```
 
 ## Example
 ```rust
 // first camera in system
-let index = CameraIndex::index(0); 
+let index = CameraIndex::Index(0);
 // request the absolute highest resolution CameraFormat that can be decoded to RGB.
 let requested = RequestedFormat::<RgbFormat>::new(RequestedFormatType::AbsoluteHighestFrameRate);
 // make the camera
@@ -35,61 +44,47 @@ println!("Decoded Frame of {}", decoded.len());
 A command line app made with `nokhwa` can be found in the `examples` folder.
 
 ## API Support
-The table below lists current Nokhwa API support.
-- The `Backend` column signifies the backend.
-- The `Input` column signifies reading frames from the camera
-- The `Query` column signifies system device list support
-- The `Query-Device` column signifies reading device capabilities
-- The `Platform` column signifies what Platform this is availible on.
 
- | Backend                              | Input              | Query             | Query-Device       | Platform            |
- |-----------------------------------------|-------------------|--------------------|-------------------|--------------------|
- | Video4Linux(`input-native`)          | ✅                 | ✅                 | ✅                | Linux               |
- | MSMF(`input-native`)                 | ✅                 | ✅                 | ✅                | Windows             |
- | AVFoundation(`input-native`)   | ✅                 | ✅                 | ✅                | Mac                 |
- | OpenCV(`input-opencv`)^              | ✅                 | ❌                 | ❌                | Linux, Windows, Mac |
- | WASM(`input-wasm`)                | ✅                 | ✅                 | ✅                | Browser(Web)        |
+| Backend                          | Input | Query | Query-Device | Platform            |
+|----------------------------------|-------|-------|--------------|---------------------|
+| Video4Linux (`input-v4l`)        | ✅    | ✅    | ✅           | Linux               |
+| MSMF (`input-msmf`)             | ✅    | ✅    | ✅           | Windows             |
+| AVFoundation (`input-avfoundation`) | ✅ | ✅    | ✅           | macOS               |
+| OpenCV (`input-opencv`)^        | ✅    | ❌    | ❌           | Linux, Windows, Mac |
 
- ✅: Working, 🔮 : Experimental, ❌ : Not Supported, 🚧: Planned/WIP
+✅ Working  ❌ Not Supported
 
-  ^ = May be bugged. Also supports IP Cameras. 
+^ = May be bugged. Also supports IP Cameras.
 
-## Feature
-The default feature includes nothing. Anything starting with `input-*` is a feature that enables the specific backend. 
+## Features
 
-`input-*` features:
- - `input-native`: Uses either V4L2(Linux), MSMF(Windows), or AVFoundation(Mac OS)
- - `input-opencv`: Enables the `opencv` backend. (cross-platform) 
- - `input-jscam`: Enables the use of the `JSCamera` struct, which uses browser APIs. (Web)
+The default feature includes nothing. You **must** enable at least one `input-*` feature.
 
-Conversely, anything that starts with `output-*` controls a feature that controls the output of something (usually a frame from the camera)
+**Input backends:**
+- `input-native`: Auto-selects V4L2 (Linux), MSMF (Windows), or AVFoundation (macOS)
+- `input-avfoundation`: macOS/iOS AVFoundation backend
+- `input-v4l`: Linux Video4Linux2 backend
+- `input-msmf`: Windows Media Foundation backend
+- `input-opencv`: Cross-platform OpenCV backend
 
-`output-*` features:
- - `output-wgpu`: Enables the API to copy a frame directly into a `wgpu` texture.
- - `output-threaded`: Enable the threaded/callback based camera. 
+**Output features:**
+- `output-wgpu`: Copy frames directly into a `wgpu` texture
+- `output-threaded`: Enable `CallbackCamera` with background capture thread
 
-Other features:
- - `decoding`: Enables `mozjpeg` decoding. Enabled by default.
- - `docs-only`: Documentation feature. Enabled for docs.rs builds.
- - `docs-nolink`: Build documentation **without** linking to any libraries. Enabled for docs.rs builds.
- - `test-fail-warning`: Fails on warning. Enabled in CI.
-
-You many want to pick and choose to reduce bloat.
+**Other features:**
+- `decoding`: MJPEG decoding via `mozjpeg` (enabled by default)
+- `serialize`: `serde` support for core types
 
 ## Issues
 If you are making an issue, please make sure that
  - It has not been made yet
  - Attach what you were doing, your environment, steps to reproduce, and backtrace.
-Thank you!
 
 ## Contributing
 Contributions are welcome!
  - Please `rustfmt` all your code and adhere to the clippy lints (unless necessary not to do so)
  - Please limit use of `unsafe`
  - All contributions are under the Apache 2.0 license unless otherwise specified
-
-## Minimum Service Rust Version
-`nokhwa` may build on older versions of `rustc`, but there is no guarantee except for the latest stable rust. 
 
 ## Sponsors
 
