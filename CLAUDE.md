@@ -78,6 +78,10 @@ Almost everything is behind feature flags. A build **must** enable at least one 
 - **Keep `CHANGELOG.md` up to date.** When merging feature or fix PRs, add an entry under the current unreleased version section. Group entries by: Features, Performance, Refactoring, Bug Fixes, Infrastructure, Cleanup.
 - **Always keep `TODO.md` current.** After every PR merge or task completion, immediately update TODO.md: mark completed items as done and remove them, add newly discovered issues, and re-prioritize as needed. TODO.md must always reflect the true current state of the project.
 
+## Versioning
+
+All workspace crates use a **unified version number** (e.g. `0.11.0`). When bumping versions, update ALL `Cargo.toml` files (root, nokhwa-core, nokhwa-bindings-macos, nokhwa-bindings-linux, nokhwa-bindings-windows) to the same version, including cross-reference `version` fields in `[dependencies.nokhwa-*]`.
+
 ## Code Style
 
 - `#![deny(clippy::pedantic)]` and `#![warn(clippy::all)]` are enforced in both `nokhwa` and `nokhwa-core`
