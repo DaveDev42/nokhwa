@@ -16,9 +16,9 @@
 
 //! SIMD-optimized pixel format conversion routines.
 //!
-//! Provides accelerated BGR-to-RGB swap and YUYV-to-RGB conversion using
-//! platform intrinsics (NEON on aarch64, SSSE3 on `x86_64`) with a
-//! scalar fallback for other architectures.
+//! Provides accelerated pixel format conversion using platform intrinsics:
+//! - **BGR-to-RGB**: NEON on aarch64, SSSE3 on `x86_64`, scalar fallback
+//! - **YUYV-to-RGB/RGBA**: NEON on aarch64, scalar fallback on other architectures
 
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::{int16x8_t, int32x4_t, uint8x8_t};
@@ -391,7 +391,7 @@ unsafe fn yuv_to_rgb_neon_8px(
 ) -> (uint8x8_t, uint8x8_t, uint8x8_t) {
     use std::arch::aarch64::{
         vaddq_s32, vcombine_s16, vdupq_n_s16, vdupq_n_s32, vget_high_s16, vget_low_s16, vmaxq_s16,
-        vmovl_s16, vmovn_s32, vmulq_s32, vqmovun_s16, vshrq_n_s32, vsubq_s32,
+        vmovl_s16, vmulq_s32, vqmovn_s32, vqmovun_s16, vshrq_n_s32, vsubq_s32,
     };
 
     // c298y = y_minus16 * 298 — can overflow i16 (max 239*298 = 71222), so use i32
@@ -435,10 +435,12 @@ unsafe fn yuv_to_rgb_neon_8px(
     let blu_lo = vshrq_n_s32::<8>(vaddq_s32(vaddq_s32(c298y_lo, vmulq_s32(cb_lo, k516)), bias));
     let blu_hi = vshrq_n_s32::<8>(vaddq_s32(vaddq_s32(c298y_hi, vmulq_s32(cb_hi, k516)), bias));
 
-    // Clamp to [0, 255]: narrow i32 -> i16 -> u8 with saturation
-    let red_16 = vcombine_s16(vmovn_s32(red_lo), vmovn_s32(red_hi));
-    let grn_16 = vcombine_s16(vmovn_s32(grn_lo), vmovn_s32(grn_hi));
-    let blu_16 = vcombine_s16(vmovn_s32(blu_lo), vmovn_s32(blu_hi));
+    // Narrow i32 -> i16 with saturating narrowing (vqmovn_s32). Post-shift values
+    // fit in i16 for valid YUV input (max ~481, min ~-122), but we use saturating
+    // narrowing for defense-in-depth against any future formula changes.
+    let red_16 = vcombine_s16(vqmovn_s32(red_lo), vqmovn_s32(red_hi));
+    let grn_16 = vcombine_s16(vqmovn_s32(grn_lo), vqmovn_s32(grn_hi));
+    let blu_16 = vcombine_s16(vqmovn_s32(blu_lo), vqmovn_s32(blu_hi));
 
     // max(0, val) then saturating narrow to u8
     let zero = vdupq_n_s16(0);
@@ -584,5 +586,47 @@ mod tests {
         let mut rgb: Vec<u8> = vec![];
         yuyv_to_rgb_simd(&yuyv, &mut rgb);
         assert!(rgb.is_empty());
+    }
+
+    #[test]
+    fn yuyv_to_rgba_empty() {
+        let yuyv: Vec<u8> = vec![];
+        let mut rgba: Vec<u8> = vec![];
+        yuyv_to_rgba_simd(&yuyv, &mut rgba);
+        assert!(rgba.is_empty());
+    }
+
+    #[test]
+    fn yuyv_to_rgb_non_aligned_exercises_tail() {
+        // 13 YUYV pairs: not a multiple of 8, so on NEON the first 8 pairs go
+        // through the vectorized path and the remaining 5 through scalar tail.
+        let pair_count = 13;
+        let yuyv: Vec<u8> = (0..pair_count * 4).map(|i| (i * 11 % 256) as u8).collect();
+        let mut simd_out = vec![0u8; pair_count * 6];
+        let mut scalar_out = vec![0u8; pair_count * 6];
+
+        yuyv_to_rgb_simd(&yuyv, &mut simd_out);
+        yuyv_to_rgb_scalar(&yuyv, &mut scalar_out);
+
+        assert_eq!(
+            simd_out, scalar_out,
+            "SIMD and scalar must match for non-8-aligned pair count"
+        );
+    }
+
+    #[test]
+    fn yuyv_to_rgba_non_aligned_exercises_tail() {
+        let pair_count = 13;
+        let yuyv: Vec<u8> = (0..pair_count * 4).map(|i| (i * 11 % 256) as u8).collect();
+        let mut simd_out = vec![0u8; pair_count * 8];
+        let mut scalar_out = vec![0u8; pair_count * 8];
+
+        yuyv_to_rgba_simd(&yuyv, &mut simd_out);
+        yuyv_to_rgba_scalar(&yuyv, &mut scalar_out);
+
+        assert_eq!(
+            simd_out, scalar_out,
+            "SIMD and scalar RGBA must match for non-8-aligned pair count"
+        );
     }
 }
