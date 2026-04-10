@@ -1577,14 +1577,37 @@ pub fn buf_nv12_to_rgb(
     let width_usize = resolution.width() as usize;
     let out_row_stride = width_usize * pxsize;
 
+    // SAFETY overview for the unchecked indexing below:
+    //
+    // Input `data` has exactly `width * height * 3 / 2` bytes (validated above).
+    //   - Y plane: data[0 .. width*height]
+    //   - UV plane: data[width*height .. width*height*3/2]
+    //
+    // Output `out` has exactly `pxsize * width * height` bytes (validated above).
+    //
+    // The outer loop iterates `hidx` over 0..height (chunks_exact of the Y plane).
+    // The inner loop iterates `cidx` over 0..width/2 (chunks_exact(2) of each row).
+    //
+    // UV access: uv_offset = y_section + (hidx/2)*width + cidx*2
+    //   Max uv_offset+1 = y_section + (height/2 - 1)*width + (width - 2) + 1
+    //                    = y_section + height*width/2 - 1 = data.len() - 1  ✓
+    //
+    // Output access: base_index = hidx*width*pxsize + cidx*pxsize*2
+    //   For RGB (pxsize=3): max base_index+5 = (height-1)*width*3 + (width/2-1)*6 + 5
+    //                                        = 3*width*height - 1 = out.len() - 1  ✓
+    //   For RGBA (pxsize=4): max base_index+7 = (height-1)*width*4 + (width/2-1)*8 + 7
+    //                                         = 4*width*height - 1 = out.len() - 1  ✓
+
     for (hidx, horizontal_row) in data[0..y_section].chunks_exact(width_usize).enumerate() {
         let uv_row_offset = y_section + (hidx / 2) * width_usize;
         let out_row_offset = hidx * out_row_stride;
 
         for (cidx, column) in horizontal_row.chunks_exact(2).enumerate() {
             let uv_offset = uv_row_offset + cidx * 2;
-            let u = data[uv_offset];
-            let v = data[uv_offset + 1];
+            // SAFETY: uv_offset+1 ≤ y_section + height*width/2 - 1 = data.len()-1
+            // because cidx < width/2 and hidx < height (see proof above).
+            let u = unsafe { *data.get_unchecked(uv_offset) };
+            let v = unsafe { *data.get_unchecked(uv_offset + 1) };
 
             let y0 = column[0];
             let y1 = column[1];
@@ -1606,21 +1629,27 @@ pub fn buf_nv12_to_rgb(
             let b1 = ((c298_1 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
 
             if rgba {
-                out[base_index] = r0;
-                out[base_index + 1] = g0;
-                out[base_index + 2] = b0;
-                out[base_index + 3] = 255;
-                out[base_index + 4] = r1;
-                out[base_index + 5] = g1;
-                out[base_index + 6] = b1;
-                out[base_index + 7] = 255;
+                // SAFETY: base_index+7 ≤ out.len()-1 for pxsize=4 (see proof above).
+                unsafe {
+                    *out.get_unchecked_mut(base_index) = r0;
+                    *out.get_unchecked_mut(base_index + 1) = g0;
+                    *out.get_unchecked_mut(base_index + 2) = b0;
+                    *out.get_unchecked_mut(base_index + 3) = 255;
+                    *out.get_unchecked_mut(base_index + 4) = r1;
+                    *out.get_unchecked_mut(base_index + 5) = g1;
+                    *out.get_unchecked_mut(base_index + 6) = b1;
+                    *out.get_unchecked_mut(base_index + 7) = 255;
+                }
             } else {
-                out[base_index] = r0;
-                out[base_index + 1] = g0;
-                out[base_index + 2] = b0;
-                out[base_index + 3] = r1;
-                out[base_index + 4] = g1;
-                out[base_index + 5] = b1;
+                // SAFETY: base_index+5 ≤ out.len()-1 for pxsize=3 (see proof above).
+                unsafe {
+                    *out.get_unchecked_mut(base_index) = r0;
+                    *out.get_unchecked_mut(base_index + 1) = g0;
+                    *out.get_unchecked_mut(base_index + 2) = b0;
+                    *out.get_unchecked_mut(base_index + 3) = r1;
+                    *out.get_unchecked_mut(base_index + 4) = g1;
+                    *out.get_unchecked_mut(base_index + 5) = b1;
+                }
             }
         }
     }
