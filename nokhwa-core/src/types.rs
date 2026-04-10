@@ -1483,8 +1483,10 @@ pub fn buf_yuyv422_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<()
 
     // Conversion math inlined from `yuyv444_to_rgb` for performance: avoids per-pixel
     // intermediate array allocations and iterator overhead on high-resolution frames.
+    // Using chunks_exact_mut + zip gives the compiler static proof of chunk bounds,
+    // eliminating hidden bounds-check branches in the hot loop.
     let stride = pixel_size * 2;
-    for (i, yuyv) in data.chunks_exact(4).enumerate() {
+    for (yuyv, out) in data.chunks_exact(4).zip(dest.chunks_exact_mut(stride)) {
         let y1 = i32::from(yuyv[0]);
         let u = i32::from(yuyv[1]);
         let y2 = i32::from(yuyv[2]);
@@ -1492,22 +1494,21 @@ pub fn buf_yuyv422_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<()
 
         let d = u - 128;
         let e = v - 128;
-        let base = i * stride;
 
         let c1 = (y1 - 16) * 298;
-        dest[base] = ((c1 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
-        dest[base + 1] = ((c1 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
-        dest[base + 2] = ((c1 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
+        out[0] = ((c1 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
+        out[1] = ((c1 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
+        out[2] = ((c1 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
         if rgba {
-            dest[base + 3] = 255;
+            out[3] = 255;
         }
 
         let c2 = (y2 - 16) * 298;
-        dest[base + pixel_size] = ((c2 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
-        dest[base + pixel_size + 1] = ((c2 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
-        dest[base + pixel_size + 2] = ((c2 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
+        out[pixel_size] = ((c2 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
+        out[pixel_size + 1] = ((c2 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
+        out[pixel_size + 2] = ((c2 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
         if rgba {
-            dest[base + pixel_size + 3] = 255;
+            out[pixel_size + 3] = 255;
         }
     }
 
