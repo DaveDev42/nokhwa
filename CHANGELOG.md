@@ -8,6 +8,7 @@
 - Moved `CaptureBackendTrait` impl from root crate wrappers into bindings crates (consistent with Linux pattern)
 - Replaced `flume` with `std::sync::mpsc` (API compatible but different error types)
 - Removed `camera-sync-impl` feature flag — `Camera` is now `Send` at the type level via `Box<dyn CaptureBackendTrait + Send>`. The `output-threaded` feature no longer pulls in `camera-sync-impl`. `Camera::with_custom()` now requires `Box<dyn CaptureBackendTrait + Send>` (callers passing a non-Send backend will get a compile error).
+- `NokhwaError` variant changes: `UnitializedError` renamed to `UninitializedError`; `GeneralError(String)`, `OpenStreamError(String)`, `ReadFrameError(String)`, `StreamShutdownError(String)` changed from tuple to struct variants with structured context fields
 
 ## Performance
 - CallbackCamera threading overhaul: eliminated simultaneous multi-lock, fixed memory ordering (SeqCst → Release/Acquire), added thread join in Drop
@@ -16,6 +17,8 @@
 - Removed unnecessary `Vec::default()` allocations in CallbackCamera
 
 ## Refactoring
+- **Restructured error types**: replaced `String`-based variants (`GeneralError`, `OpenStreamError`, `ReadFrameError`, `StreamShutdownError`) with structured fields (`backend: Option<ApiBackend>`, `format: Option<FrameFormat>`). Binding crates now populate context. Added helper constructors for backwards compatibility.
+- Fixed `UnitializedError` typo → `UninitializedError`
 - **macOS: migrated from `objc`/`cocoa-foundation` to `objc2`/`block2`** — eliminated all 186 deprecation warnings, reduced dependencies from 6 to 3
 - Split macOS bindings monolith (2,422 lines) into 6 focused modules (ffi, util, types, callback, device, session)
 - Fixed UB: `from_raw_parts_mut` → `from_raw_parts` in CVPixelBuffer callback
