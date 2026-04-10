@@ -33,8 +33,9 @@ features = [ "derive" ]
 optional = true
 
 [dependencies.wgpu]
-version  = "27"
-optional = true
+version          = "27"
+default-features = false
+optional         = true
 
 [dependencies.opencv]
 version  = "0.97"

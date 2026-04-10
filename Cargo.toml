@@ -46,15 +46,7 @@ input-opencv = [
     "opencv/clang-runtime",
     "nokhwa-core/opencv-mat",
 ]
-# input-jscam = [
-#     "web-sys",
-#     "js-sys",
-#     "wasm-bindgen-futures",
-#     "wasm-bindgen",
-#     "wasm-rs-async-executor",
-# ]
 output-wgpu = [ "wgpu", "nokhwa-core/wgpu-types" ]
-# output-wasm = [ "input-jscam" ]
 output-threaded  = [ "parking_lot", "camera-sync-impl" ]
 camera-sync-impl = [  ]
 # small-wasm = [  ]
@@ -88,8 +80,9 @@ version          = "0.25"
 default-features = false
 
 [dependencies.wgpu]
-version  = "27"
-optional = true
+version          = "27"
+default-features = false
+optional         = true
 
 [dependencies.opencv]
 version          = "0.97"
@@ -117,58 +110,6 @@ optional = true
 
 [dependencies.parking_lot]
 version  = "0.12"
-optional = true
-
-[dependencies.web-sys]
-version = "0.3"
-features = [
-    "console",
-    "CanvasRenderingContext2d",
-    "CssStyleDeclaration",
-    "Document",
-    "Element",
-    "HtmlElement",
-    "HtmlVideoElement",
-    "HtmlCanvasElement",
-    "ImageData",
-    "MediaDevices",
-    "MediaDeviceInfo",
-    "MediaDeviceKind",
-    "MediaStreamConstraints",
-    "MediaTrackSupportedConstraints",
-    "MediaStream",
-    "MediaStreamTrack",
-    "MediaTrackSettings",
-    "MediaTrackConstraints",
-    "MediaStreamTrackState",
-    "MimeType",
-    "MimeTypeArray",
-    "Navigator",
-    "Node",
-    "Permissions",
-    "PermissionDescriptor",
-    "PermissionState",
-    "PermissionStatus",
-    "Plugin",
-    "PluginArray",
-    "Window",
-]
-optional = true
-
-[dependencies.js-sys]
-version  = "0.3"
-optional = true
-
-[dependencies.wasm-bindgen]
-version  = "0.2"
-optional = true
-
-[dependencies.wasm-bindgen-futures]
-version  = "0.4"
-optional = true
-
-[dependencies.wasm-rs-async-executor]
-version  = "0.9"
 optional = true
 
 [package.metadata.docs.rs]
