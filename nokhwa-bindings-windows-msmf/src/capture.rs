@@ -254,12 +254,15 @@ impl CaptureBackendTrait for MediaFoundationCaptureDevice {
         self.refresh_camera_format()?;
         let self_ctrl = self.camera_format();
         let (bytes, capture_ts) = self.inner.raw_bytes()?;
-        Ok(Buffer::with_timestamp(
-            self_ctrl.resolution(),
-            &bytes,
-            self_ctrl.format(),
-            capture_ts.map(|ts| (ts, TimestampKind::MonotonicClock)),
-        ))
+        let ts = capture_ts.map(|ts| (ts, TimestampKind::MonotonicClock));
+        Ok(match bytes {
+            Cow::Owned(vec) => {
+                Buffer::from_vec_with_timestamp(self_ctrl.resolution(), vec, self_ctrl.format(), ts)
+            }
+            Cow::Borrowed(slice) => {
+                Buffer::with_timestamp(self_ctrl.resolution(), slice, self_ctrl.format(), ts)
+            }
+        })
     }
 
     fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {

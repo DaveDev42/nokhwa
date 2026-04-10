@@ -97,6 +97,22 @@ impl Buffer {
     /// when the caller already has owned data, as it avoids a redundant memory copy.
     #[must_use]
     #[inline]
+    pub fn from_vec(res: Resolution, buf: Vec<u8>, source_frame_format: FrameFormat) -> Self {
+        Self {
+            resolution: res,
+            data: Bytes::from(buf),
+            source_frame_format,
+            capture_timestamp: None,
+        }
+    }
+
+    /// Creates a new buffer taking ownership of a [`Vec<u8>`] without copying,
+    /// with a backend-provided capture timestamp.
+    ///
+    /// This is more efficient than [`with_timestamp`](Self::with_timestamp)
+    /// when the caller already has owned data, as it avoids a redundant memory copy.
+    #[must_use]
+    #[inline]
     pub fn from_vec_with_timestamp(
         res: Resolution,
         buf: Vec<u8>,
