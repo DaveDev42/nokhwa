@@ -1562,9 +1562,9 @@ pub fn buf_nv12_to_rgb(
         });
     }
 
-    let pxsize = if rgba { 4 } else { 3 };
+    let pxsize: usize = if rgba { 4 } else { 3 };
 
-    if out.len() != (pxsize * resolution.width() * resolution.height()) as usize {
+    if out.len() != pxsize * (resolution.width() * resolution.height()) as usize {
         return Err(NokhwaError::ProcessFrameError {
             src: FrameFormat::NV12,
             destination: "RGB".to_string(),
@@ -1572,12 +1572,10 @@ pub fn buf_nv12_to_rgb(
         });
     }
 
-    let rgba_size = if rgba { 4 } else { 3 };
-
     let y_section = (resolution.width() * resolution.height()) as usize;
 
     let width_usize = resolution.width() as usize;
-    let out_row_stride = width_usize * rgba_size;
+    let out_row_stride = width_usize * pxsize;
 
     for (hidx, horizontal_row) in data[0..y_section].chunks_exact(width_usize).enumerate() {
         let uv_row_offset = y_section + (hidx / 2) * width_usize;
@@ -1590,7 +1588,7 @@ pub fn buf_nv12_to_rgb(
 
             let y0 = column[0];
             let y1 = column[1];
-            let base_index = out_row_offset + cidx * rgba_size * 2;
+            let base_index = out_row_offset + cidx * pxsize * 2;
 
             // Inline BT.601 YUV→RGB: avoids intermediate [u8; 3]/[u8; 4] arrays
             let d = i32::from(u) - 128;
