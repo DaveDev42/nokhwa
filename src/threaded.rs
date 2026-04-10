@@ -339,8 +339,7 @@ impl CallbackCamera {
     /// # Errors
     /// This will error if the camera fails to capture a frame.
     pub fn poll_frame(&mut self) -> Result<Buffer, NokhwaError> {
-        let frame = self.camera.lock().frame()?;
-        let frame = Arc::new(frame);
+        let frame = Arc::new(self.camera.lock().frame()?);
         self.last_frame_captured.store(Arc::clone(&frame));
         Ok(Buffer::clone(&frame))
     }
@@ -354,8 +353,7 @@ impl CallbackCamera {
     /// # Errors
     /// This will error if the camera fails to capture a frame or the timeout elapses.
     pub fn poll_frame_timeout(&mut self, duration: Duration) -> Result<Buffer, NokhwaError> {
-        let frame = self.camera.lock().frame_timeout(duration)?;
-        let frame = Arc::new(frame);
+        let frame = Arc::new(self.camera.lock().frame_timeout(duration)?);
         self.last_frame_captured.store(Arc::clone(&frame));
         Ok(Buffer::clone(&frame))
     }
