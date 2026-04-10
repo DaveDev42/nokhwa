@@ -253,19 +253,36 @@ fn decode_nv12_to_rgb_known_values() {
 }
 
 #[test]
-fn decode_yuyv_to_luma_produces_correct_size() {
-    let yuyv = vec![100u8, 128, 200, 128]; // 2 pixels
+fn decode_yuyv_to_luma_correctness() {
+    // YUYV [Y0=100, U=128, Y1=200, V=128] -> 2 pixels
+    // U=V=128 (neutral chroma), so RGB ≈ (Y, Y, Y) and luma ≈ Y
+    let yuyv = vec![100u8, 128, 200, 128];
     let buf = Buffer::new(Resolution::new(2, 1), &yuyv, FrameFormat::YUYV);
     let img = buf
         .decode_image::<crate::pixel_format::LumaFormat>()
         .expect("YUYV -> LumaFormat should succeed");
     assert_eq!(img.width(), 2);
     assert_eq!(img.height(), 1);
-    assert_eq!(img.into_raw().len(), 2);
+    let raw = img.into_raw();
+    assert_eq!(raw.len(), 2);
+    // With neutral chroma, luma should be close to Y values.
+    // The YUV->RGB->avg pipeline introduces rounding, so allow ±20 tolerance.
+    assert!(
+        (80..=120).contains(&raw[0]),
+        "First pixel luma expected ~100, got {}",
+        raw[0]
+    );
+    assert!(
+        (180..=220).contains(&raw[1]),
+        "Second pixel luma expected ~200, got {}",
+        raw[1]
+    );
 }
 
 #[test]
-fn decode_nv12_to_luma_produces_correct_size() {
+fn decode_nv12_to_luma_correctness() {
+    // NV12: Y plane [50, 100, 150, 200], UV plane [128, 128] (neutral chroma)
+    // With neutral chroma, luma should be close to original Y values
     let nv12 = vec![50, 100, 150, 200, 128, 128];
     let buf = Buffer::new(Resolution::new(2, 2), &nv12, FrameFormat::NV12);
     let img = buf
@@ -273,7 +290,16 @@ fn decode_nv12_to_luma_produces_correct_size() {
         .expect("NV12 -> LumaFormat should succeed");
     assert_eq!(img.width(), 2);
     assert_eq!(img.height(), 2);
-    assert_eq!(img.into_raw().len(), 4);
+    let raw = img.into_raw();
+    assert_eq!(raw.len(), 4);
+    let expected_y = [50u8, 100, 150, 200];
+    // The NV12->RGB->avg pipeline introduces rounding, so allow ±20 tolerance.
+    for (i, (&actual, &expected)) in raw.iter().zip(expected_y.iter()).enumerate() {
+        assert!(
+            (actual as i16 - expected as i16).unsigned_abs() <= 20,
+            "Pixel {i}: luma expected ~{expected}, got {actual}"
+        );
+    }
 }
 
 // ===== write_output_buffer tests =====
@@ -306,6 +332,22 @@ fn decode_gray_to_luma_buffer() {
     buf.decode_image_to_buffer::<crate::pixel_format::LumaFormat>(&mut dest)
         .expect("write_output_buffer GRAY -> Luma should succeed");
     assert_eq!(dest, vec![42, 99]);
+}
+
+#[test]
+fn decode_yuyv_to_rgb_buffer() {
+    // YUYV neutral gray: Y=128, U=128, V=128 -> RGB ~(128, 128, 128) per pixel
+    let yuyv = vec![128u8, 128, 128, 128]; // 2 pixels
+    let buf = Buffer::new(Resolution::new(2, 1), &yuyv, FrameFormat::YUYV);
+    let mut dest = vec![0u8; 6]; // 2 pixels * 3 channels
+    buf.decode_image_to_buffer::<crate::pixel_format::RgbFormat>(&mut dest)
+        .expect("write_output_buffer YUYV -> RGB should succeed");
+    for (i, &channel) in dest.iter().enumerate() {
+        assert!(
+            (120..=136).contains(&channel),
+            "Channel {i}: expected ~128 but got {channel}"
+        );
+    }
 }
 
 // ===== Robustness tests: malformed data =====
@@ -420,14 +462,10 @@ fn decode_nv12_odd_resolution_returns_error() {
 #[test]
 fn decode_yuyv_zero_length_does_not_panic() {
     let buf = Buffer::new(Resolution::new(0, 0), &[], FrameFormat::YUYV);
-    // Verify this doesn't panic; either Ok or Err is acceptable
-    let result = buf.decode_image::<crate::pixel_format::RgbFormat>();
     // Zero-length YUYV with 0x0 resolution: YUYV produces empty output,
     // ImageBuffer::from_raw(0, 0, vec![]) succeeds
-    assert!(
-        result.is_ok() || result.is_err(),
-        "Should not panic on zero-length YUYV"
-    );
+    let result = buf.decode_image::<crate::pixel_format::RgbFormat>();
+    assert!(result.is_ok(), "0x0 YUYV decode should succeed");
 }
 
 #[test]
@@ -460,8 +498,8 @@ fn decode_rawrgb_to_luma_a_returns_error() {
 
 #[test]
 fn decode_rawbgr_to_luma_averages_channels() {
-    // BGR (10, 20, 30) -> Luma avg = (30 + 20 + 10) / 3 = 20
-    // (LumaFormat averages as (px[2]+px[1]+px[0])/3 for RAWBGR, same order as RAWRGB)
+    // BGR (10, 20, 30) -> Luma avg = (10 + 20 + 30) / 3 = 20
+    // (same arithmetic result as RAWRGB since addition is commutative)
     let bgr = vec![10u8, 20, 30];
     let buf = Buffer::new(Resolution::new(1, 1), &bgr, FrameFormat::RAWBGR);
     let img = buf
