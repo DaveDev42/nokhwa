@@ -284,9 +284,9 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
                     message: why.to_string(),
                     format: Some(cfmt.format()),
                 })?;
-        let buffer = Buffer::with_timestamp(
+        let buffer = Buffer::from_vec_with_timestamp(
             cfmt.resolution(),
-            &bytes,
+            bytes,
             cfmt.format(),
             capture_ts.map(|ts| (ts, TimestampKind::Presentation)),
         );
