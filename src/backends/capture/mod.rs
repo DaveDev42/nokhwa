@@ -16,7 +16,7 @@
 
 #[cfg(all(feature = "input-v4l", target_os = "linux"))]
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-v4l")))]
-pub use nokhwa_bindings_linux::V4LCaptureDevice;
+pub use nokhwa_bindings_linux_v4l::V4LCaptureDevice;
 #[cfg(any(
     all(
         feature = "input-avfoundation",
@@ -29,13 +29,13 @@ pub use nokhwa_bindings_linux::V4LCaptureDevice;
     )
 ))]
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-avfoundation")))]
-pub use nokhwa_bindings_macos::AVFoundationCaptureDevice;
+pub use nokhwa_bindings_macos_avfoundation::AVFoundationCaptureDevice;
 #[cfg(any(
     all(feature = "input-msmf", target_os = "windows"),
     all(feature = "docs-only", feature = "docs-nolink", feature = "input-msmf")
 ))]
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-msmf")))]
-pub use nokhwa_bindings_windows::MediaFoundationCaptureDevice;
+pub use nokhwa_bindings_windows_msmf::MediaFoundationCaptureDevice;
 #[cfg(feature = "input-opencv")]
 mod opencv_backend;
 #[cfg(feature = "input-opencv")]
