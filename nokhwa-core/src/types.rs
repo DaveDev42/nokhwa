@@ -1485,8 +1485,11 @@ pub fn buf_yuyv422_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<()
     // intermediate array allocations and iterator overhead on high-resolution frames.
     // Using chunks_exact_mut + zip gives the compiler static proof of chunk bounds,
     // eliminating hidden bounds-check branches in the hot loop.
-    let stride = pixel_size * 2;
-    for (yuyv, out) in data.chunks_exact(4).zip(dest.chunks_exact_mut(stride)) {
+    let out_pair_size = pixel_size * 2;
+    for (yuyv, out) in data
+        .chunks_exact(4)
+        .zip(dest.chunks_exact_mut(out_pair_size))
+    {
         let y1 = i32::from(yuyv[0]);
         let u = i32::from(yuyv[1]);
         let y2 = i32::from(yuyv[2]);
@@ -1499,6 +1502,7 @@ pub fn buf_yuyv422_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<()
         out[0] = ((c1 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
         out[1] = ((c1 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
         out[2] = ((c1 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
+        // `rgba` is loop-invariant; LLVM hoists this branch out of the loop.
         if rgba {
             out[3] = 255;
         }
@@ -1511,6 +1515,12 @@ pub fn buf_yuyv422_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<()
             out[pixel_size + 3] = 255;
         }
     }
+
+    debug_assert_eq!(
+        data.chunks_exact(4).len(),
+        dest.chunks_exact(out_pair_size).len(),
+        "YUYV input and output chunk counts must match"
+    );
 
     Ok(())
 }
