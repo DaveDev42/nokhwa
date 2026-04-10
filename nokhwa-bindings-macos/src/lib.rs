@@ -25,6 +25,8 @@
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod callback;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
+mod capture;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod device;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod ffi;
@@ -48,6 +50,8 @@ pub use device::{
 pub use ffi::*;
 
 // Re-export typed AVFoundation types for downstream use
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+pub use capture::AVFoundationCaptureDevice;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use objc2::rc::Retained;
 #[cfg(any(target_os = "macos", target_os = "ios"))]

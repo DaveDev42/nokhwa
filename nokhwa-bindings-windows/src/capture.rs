@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-use nokhwa_bindings_windows::wmf::MediaFoundationDevice;
+use crate::wmf::MediaFoundationDevice;
 use nokhwa_core::{
     buffer::Buffer,
     error::NokhwaError,

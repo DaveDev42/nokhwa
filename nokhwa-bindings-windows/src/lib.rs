@@ -1352,3 +1352,8 @@ pub mod wmf {
         fn drop(&mut self) {}
     }
 }
+
+#[cfg(all(windows, not(feature = "docs-only")))]
+mod capture;
+#[cfg(all(windows, not(feature = "docs-only")))]
+pub use capture::MediaFoundationCaptureDevice;
