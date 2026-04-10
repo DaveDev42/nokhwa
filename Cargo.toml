@@ -67,7 +67,6 @@ device-test = [  ]
 
 [dependencies]
 thiserror = "2.0"
-paste     = "1.0"
 
 [dependencies.nokhwa-core]
 path = "nokhwa-core"
