@@ -605,7 +605,8 @@ fn verify_setter_integer() {
 
 #[test]
 fn verify_setter_integer_zero_step() {
-    // When step == 0, verify_setter returns true unconditionally.
+    // When step == 0, verify_setter returns true unconditionally —
+    // even for mismatched types (step==0 bypasses type checking).
     let desc = ControlValueDescription::Integer {
         value: 50,
         default: 50,
@@ -883,7 +884,7 @@ fn control_value_roundtrip_none() {
 }
 
 #[test]
-fn known_camera_control_all_variants_display_roundtrip() {
+fn known_camera_control_all_variants_display_non_empty() {
     let controls = [
         KnownCameraControl::Brightness,
         KnownCameraControl::Contrast,

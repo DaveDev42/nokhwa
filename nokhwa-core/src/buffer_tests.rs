@@ -425,6 +425,19 @@ fn decode_gray_wrong_dest_buffer_size_returns_error() {
 }
 
 #[test]
+fn decode_yuyv_wrong_dest_buffer_size_returns_error() {
+    let yuyv = vec![128u8, 128, 128, 128]; // 2 pixels of YUYV
+    let buf = Buffer::new(Resolution::new(2, 1), &yuyv, FrameFormat::YUYV);
+    // Correct dest size is 6 (2 pixels * 3 RGB channels); give 4 instead
+    let mut dest = vec![0u8; 4];
+    let result = buf.decode_image_to_buffer::<crate::pixel_format::RgbFormat>(&mut dest);
+    assert!(
+        result.is_err(),
+        "YUYV with wrong destination buffer size should error"
+    );
+}
+
+#[test]
 fn decode_mjpeg_empty_to_luma_returns_error() {
     let buf = Buffer::new(Resolution::new(1, 1), &[], FrameFormat::MJPEG);
     let result = buf.decode_image::<crate::pixel_format::LumaFormat>();
@@ -499,7 +512,7 @@ fn decode_rawrgb_to_luma_a_returns_error() {
 #[test]
 fn decode_rawbgr_to_luma_averages_channels() {
     // BGR (10, 20, 30) -> Luma avg = (10 + 20 + 30) / 3 = 20
-    // (same arithmetic result as RAWRGB since addition is commutative)
+    // Values intentionally chosen so channel order doesn't affect the average
     let bgr = vec![10u8, 20, 30];
     let buf = Buffer::new(Resolution::new(1, 1), &bgr, FrameFormat::RAWBGR);
     let img = buf
@@ -542,13 +555,30 @@ fn decode_nv12_to_rgba_known_values() {
 }
 
 #[test]
-fn decode_yuyv_to_luma_a_produces_correct_size() {
-    let yuyv = vec![100u8, 128, 200, 128]; // 2 pixels
+fn decode_yuyv_to_luma_a_correctness() {
+    // YUYV [Y0=100, U=128, Y1=200, V=128] -> 2 LumaA pixels
+    // With neutral chroma, luma ≈ Y, alpha = 255
+    let yuyv = vec![100u8, 128, 200, 128];
     let buf = Buffer::new(Resolution::new(2, 1), &yuyv, FrameFormat::YUYV);
     let img = buf
         .decode_image::<crate::pixel_format::LumaAFormat>()
         .expect("YUYV -> LumaAFormat should succeed");
     assert_eq!(img.width(), 2);
     assert_eq!(img.height(), 1);
-    assert_eq!(img.into_raw().len(), 4); // 2 pixels * 2 channels (luma + alpha)
+    let raw = img.into_raw();
+    assert_eq!(raw.len(), 4); // 2 pixels * 2 channels (luma + alpha)
+                              // Check alpha channels are 255
+    assert_eq!(raw[1], 255, "First pixel alpha should be 255");
+    assert_eq!(raw[3], 255, "Second pixel alpha should be 255");
+    // Check luma values are close to Y inputs (±20 for YUV->RGB->avg rounding)
+    assert!(
+        (80..=120).contains(&raw[0]),
+        "First pixel luma expected ~100, got {}",
+        raw[0]
+    );
+    assert!(
+        (180..=220).contains(&raw[2]),
+        "Second pixel luma expected ~200, got {}",
+        raw[2]
+    );
 }
