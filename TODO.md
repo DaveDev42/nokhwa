@@ -16,7 +16,7 @@
 
 ## Performance
 - [ ] Explore `unsafe get_unchecked` for YUYV/NV12 inner loops — SIMD fallback and NV12 scalar paths use safe indexing. Benchmark first; only apply if measurable gain.
-- [ ] Inline `yuyv444_to_rgb` in NV12 decoder — same optimization pattern as YUYV (#58). The NV12 scalar path still calls the helper function with intermediate `[u8; 3]` array allocation per pixel.
+- [x] ~~Inline `yuyv444_to_rgb` in NV12 decoder — same optimization pattern as YUYV (#58).~~
 
 ## Backlog
 - [ ] Re-implement GStreamer backend (cross-platform, previously 839 lines)

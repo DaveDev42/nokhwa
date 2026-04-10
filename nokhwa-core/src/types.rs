@@ -1526,8 +1526,8 @@ pub fn nv12_to_rgb(
     data: &[u8],
     rgba: bool,
 ) -> Result<Vec<u8>, NokhwaError> {
-    let pxsize = if rgba { 4 } else { 3 };
-    let mut dest = vec![0; (pxsize * resolution.width() * resolution.height()) as usize];
+    let pxsize: usize = if rgba { 4 } else { 3 };
+    let mut dest = vec![0; pxsize * (resolution.width() * resolution.height()) as usize];
     buf_nv12_to_rgb(resolution, data, &mut dest, rgba)?;
     Ok(dest)
 }
@@ -1590,7 +1590,8 @@ pub fn buf_nv12_to_rgb(
             let y1 = column[1];
             let base_index = out_row_offset + cidx * pxsize * 2;
 
-            // Inline BT.601 YUV→RGB: avoids intermediate [u8; 3]/[u8; 4] arrays
+            // Inline BT.601 YUV→RGB: avoids intermediate [u8; 3]/[u8; 4] arrays.
+            // d/e = chroma offsets, c298_N = scaled luma for pixel N.
             let d = i32::from(u) - 128;
             let e = i32::from(v) - 128;
 
