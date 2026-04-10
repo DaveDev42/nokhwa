@@ -106,27 +106,23 @@ unsafe fn bgr_to_rgb_ssse3(src: &[u8], dst: &mut [u8]) {
     // Shuffle mask: swap bytes within each 3-byte group for 5 pixels (15 bytes)
     let shuffle = _mm_setr_epi8(2, 1, 0, 5, 4, 3, 8, 7, 6, 11, 10, 9, 14, 13, 12, -1);
 
-    let simd_end = len - (len % 15);
+    // Each iteration loads 16 bytes but only uses 15, so we need at least 16
+    // readable bytes from the start of every chunk. Compute the last safe
+    // start index: we can process a chunk starting at idx when idx + 16 <= len.
+    let simd_limit = len.saturating_sub(15);
     let mut idx = 0;
 
-    while idx < simd_end {
-        // Load 16 bytes via _mm_loadu_si128 (we only use 15). The guard
-        // ensures idx+16 <= len so the read stays within the slice bounds.
-        if idx + 16 <= len {
-            let vec = _mm_loadu_si128(src.as_ptr().add(idx).cast());
-            let shuffled = _mm_shuffle_epi8(vec, shuffle);
-            // Store only 15 bytes — can't use _mm_storeu for partial; copy manually
-            let mut tmp = [0u8; 16];
-            _mm_storeu_si128(tmp.as_mut_ptr().cast(), shuffled);
-            dst[idx..idx + 15].copy_from_slice(&tmp[..15]);
-        } else {
-            bgr_to_rgb_scalar(&src[idx..], &mut dst[idx..]);
-            return;
-        }
+    while idx < simd_limit {
+        let vec = _mm_loadu_si128(src.as_ptr().add(idx).cast());
+        let shuffled = _mm_shuffle_epi8(vec, shuffle);
+        // Store only 15 bytes — can't use _mm_storeu for partial; copy manually
+        let mut tmp = [0u8; 16];
+        _mm_storeu_si128(tmp.as_mut_ptr().cast(), shuffled);
+        dst[idx..idx + 15].copy_from_slice(&tmp[..15]);
         idx += 15;
     }
 
-    bgr_to_rgb_scalar(&src[simd_end..], &mut dst[simd_end..]);
+    bgr_to_rgb_scalar(&src[idx..], &mut dst[idx..]);
 }
 
 // ──────────────────────────────────────────────
