@@ -1,7 +1,7 @@
 # TODO
 
 ## High Priority
-- [ ] Fix `CallbackCamera` Drop panic — `stop_stream()` failure causes `unwrap()` in destructor, which can lead to double panic and abort. Should log and ignore instead.
+- [x] ~~Fix `CallbackCamera` Drop panic~~ — Already fixed: `Drop` uses `let _ = self.stop_stream()` and `stop_stream()` uses `if let Ok(...)` for mutex access. No `unwrap()` in destructor path.
 - [ ] Remove `unsafe impl Send for Camera` (`camera-sync-impl` feature) — backend types should satisfy `Send` at the type level, or `Camera` should be made generic to enforce it at compile time.
 
 ## Medium Priority
