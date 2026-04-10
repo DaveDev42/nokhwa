@@ -404,9 +404,9 @@ impl Camera {
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                 Err(NokhwaError::TimeoutError(duration))
             }
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(
-                NokhwaError::ReadFrameError("frame capture thread panicked".to_string()),
-            ),
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                Err(NokhwaError::read_frame("frame capture thread panicked"))
+            }
         };
         let _ = handle.join();
         result

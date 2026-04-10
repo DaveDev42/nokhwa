@@ -358,7 +358,7 @@ impl CallbackCamera {
         *self
             .last_frame_captured
             .lock()
-            .map_err(|why| NokhwaError::GeneralError(why.to_string()))? = frame.clone();
+            .map_err(|why| NokhwaError::general(why.to_string()))? = frame.clone();
         Ok(frame)
     }
 
