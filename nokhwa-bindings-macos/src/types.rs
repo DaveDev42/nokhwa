@@ -1,16 +1,17 @@
-use crate::ffi::{
-    AVMediaTypeAudio, AVMediaTypeClosedCaption, AVMediaTypeDepthData, AVMediaTypeMetadata,
-    AVMediaTypeMetadataObject, AVMediaTypeMuxed, AVMediaTypeSubtitle, AVMediaTypeText,
-    AVMediaTypeTimecode, AVMediaTypeVideo,
-};
-use crate::util::{compare_ns_string, nsstr_to_str, str_to_nsstr};
 use nokhwa_core::error::NokhwaError;
-use objc2::encode::{Encode, Encoding};
-use objc2::runtime::AnyObject;
-use std::convert::TryFrom;
+use objc2_av_foundation::{
+    AVCaptureDeviceType, AVCaptureDeviceTypeBuiltInDualCamera,
+    AVCaptureDeviceTypeBuiltInDualWideCamera, AVCaptureDeviceTypeBuiltInTelephotoCamera,
+    AVCaptureDeviceTypeBuiltInTripleCamera, AVCaptureDeviceTypeBuiltInTrueDepthCamera,
+    AVCaptureDeviceTypeBuiltInUltraWideCamera, AVCaptureDeviceTypeBuiltInWideAngleCamera,
+    AVCaptureDeviceTypeExternal, AVMediaType, AVMediaTypeAudio, AVMediaTypeClosedCaption,
+    AVMediaTypeDepthData, AVMediaTypeMetadata, AVMediaTypeMetadataObject, AVMediaTypeMuxed,
+    AVMediaTypeSubtitle, AVMediaTypeText, AVMediaTypeTimecode, AVMediaTypeVideo,
+};
+use objc2_foundation::NSString;
 
 #[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
-pub enum AVCaptureDeviceType {
+pub enum AVCaptureDeviceTypeLocal {
     Dual,
     DualWide,
     Triple,
@@ -21,39 +22,25 @@ pub enum AVCaptureDeviceType {
     External,
 }
 
-impl From<AVCaptureDeviceType> for *mut AnyObject {
-    fn from(device_type: AVCaptureDeviceType) -> Self {
-        match device_type {
-            AVCaptureDeviceType::Dual => str_to_nsstr("AVCaptureDeviceTypeBuiltInDualCamera"),
-            AVCaptureDeviceType::DualWide => {
-                str_to_nsstr("AVCaptureDeviceTypeBuiltInDualWideCamera")
+impl AVCaptureDeviceTypeLocal {
+    pub fn as_av_capture_device_type(self) -> &'static AVCaptureDeviceType {
+        unsafe {
+            match self {
+                Self::Dual => AVCaptureDeviceTypeBuiltInDualCamera,
+                Self::DualWide => AVCaptureDeviceTypeBuiltInDualWideCamera,
+                Self::Triple => AVCaptureDeviceTypeBuiltInTripleCamera,
+                Self::WideAngle => AVCaptureDeviceTypeBuiltInWideAngleCamera,
+                Self::UltraWide => AVCaptureDeviceTypeBuiltInUltraWideCamera,
+                Self::Telephoto => AVCaptureDeviceTypeBuiltInTelephotoCamera,
+                Self::TrueDepth => AVCaptureDeviceTypeBuiltInTrueDepthCamera,
+                Self::External => AVCaptureDeviceTypeExternal,
             }
-            AVCaptureDeviceType::Triple => str_to_nsstr("AVCaptureDeviceTypeBuiltInTripleCamera"),
-            AVCaptureDeviceType::WideAngle => {
-                str_to_nsstr("AVCaptureDeviceTypeBuiltInWideAngleCamera")
-            }
-            AVCaptureDeviceType::UltraWide => {
-                str_to_nsstr("AVCaptureDeviceTypeBuiltInUltraWideCamera")
-            }
-            AVCaptureDeviceType::Telephoto => {
-                str_to_nsstr("AVCaptureDeviceTypeBuiltInTelephotoCamera")
-            }
-            AVCaptureDeviceType::TrueDepth => {
-                str_to_nsstr("AVCaptureDeviceTypeBuiltInTrueDepthCamera")
-            }
-            AVCaptureDeviceType::External => str_to_nsstr("AVCaptureDeviceTypeExternal"),
         }
     }
 }
 
-impl AVCaptureDeviceType {
-    pub fn into_ns_str(self) -> *mut AnyObject {
-        <*mut AnyObject>::from(self)
-    }
-}
-
 #[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
-pub enum AVMediaType {
+pub enum AVMediaTypeLocal {
     Audio,
     ClosedCaption,
     DepthData,
@@ -66,76 +53,61 @@ pub enum AVMediaType {
     Video,
 }
 
-impl From<AVMediaType> for *mut AnyObject {
-    fn from(media_type: AVMediaType) -> Self {
-        match media_type {
-            AVMediaType::Audio => unsafe { AVMediaTypeAudio.0 },
-            AVMediaType::ClosedCaption => unsafe { AVMediaTypeClosedCaption.0 },
-            AVMediaType::DepthData => unsafe { AVMediaTypeDepthData.0 },
-            AVMediaType::Metadata => unsafe { AVMediaTypeMetadata.0 },
-            AVMediaType::MetadataObject => unsafe { AVMediaTypeMetadataObject.0 },
-            AVMediaType::Muxed => unsafe { AVMediaTypeMuxed.0 },
-            AVMediaType::Subtitle => unsafe { AVMediaTypeSubtitle.0 },
-            AVMediaType::Text => unsafe { AVMediaTypeText.0 },
-            AVMediaType::Timecode => unsafe { AVMediaTypeTimecode.0 },
-            AVMediaType::Video => unsafe { AVMediaTypeVideo.0 },
-        }
-    }
-}
-
-impl TryFrom<*mut AnyObject> for AVMediaType {
-    type Error = NokhwaError;
-
-    fn try_from(value: *mut AnyObject) -> Result<Self, Self::Error> {
+impl AVMediaTypeLocal {
+    pub fn to_av_media_type(self) -> &'static AVMediaType {
+        // unwrap(): objc2 wraps extern statics as Option<&T> for weak-linking support,
+        // but these AVMediaType constants are always available on supported Apple platforms.
         unsafe {
-            if compare_ns_string(value, (AVMediaTypeAudio).clone()) {
-                Ok(AVMediaType::Audio)
-            } else if compare_ns_string(value, (AVMediaTypeClosedCaption).clone()) {
-                Ok(AVMediaType::ClosedCaption)
-            } else if compare_ns_string(value, (AVMediaTypeDepthData).clone()) {
-                Ok(AVMediaType::DepthData)
-            } else if compare_ns_string(value, (AVMediaTypeMetadata).clone()) {
-                Ok(AVMediaType::Metadata)
-            } else if compare_ns_string(value, (AVMediaTypeMetadataObject).clone()) {
-                Ok(AVMediaType::MetadataObject)
-            } else if compare_ns_string(value, (AVMediaTypeMuxed).clone()) {
-                Ok(AVMediaType::Muxed)
-            } else if compare_ns_string(value, (AVMediaTypeSubtitle).clone()) {
-                Ok(AVMediaType::Subtitle)
-            } else if compare_ns_string(value, (AVMediaTypeText).clone()) {
-                Ok(AVMediaType::Text)
-            } else if compare_ns_string(value, (AVMediaTypeTimecode).clone()) {
-                Ok(AVMediaType::Timecode)
-            } else if compare_ns_string(value, (AVMediaTypeVideo).clone()) {
-                Ok(AVMediaType::Video)
-            } else {
-                let name = nsstr_to_str(value);
-                Err(NokhwaError::GetPropertyError {
-                    property: "AVMediaType".to_string(),
-                    error: format!("Invalid AVMediaType {name}"),
-                })
+            match self {
+                Self::Audio => AVMediaTypeAudio.unwrap(),
+                Self::ClosedCaption => AVMediaTypeClosedCaption.unwrap(),
+                Self::DepthData => AVMediaTypeDepthData.unwrap(),
+                Self::Metadata => AVMediaTypeMetadata.unwrap(),
+                Self::MetadataObject => AVMediaTypeMetadataObject.unwrap(),
+                Self::Muxed => AVMediaTypeMuxed.unwrap(),
+                Self::Subtitle => AVMediaTypeSubtitle.unwrap(),
+                Self::Text => AVMediaTypeText.unwrap(),
+                Self::Timecode => AVMediaTypeTimecode.unwrap(),
+                Self::Video => AVMediaTypeVideo.unwrap(),
             }
         }
     }
 }
 
-impl AVMediaType {
-    pub fn into_ns_str(self) -> *mut AnyObject {
-        <*mut AnyObject>::from(self)
+impl TryFrom<&NSString> for AVMediaTypeLocal {
+    type Error = NokhwaError;
+
+    fn try_from(value: &NSString) -> Result<Self, Self::Error> {
+        // unwrap(): see comment in to_av_media_type() — always non-null on supported platforms.
+        unsafe {
+            if value.isEqualToString(AVMediaTypeAudio.unwrap()) {
+                Ok(Self::Audio)
+            } else if value.isEqualToString(AVMediaTypeClosedCaption.unwrap()) {
+                Ok(Self::ClosedCaption)
+            } else if value.isEqualToString(AVMediaTypeDepthData.unwrap()) {
+                Ok(Self::DepthData)
+            } else if value.isEqualToString(AVMediaTypeMetadata.unwrap()) {
+                Ok(Self::Metadata)
+            } else if value.isEqualToString(AVMediaTypeMetadataObject.unwrap()) {
+                Ok(Self::MetadataObject)
+            } else if value.isEqualToString(AVMediaTypeMuxed.unwrap()) {
+                Ok(Self::Muxed)
+            } else if value.isEqualToString(AVMediaTypeSubtitle.unwrap()) {
+                Ok(Self::Subtitle)
+            } else if value.isEqualToString(AVMediaTypeText.unwrap()) {
+                Ok(Self::Text)
+            } else if value.isEqualToString(AVMediaTypeTimecode.unwrap()) {
+                Ok(Self::Timecode)
+            } else if value.isEqualToString(AVMediaTypeVideo.unwrap()) {
+                Ok(Self::Video)
+            } else {
+                Err(NokhwaError::GetPropertyError {
+                    property: "AVMediaType".to_string(),
+                    error: format!("Invalid AVMediaType {value}"),
+                })
+            }
+        }
     }
-}
-
-#[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
-#[repr(isize)]
-pub enum AVCaptureDevicePosition {
-    Unspecified = 0,
-    Back = 1,
-    Front = 2,
-}
-
-// SAFETY: AVCaptureDevicePosition is repr(isize), same encoding as NSInteger.
-unsafe impl Encode for AVCaptureDevicePosition {
-    const ENCODING: Encoding = isize::ENCODING;
 }
 
 #[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
@@ -145,9 +117,4 @@ pub enum AVAuthorizationStatus {
     Restricted = 1,
     Denied = 2,
     Authorized = 3,
-}
-
-// SAFETY: AVAuthorizationStatus is repr(isize), same encoding as NSInteger.
-unsafe impl Encode for AVAuthorizationStatus {
-    const ENCODING: Encoding = isize::ENCODING;
 }

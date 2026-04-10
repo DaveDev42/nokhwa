@@ -1,4 +1,3 @@
-use crate::ffi::AVMediaTypeVideo;
 use crate::ffi::CMSampleBufferRef;
 use crate::ffi::{
     dispatch_queue_create, dispatch_release, CMSampleBufferGetImageBuffer,
@@ -6,12 +5,13 @@ use crate::ffi::{
     CVPixelBufferGetDataSize, CVPixelBufferGetPixelFormatType, CVPixelBufferLockBaseAddress,
     CVPixelBufferUnlockBaseAddress, DispatchQueue,
 };
-use crate::types::{AVAuthorizationStatus, AVMediaType};
+use crate::types::{AVAuthorizationStatus, AVMediaTypeLocal};
 use crate::util::raw_fcc_to_frameformat;
 use block2::RcBlock;
 use flume::Sender;
 use nokhwa_core::{error::NokhwaError, types::FrameFormat};
 use objc2::runtime::{AnyClass, AnyObject, AnyProtocol, Bool, ClassBuilder, Sel};
+use objc2_av_foundation::{AVCaptureDevice, AVMediaTypeVideo};
 use std::{
     ffi::{c_void, CStr},
     sync::{Arc, LazyLock},
@@ -188,7 +188,7 @@ static CALLBACK_CLASS: LazyLock<&'static AnyClass> = LazyLock::new(|| {
 });
 
 pub fn request_permission_with_callback(callback: impl Fn(bool) + Send + Sync + 'static) {
-    let cls = objc2::class!(AVCaptureDevice);
+    let media_type = unsafe { AVMediaTypeVideo.unwrap() };
 
     let wrapper = move |b: Bool| {
         callback(b.as_bool());
@@ -197,14 +197,22 @@ pub fn request_permission_with_callback(callback: impl Fn(bool) + Send + Sync + 
     let objc_fn_pass = RcBlock::new(wrapper);
 
     unsafe {
-        let _: () = objc2::msg_send![cls, requestAccessForMediaType: (AVMediaTypeVideo.clone()), completionHandler: &*objc_fn_pass];
+        AVCaptureDevice::requestAccessForMediaType_completionHandler(media_type, &objc_fn_pass);
     }
 }
 
 pub fn current_authorization_status() -> AVAuthorizationStatus {
-    let cls = objc2::class!(AVCaptureDevice);
-    unsafe {
-        objc2::msg_send![cls, authorizationStatusForMediaType:AVMediaType::Video.into_ns_str()]
+    let media_type = AVMediaTypeLocal::Video.to_av_media_type();
+    let status = unsafe { AVCaptureDevice::authorizationStatusForMediaType(media_type) };
+    // Map from objc2_av_foundation::AVAuthorizationStatus(NSInteger) to our local enum.
+    // Values match Apple's AVAuthorizationStatus enum:
+    // https://developer.apple.com/documentation/avfoundation/avauthorizationstatus
+    match status.0 {
+        0 => AVAuthorizationStatus::NotDetermined,
+        1 => AVAuthorizationStatus::Restricted,
+        2 => AVAuthorizationStatus::Denied,
+        3 => AVAuthorizationStatus::Authorized,
+        _ => AVAuthorizationStatus::NotDetermined,
     }
 }
 

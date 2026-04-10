@@ -25,8 +25,6 @@
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod callback;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-mod controls;
-#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod device;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod ffi;
@@ -43,17 +41,18 @@ pub use callback::{
 };
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use device::{
-    get_raw_device_info, query_avfoundation, AVCaptureDevice, AVCaptureDeviceFormat,
-    AVFrameRateRange,
+    get_raw_device_info, query_avfoundation, AVCaptureDeviceFormatWrapper, AVCaptureDeviceWrapper,
+    AVFrameRateRangeWrapper,
 };
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use ffi::*;
+
+// Re-export typed AVFoundation types for downstream use
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-pub use session::{
-    AVCaptureDeviceDiscoverySession, AVCaptureDeviceInput, AVCaptureSession,
-    AVCaptureVideoDataOutput,
-};
+pub use objc2::rc::Retained;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-pub use types::{AVAuthorizationStatus, AVCaptureDevicePosition, AVCaptureDeviceType, AVMediaType};
+pub use objc2_av_foundation::{AVCaptureDeviceInput, AVCaptureSession, AVCaptureVideoDataOutput};
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+pub use types::{AVAuthorizationStatus, AVCaptureDeviceTypeLocal, AVMediaTypeLocal};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use util::{CompressionData, DataPipe};
