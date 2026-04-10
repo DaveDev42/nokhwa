@@ -57,4 +57,6 @@ pub enum NokhwaError {
     UnsupportedOperationError(ApiBackend),
     #[error("This operation is not implemented yet: {0}")]
     NotImplementedError(String),
+    #[error("Frame capture timed out after {0:?}")]
+    TimeoutError(std::time::Duration),
 }
