@@ -32,6 +32,7 @@ use std::time::Duration;
 /// This enum lets callers know what a [`Duration`] actually represents.
 #[derive(Clone, Copy, Debug, Hash, PartialOrd, Ord, PartialEq, Eq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
+#[non_exhaustive]
 pub enum TimestampKind {
     /// The timestamp represents when the frame was captured by the sensor.
     Capture,
@@ -74,6 +75,9 @@ impl Buffer {
     }
 
     /// Creates a new buffer with a [`&[u8]`] and a backend-provided capture timestamp.
+    ///
+    /// When `capture_timestamp` is `None`, `timestamp_kind` is ignored
+    /// (no timestamp means no associated kind).
     #[must_use]
     #[inline]
     pub fn with_timestamp(

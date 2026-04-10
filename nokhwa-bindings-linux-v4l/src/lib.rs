@@ -886,7 +886,7 @@ mod internal {
                             data,
                             cam_fmt.format(),
                             wall_ts,
-                            TimestampKind::MonotonicClock,
+                            TimestampKind::WallClock,
                         ))
                     }
                     Err(why) => Err(NokhwaError::ReadFrameError(why.to_string())),
