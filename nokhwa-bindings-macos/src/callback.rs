@@ -4,7 +4,7 @@ use crate::ffi::{
     dispatch_queue_create, dispatch_release, CMSampleBufferGetImageBuffer,
     CMSampleBufferGetPresentationTimeStamp, CVImageBufferRef, CVPixelBufferGetBaseAddress,
     CVPixelBufferGetDataSize, CVPixelBufferGetPixelFormatType, CVPixelBufferLockBaseAddress,
-    CVPixelBufferUnlockBaseAddress, NSObject,
+    CVPixelBufferUnlockBaseAddress, DispatchQueue,
 };
 use crate::types::{AVAuthorizationStatus, AVMediaType};
 use crate::util::raw_fcc_to_frameformat;
@@ -216,7 +216,7 @@ pub fn current_authorization_status() -> AVAuthorizationStatus {
 /// GCD dispatch queue associated with the AVCaptureSession.
 pub struct AVCaptureVideoCallback {
     pub(crate) delegate: *mut AnyObject,
-    pub(crate) queue: NSObject,
+    pub(crate) queue: DispatchQueue,
 }
 
 impl AVCaptureVideoCallback {
@@ -232,8 +232,7 @@ impl AVCaptureVideoCallback {
             let _: () = objc2::msg_send![delegate, setBufferPtr: buffer_as_ptr];
         }
 
-        let queue =
-            unsafe { dispatch_queue_create(device_spec.as_ptr(), NSObject(std::ptr::null_mut())) };
+        let queue = unsafe { dispatch_queue_create(device_spec.as_ptr(), std::ptr::null()) };
 
         Ok(AVCaptureVideoCallback { delegate, queue })
     }
@@ -242,7 +241,7 @@ impl AVCaptureVideoCallback {
         self.delegate
     }
 
-    pub fn queue(&self) -> &NSObject {
+    pub fn queue(&self) -> &DispatchQueue {
         &self.queue
     }
 }
@@ -256,7 +255,7 @@ impl Drop for AVCaptureVideoCallback {
         }
         if !self.queue.0.is_null() {
             unsafe {
-                dispatch_release(NSObject(self.queue.0));
+                dispatch_release(DispatchQueue(self.queue.0));
             }
         }
     }

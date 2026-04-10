@@ -110,13 +110,25 @@ extern "C" {
     pub fn CMFormatDescriptionGetMediaSubType(desc: CMFormatDescriptionRef) -> FourCharCode;
 }
 
+/// Opaque wrapper for GCD dispatch objects (not ObjC NSObjects).
+#[repr(transparent)]
+#[derive(Clone)]
+pub struct DispatchQueue(pub Id);
+
+// SAFETY: DispatchQueue is repr(transparent) over a raw pointer.
+unsafe impl Encode for DispatchQueue {
+    const ENCODING: Encoding = Encoding::Object;
+}
+
 // dispatch_queue_create / dispatch_release are libdispatch (GCD) symbols,
 // part of libSystem which is always linked on Apple platforms.
-#[allow(non_snake_case)]
 extern "C" {
-    pub fn dispatch_queue_create(label: *const std::os::raw::c_char, attr: NSObject) -> NSObject;
+    pub fn dispatch_queue_create(
+        label: *const std::os::raw::c_char,
+        attr: *const std::ffi::c_void,
+    ) -> DispatchQueue;
 
-    pub fn dispatch_release(object: NSObject);
+    pub fn dispatch_release(object: DispatchQueue);
 }
 
 #[allow(non_snake_case)]
@@ -177,8 +189,7 @@ unsafe impl Encode for AVCaptureWhiteBalanceGains {
     );
 }
 
-/// A local newtype wrapper around `CMTime` to implement `Encode`.
-/// This is needed because both `CMTime` and `Encode` are from external crates.
+/// Newtype wrapper around `CMTime` that implements `Encode` for ObjC messaging.
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone)]
 pub struct EncodableCMTime(pub CMTime);
