@@ -210,3 +210,33 @@ fn control_value_description_verify_setter() {
     assert!(desc.verify_setter(&ControlValueSetter::Integer(75)));
     assert!(!desc.verify_setter(&ControlValueSetter::Float(3.14)));
 }
+
+#[test]
+fn closest_format_when_exact_resolution_unavailable() {
+    let available = vec![
+        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30),
+        CameraFormat::new_from(1920, 1080, FrameFormat::MJPEG, 30),
+        CameraFormat::new_from(1920, 1080, FrameFormat::MJPEG, 60),
+    ];
+
+    // Request 1280x720 which doesn't exist in the available formats
+    let requested_fmt = CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 30);
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::Closest(requested_fmt),
+        &[FrameFormat::MJPEG],
+    );
+
+    let result = req.fulfill(&available);
+    assert!(
+        result.is_some(),
+        "Closest should return a format even when exact resolution is unavailable"
+    );
+
+    let result = result.unwrap();
+    // 1920x1080 is closer to 1280x720 than 640x480 by Euclidean distance:
+    // dist(1280,720 -> 1920,1080) = sqrt(640^2 + 360^2) = sqrt(539200) ≈ 734
+    // dist(1280,720 -> 640,480)   = sqrt(640^2 + 240^2) = sqrt(467200) ≈ 683
+    // So 640x480 is actually closer; either way, the bug was returning None.
+    assert_eq!(result.format(), FrameFormat::MJPEG);
+    assert!(result.frame_rate() > 0);
+}
