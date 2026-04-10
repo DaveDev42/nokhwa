@@ -448,21 +448,36 @@ fn figure_out_auto() -> Option<ApiBackend> {
     Some(cap)
 }
 
+/// Creates the appropriate backend for the given [`ApiBackend`] variant.
+///
+/// The caller must resolve [`ApiBackend::Auto`] before calling this function.
 fn create_backend(
     backend: ApiBackend,
     index: &CameraIndex,
     format: RequestedFormat,
 ) -> Result<Box<dyn CaptureBackendTrait>, NokhwaError> {
+    #[cfg(all(
+        feature = "input-avfoundation",
+        any(target_os = "macos", target_os = "ios")
+    ))]
+    use crate::backends::capture::AVFoundationCaptureDevice;
+    #[cfg(all(feature = "input-msmf", target_os = "windows"))]
+    use crate::backends::capture::MediaFoundationCaptureDevice;
+    #[cfg(feature = "input-opencv")]
+    use crate::backends::capture::OpenCvCaptureDevice;
+    #[cfg(all(feature = "input-v4l", target_os = "linux"))]
+    use crate::backends::capture::V4LCaptureDevice;
+
     match backend {
+        ApiBackend::Auto => Err(NokhwaError::NotImplementedError(
+            "ApiBackend::Auto must be resolved before creating a backend.".to_string(),
+        )),
+
         #[cfg(all(feature = "input-v4l", target_os = "linux"))]
-        ApiBackend::Video4Linux => {
-            use crate::backends::capture::V4LCaptureDevice;
-            Ok(Box::new(V4LCaptureDevice::new(index, format)?))
-        }
+        ApiBackend::Video4Linux => Ok(Box::new(V4LCaptureDevice::new(index, format)?)),
 
         #[cfg(all(feature = "input-msmf", target_os = "windows"))]
         ApiBackend::MediaFoundation => {
-            use crate::backends::capture::MediaFoundationCaptureDevice;
             Ok(Box::new(MediaFoundationCaptureDevice::new(index, format)?))
         }
 
@@ -470,16 +485,10 @@ fn create_backend(
             feature = "input-avfoundation",
             any(target_os = "macos", target_os = "ios")
         ))]
-        ApiBackend::AVFoundation => {
-            use crate::backends::capture::AVFoundationCaptureDevice;
-            Ok(Box::new(AVFoundationCaptureDevice::new(index, format)?))
-        }
+        ApiBackend::AVFoundation => Ok(Box::new(AVFoundationCaptureDevice::new(index, format)?)),
 
         #[cfg(feature = "input-opencv")]
-        ApiBackend::OpenCv => {
-            use crate::backends::capture::OpenCvCaptureDevice;
-            Ok(Box::new(OpenCvCaptureDevice::new(index, format)?))
-        }
+        ApiBackend::OpenCv => Ok(Box::new(OpenCvCaptureDevice::new(index, format)?)),
 
         _ => Err(NokhwaError::NotImplementedError(format!(
             "Backend {backend} is not available (not enabled or wrong platform)."
