@@ -51,7 +51,7 @@ input-opencv = [
     "nokhwa-core/opencv-mat",
 ]
 output-wgpu = [ "wgpu", "nokhwa-core/wgpu-types" ]
-output-threaded  = [ "parking_lot" ]
+output-threaded  = [ "parking_lot", "arc-swap" ]
 docs-only = [
     "input-native",
     "input-opencv",
@@ -106,6 +106,10 @@ optional = true
 
 [dependencies.parking_lot]
 version  = "0.12"
+optional = true
+
+[dependencies.arc-swap]
+version  = "1"
 optional = true
 
 [package.metadata.docs.rs]

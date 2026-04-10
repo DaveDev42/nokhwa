@@ -13,6 +13,7 @@
 ## Performance
 - Optimized NV12 decoder: pre-computed UV row offset and output row offset outside inner loop, consolidated UV indexing to eliminate redundant per-pixel division
 - CallbackCamera threading overhaul: eliminated simultaneous multi-lock, fixed memory ordering (SeqCst → Release/Acquire), added thread join in Drop
+- CallbackCamera: replaced `Mutex<Buffer>` last_frame with lock-free `ArcSwap`, reducing per-frame lock acquisitions from 3 to 1
 - Replaced `to_vec()` + sort allocations with zero-allocation `max_by_key` iterators in `RequestedFormat::fulfill()`
 - Deduplicated Windows Media Foundation format enumeration (~80 lines removed)
 - Removed unnecessary `Vec::default()` allocations in CallbackCamera
