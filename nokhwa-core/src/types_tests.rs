@@ -160,7 +160,7 @@ fn camera_info_getters_setters() {
 fn control_value_setter_accessors() {
     assert!(ControlValueSetter::None.as_none().is_some());
     assert_eq!(ControlValueSetter::Integer(42).as_integer(), Some(&42));
-    assert_eq!(ControlValueSetter::Float(3.14).as_float(), Some(&3.14));
+    assert_eq!(ControlValueSetter::Float(2.72).as_float(), Some(&2.72));
     assert_eq!(ControlValueSetter::Boolean(true).as_boolean(), Some(&true));
     assert_eq!(
         ControlValueSetter::String("hello".into()).as_str(),
@@ -175,7 +175,7 @@ fn control_value_setter_accessors() {
 #[test]
 fn control_value_setter_wrong_type_returns_none() {
     assert!(ControlValueSetter::Integer(42).as_float().is_none());
-    assert!(ControlValueSetter::Float(3.14).as_integer().is_none());
+    assert!(ControlValueSetter::Float(2.72).as_integer().is_none());
     assert!(ControlValueSetter::Boolean(true).as_str().is_none());
 }
 
@@ -208,7 +208,7 @@ fn control_value_description_verify_setter() {
         default: 50,
     };
     assert!(desc.verify_setter(&ControlValueSetter::Integer(75)));
-    assert!(!desc.verify_setter(&ControlValueSetter::Float(3.14)));
+    assert!(!desc.verify_setter(&ControlValueSetter::Float(2.72)));
 }
 
 #[test]
@@ -444,7 +444,7 @@ fn verify_setter_integer_range_zero_step_always_valid() {
         default: 50,
     };
     assert!(desc.verify_setter(&ControlValueSetter::Integer(42)));
-    assert!(desc.verify_setter(&ControlValueSetter::Float(3.14)));
+    assert!(desc.verify_setter(&ControlValueSetter::Float(2.72)));
 }
 
 #[test]
@@ -505,15 +505,28 @@ fn verify_setter_enum_checks_possible_values() {
 
 #[test]
 fn verify_setter_float_range_in_bounds() {
-    let desc = ControlValueDescription::FloatRange {
+    // Zero step bypasses all validation unconditionally.
+    let desc_zero_step = ControlValueDescription::FloatRange {
         min: 0.0,
         max: 1.0,
         value: 0.5,
         step: 0.0,
         default: 0.5,
     };
-    // step is 0.0, so any value in range should pass
-    assert!(desc.verify_setter(&ControlValueSetter::Float(0.75)));
+    assert!(desc_zero_step.verify_setter(&ControlValueSetter::Float(0.75)));
+    assert!(desc_zero_step.verify_setter(&ControlValueSetter::Float(999.0)));
+
+    // Non-zero step exercises the actual range-checking logic.
+    let desc_with_step = ControlValueDescription::FloatRange {
+        min: 0.0,
+        max: 1.0,
+        value: 0.5,
+        step: 0.5,
+        default: 0.0,
+    };
+    assert!(desc_with_step.verify_setter(&ControlValueSetter::Float(0.5)));
+    assert!(!desc_with_step.verify_setter(&ControlValueSetter::Float(2.0)));
+    assert!(!desc_with_step.verify_setter(&ControlValueSetter::Integer(1)));
 }
 
 #[test]
