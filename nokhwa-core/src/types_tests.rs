@@ -323,6 +323,8 @@ fn fulfill_highest_framerate_at_given_fps() {
 
 #[test]
 fn fulfill_exact_match() {
+    // Note: Exact variant does not check membership in the available list —
+    // it only verifies the format matches the wanted decoder.
     let target = CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 30);
     let available = vec![
         CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30),
@@ -353,6 +355,16 @@ fn fulfill_none_returns_first_compatible() {
     let req = RequestedFormat::with_formats(RequestedFormatType::None, &[FrameFormat::MJPEG]);
     let result = req.fulfill(&available).unwrap();
     assert_eq!(result.format(), FrameFormat::MJPEG);
+}
+
+#[test]
+fn fulfill_none_no_compatible_format() {
+    let available = vec![
+        CameraFormat::new_from(640, 480, FrameFormat::NV12, 30),
+        CameraFormat::new_from(640, 480, FrameFormat::YUYV, 30),
+    ];
+    let req = RequestedFormat::with_formats(RequestedFormatType::None, &[FrameFormat::GRAY]);
+    assert!(req.fulfill(&available).is_none());
 }
 
 #[test]
