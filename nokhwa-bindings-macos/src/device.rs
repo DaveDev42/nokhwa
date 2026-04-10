@@ -20,7 +20,7 @@ use objc2_av_foundation::{
 };
 use objc2_core_foundation::{CGFloat, CGPoint};
 use objc2_core_media::CMTime;
-use std::{cmp::Ordering, collections::BTreeMap, convert::TryFrom, ffi::c_float};
+use std::{cmp::Ordering, collections::BTreeMap, ffi::c_float};
 
 pub fn query_avfoundation() -> Result<Vec<CameraInfo>, NokhwaError> {
     let session = discovery_session_with_types(&[
