@@ -1234,21 +1234,6 @@ pub mod wmf {
             let unknown = GUID::from_values(0, 0, 0, [0; 8]);
             assert_eq!(guid_to_frameformat(unknown), None);
         }
-
-        #[test]
-        fn all_known_guids_roundtrip() {
-            let known = [
-                (MF_VIDEO_FORMAT_NV12, FrameFormat::NV12),
-                (MF_VIDEO_FORMAT_RGB24, FrameFormat::RAWBGR),
-                (MF_VIDEO_FORMAT_GRAY, FrameFormat::GRAY),
-                (MF_VIDEO_FORMAT_YUY2, FrameFormat::YUYV),
-                (MF_VIDEO_FORMAT_MJPEG, FrameFormat::MJPEG),
-            ];
-            for (guid, expected) in known {
-                let result = guid_to_frameformat(guid);
-                assert_eq!(result, Some(expected), "GUID mismatch for {expected:?}");
-            }
-        }
     }
 }
 

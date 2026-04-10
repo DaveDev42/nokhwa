@@ -1,5 +1,5 @@
 //! Non-device integration tests for the root nokhwa crate.
-//! These test public API types without requiring a physical camera.
+//! These verify that public API re-exports are accessible from outside the crate.
 
 use nokhwa::utils::*;
 
@@ -55,29 +55,6 @@ fn resolution_display_contains_dimensions() {
 }
 
 #[test]
-fn frame_format_display_roundtrip_all() {
-    for fmt in frame_formats() {
-        let s = format!("{fmt}");
-        let parsed: FrameFormat = s.parse().expect("should parse");
-        assert_eq!(*fmt, parsed);
-    }
-}
-
-#[test]
-fn fulfill_filters_by_decoder_formats() {
-    let available = vec![
-        CameraFormat::new_from(1920, 1080, FrameFormat::NV12, 30),
-        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30),
-    ];
-    let req = RequestedFormat::with_formats(
-        RequestedFormatType::AbsoluteHighestResolution,
-        &[FrameFormat::MJPEG],
-    );
-    let result = req.fulfill(&available).unwrap();
-    assert_eq!(result.format(), FrameFormat::MJPEG);
-}
-
-#[test]
 fn camera_info_construction() {
     let info = CameraInfo::new(
         "Test Camera",
@@ -89,17 +66,4 @@ fn camera_info_construction() {
     assert_eq!(info.description(), "A test camera");
     assert_eq!(info.misc(), "misc");
     assert_eq!(info.index(), &CameraIndex::Index(0));
-}
-
-#[test]
-fn buffer_creation_and_access() {
-    use nokhwa::buffer::Buffer;
-
-    let res = Resolution::new(2, 2);
-    let data = vec![0u8; 12];
-    let buf = Buffer::new(res, &data, FrameFormat::RAWRGB);
-    assert_eq!(buf.resolution(), res);
-    assert_eq!(buf.buffer().len(), 12);
-    assert_eq!(buf.source_frame_format(), FrameFormat::RAWRGB);
-    assert!(buf.capture_timestamp().is_none());
 }

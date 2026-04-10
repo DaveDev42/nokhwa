@@ -434,6 +434,8 @@ fn verify_setter_integer_range_out_of_bounds() {
 
 #[test]
 fn verify_setter_integer_range_zero_step_always_valid() {
+    // When step == 0, verify_setter returns true unconditionally —
+    // even for mismatched types. This is the documented implementation behavior.
     let desc = ControlValueDescription::IntegerRange {
         min: 0,
         max: 100,
@@ -534,6 +536,64 @@ fn verify_setter_key_value_pair() {
         default: (0, 0),
     };
     assert!(desc.verify_setter(&ControlValueSetter::KeyValue(10, 20)));
+    assert!(!desc.verify_setter(&ControlValueSetter::Integer(1)));
+}
+
+#[test]
+fn verify_setter_integer() {
+    let desc = ControlValueDescription::Integer {
+        value: 50,
+        default: 50,
+        step: 1,
+    };
+    assert!(desc.verify_setter(&ControlValueSetter::Integer(51)));
+    assert!(!desc.verify_setter(&ControlValueSetter::Float(1.0)));
+}
+
+#[test]
+fn verify_setter_integer_zero_step() {
+    // When step == 0, verify_setter returns true unconditionally.
+    let desc = ControlValueDescription::Integer {
+        value: 50,
+        default: 50,
+        step: 0,
+    };
+    assert!(desc.verify_setter(&ControlValueSetter::Integer(99)));
+    assert!(desc.verify_setter(&ControlValueSetter::Float(1.0)));
+}
+
+#[test]
+fn verify_setter_float() {
+    // When step == 0.0, verify_setter returns true unconditionally.
+    let desc_zero_step = ControlValueDescription::Float {
+        value: 0.5,
+        default: 0.5,
+        step: 0.0,
+    };
+    assert!(desc_zero_step.verify_setter(&ControlValueSetter::Float(0.75)));
+    assert!(desc_zero_step.verify_setter(&ControlValueSetter::Integer(1)));
+
+    // With a non-zero step, wrong types are rejected.
+    let desc_with_step = ControlValueDescription::Float {
+        value: 0.5,
+        default: 0.5,
+        step: 0.1,
+    };
+    assert!(!desc_with_step.verify_setter(&ControlValueSetter::Integer(1)));
+}
+
+#[test]
+fn verify_setter_rgb() {
+    // RGB verify_setter checks *v >= max for each channel.
+    // This documents the actual implementation behavior.
+    let desc = ControlValueDescription::RGB {
+        value: (0.5, 0.5, 0.5),
+        max: (1.0, 1.0, 1.0),
+        default: (0.0, 0.0, 0.0),
+    };
+    assert!(desc.verify_setter(&ControlValueSetter::RGB(1.0, 1.0, 1.0)));
+    assert!(desc.verify_setter(&ControlValueSetter::RGB(2.0, 2.0, 2.0)));
+    assert!(!desc.verify_setter(&ControlValueSetter::RGB(0.5, 0.5, 0.5)));
     assert!(!desc.verify_setter(&ControlValueSetter::Integer(1)));
 }
 
