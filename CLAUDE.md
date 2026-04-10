@@ -76,7 +76,7 @@ Almost everything is behind feature flags. A build **must** enable at least one 
 - When using `gh` commands, always specify `--repo DaveDev42/nokhwa` to avoid accidentally targeting upstream.
 - **NEVER commit planning artifacts, spec documents, or skill-generated files (e.g. `docs/superpowers/`, `docs/plans/`) to the repository.** Keep all planning work in local context only.
 - **Keep `CHANGELOG.md` up to date.** When merging feature or fix PRs, add an entry under the current unreleased version section. Group entries by: Features, Performance, Refactoring, Bug Fixes, Infrastructure, Cleanup.
-- **Keep `TODO.md` up to date.** When discovering bugs, potential improvements, or future work items during development or code review, add them to `TODO.md` with appropriate priority (High/Medium/Low).
+- **Always keep `TODO.md` current.** After every PR merge or task completion, immediately update TODO.md: mark completed items as done and remove them, add newly discovered issues, and re-prioritize as needed. TODO.md must always reflect the true current state of the project.
 
 ## Code Style
 
