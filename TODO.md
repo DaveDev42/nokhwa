@@ -10,4 +10,4 @@
 - [ ] Version number cleanup — all crates still show pre-fork versions (root 0.10.10, core 0.1.8, bindings 0.2.3/0.1.3/0.4.5)
 
 ## Low Priority
-- [ ] Investigate replacing `flume` with `std::sync::mpsc` or `crossbeam-channel` — currently only 3 unbounded channel usages, Bytes clone is already O(1), low priority
+- [x] ~~Investigate replacing `flume` with `std::sync::mpsc` or `crossbeam-channel`~~ — Done: replaced with `std::sync::mpsc` in all library and example code
