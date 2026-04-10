@@ -1,6 +1,8 @@
 # 0.11.0 (unreleased, fork: DaveDev42/nokhwa)
 
 ## Breaking
+- Removed deprecated `Camera::new_with()` (use `Camera::new()` or `Camera::with_backend()` instead)
+- Removed deprecated `Camera::set_camera_format()` and `CallbackCamera::set_camera_format()` (use `set_camera_request()` instead)
 - Renamed bindings crates: `nokhwa-bindings-macos` → `nokhwa-bindings-macos-avfoundation`, `nokhwa-bindings-windows` → `nokhwa-bindings-windows-msmf`, `nokhwa-bindings-linux` → `nokhwa-bindings-linux-v4l`
 - Unified all workspace crate versions to `0.11.0` (workspace version inheritance)
 - Moved `CaptureBackendTrait` impl from root crate wrappers into bindings crates (consistent with Linux pattern)

@@ -61,26 +61,6 @@ impl Camera {
         })
     }
 
-    /// Create a new `Camera` from raw values.
-    /// # Errors
-    /// This will error if you either have a bad platform configuration (e.g. `input-v4l` but not on linux) or the backend cannot create the camera (e.g. permission denied).
-    #[deprecated(since = "0.10.0", note = "please use `new` instead.")]
-    pub fn new_with(
-        index: CameraIndex,
-        width: u32,
-        height: u32,
-        fps: u32,
-        fourcc: FrameFormat,
-        backend: ApiBackend,
-    ) -> Result<Self, NokhwaError> {
-        let camera_format = CameraFormat::new_from(width, height, fourcc, fps);
-        Camera::with_backend(
-            index,
-            RequestedFormat::with_formats(RequestedFormatType::Exact(camera_format), &[fourcc]),
-            backend,
-        )
-    }
-
     /// Allows creation of a [`Camera`] with a custom backend. This is useful if you are creating e.g. a custom module.
     ///
     /// You **must** have set a format beforehand.
@@ -181,17 +161,6 @@ impl Camera {
             })?;
         self.device.set_camera_format(new_format)?;
         Ok(new_format)
-    }
-
-    #[deprecated(since = "0.10.0", note = "please use `set_camera_request` instead.")]
-    /// Will set the current [`CameraFormat`]
-    /// This will reset the current stream if used while stream is opened.
-    ///
-    /// This will also update the cache.
-    /// # Errors
-    /// If you started the stream and the camera rejects the new camera format, this will return an error.
-    pub fn set_camera_format(&mut self, new_fmt: CameraFormat) -> Result<(), NokhwaError> {
-        self.device.set_camera_format(new_fmt)
     }
 
     /// A hashmap of [`Resolution`]s mapped to framerates

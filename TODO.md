@@ -15,7 +15,6 @@
 
 ## Low Priority
 - [ ] Add async support — `frame()` is blocking with no timeout mechanism. Short-term: add `frame_timeout(Duration)`. Long-term: consider `AsyncCaptureBackendTrait` or `Stream`-based API.
-- [ ] Remove deprecated `Camera::new_with()` (deprecated since 0.10.0) — or at minimum document a removal timeline.
 - [ ] Improve wgpu integration — `frame_texture()` always converts to RGBA regardless of input format. Provide raw texture variants so NV12/YUYV can be decoded via GPU shaders for better performance.
 
 ## Backlog
