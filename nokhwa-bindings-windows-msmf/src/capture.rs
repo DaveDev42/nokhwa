@@ -249,8 +249,7 @@ impl CaptureBackendTrait for MediaFoundationCaptureDevice {
             self_ctrl.resolution(),
             &bytes,
             self_ctrl.format(),
-            capture_ts,
-            TimestampKind::MonotonicClock,
+            capture_ts.map(|ts| (ts, TimestampKind::MonotonicClock)),
         ))
     }
 

@@ -50,8 +50,7 @@ fn buffer_with_timestamp_some() {
         res,
         &data,
         FrameFormat::RAWRGB,
-        Some(ts),
-        TimestampKind::Capture,
+        Some((ts, TimestampKind::Capture)),
     );
 
     assert_eq!(buf.resolution(), res);
@@ -68,13 +67,7 @@ fn buffer_with_timestamp_some() {
 fn buffer_with_timestamp_none() {
     let res = Resolution::new(1, 1);
     let data = vec![0; 3];
-    let buf = Buffer::with_timestamp(
-        res,
-        &data,
-        FrameFormat::RAWRGB,
-        None,
-        TimestampKind::Unknown,
-    );
+    let buf = Buffer::with_timestamp(res, &data, FrameFormat::RAWRGB, None);
     assert!(buf.capture_timestamp().is_none());
     assert!(buf.capture_timestamp_with_kind().is_none());
 }
@@ -97,8 +90,7 @@ fn buffer_with_timestamp_zero_duration() {
         res,
         &data,
         FrameFormat::RAWRGB,
-        Some(ts),
-        TimestampKind::MonotonicClock,
+        Some((ts, TimestampKind::MonotonicClock)),
     );
     assert_eq!(buf.capture_timestamp(), Some(std::time::Duration::ZERO));
     assert_eq!(
@@ -131,7 +123,7 @@ fn buffer_timestamp_kind_variants() {
         TimestampKind::WallClock,
         TimestampKind::Unknown,
     ] {
-        let buf = Buffer::with_timestamp(res, &data, FrameFormat::RAWRGB, Some(ts), kind);
+        let buf = Buffer::with_timestamp(res, &data, FrameFormat::RAWRGB, Some((ts, kind)));
         let (returned_ts, returned_kind) = buf.capture_timestamp_with_kind().unwrap();
         assert_eq!(returned_ts, ts);
         assert_eq!(returned_kind, kind);

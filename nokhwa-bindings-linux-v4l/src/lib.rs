@@ -885,8 +885,7 @@ mod internal {
                             cam_fmt.resolution(),
                             data,
                             cam_fmt.format(),
-                            wall_ts,
-                            TimestampKind::WallClock,
+                            wall_ts.map(|ts| (ts, TimestampKind::WallClock)),
                         ))
                     }
                     Err(why) => Err(NokhwaError::ReadFrameError(why.to_string())),

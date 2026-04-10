@@ -40,7 +40,7 @@ pub enum TimestampKind {
     /// (e.g. `CMSampleBuffer` on macOS).
     Presentation,
     /// The timestamp is derived from a monotonic clock
-    /// (e.g. `CLOCK_MONOTONIC` on Linux, `IMFSample` clock on Windows).
+    /// (e.g. `IMFSample` clock on Windows).
     MonotonicClock,
     /// The timestamp is a wall-clock time (e.g. `CLOCK_REALTIME` / `SystemTime`).
     WallClock,
@@ -75,23 +75,19 @@ impl Buffer {
     }
 
     /// Creates a new buffer with a [`&[u8]`] and a backend-provided capture timestamp.
-    ///
-    /// When `capture_timestamp` is `None`, `timestamp_kind` is ignored
-    /// (no timestamp means no associated kind).
     #[must_use]
     #[inline]
     pub fn with_timestamp(
         res: Resolution,
         buf: &[u8],
         source_frame_format: FrameFormat,
-        capture_timestamp: Option<Duration>,
-        timestamp_kind: TimestampKind,
+        capture_timestamp: Option<(Duration, TimestampKind)>,
     ) -> Self {
         Self {
             resolution: res,
             data: Bytes::copy_from_slice(buf),
             source_frame_format,
-            capture_timestamp: capture_timestamp.map(|ts| (ts, timestamp_kind)),
+            capture_timestamp,
         }
     }
 

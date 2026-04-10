@@ -285,8 +285,7 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
             cfmt.resolution(),
             &bytes,
             cfmt.format(),
-            capture_ts,
-            TimestampKind::Presentation,
+            capture_ts.map(|ts| (ts, TimestampKind::Presentation)),
         );
         self.frame_buffer_receiver.try_iter().for_each(drop);
         Ok(buffer)
