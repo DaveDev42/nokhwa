@@ -91,6 +91,26 @@ impl Buffer {
         }
     }
 
+    /// Creates a new buffer taking ownership of a [`Vec<u8>`] without copying.
+    ///
+    /// This is more efficient than [`new`](Self::new) or [`with_timestamp`](Self::with_timestamp)
+    /// when the caller already has owned data, as it avoids a redundant memory copy.
+    #[must_use]
+    #[inline]
+    pub fn from_vec_with_timestamp(
+        res: Resolution,
+        buf: Vec<u8>,
+        source_frame_format: FrameFormat,
+        capture_timestamp: Option<(Duration, TimestampKind)>,
+    ) -> Self {
+        Self {
+            resolution: res,
+            data: Bytes::from(buf),
+            source_frame_format,
+            capture_timestamp,
+        }
+    }
+
     /// Get the backend-provided capture timestamp, if available.
     ///
     /// This returns only the [`Duration`] value. To also get the
