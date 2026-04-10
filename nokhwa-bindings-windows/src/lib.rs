@@ -1184,6 +1184,57 @@ pub mod wmf {
             }
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn guid_nv12() {
+            assert_eq!(
+                guid_to_frameformat(MF_VIDEO_FORMAT_NV12),
+                Some(FrameFormat::NV12)
+            );
+        }
+
+        #[test]
+        fn guid_rgb24_maps_to_rawbgr() {
+            assert_eq!(
+                guid_to_frameformat(MF_VIDEO_FORMAT_RGB24),
+                Some(FrameFormat::RAWBGR)
+            );
+        }
+
+        #[test]
+        fn guid_gray() {
+            assert_eq!(
+                guid_to_frameformat(MF_VIDEO_FORMAT_GRAY),
+                Some(FrameFormat::GRAY)
+            );
+        }
+
+        #[test]
+        fn guid_yuy2() {
+            assert_eq!(
+                guid_to_frameformat(MF_VIDEO_FORMAT_YUY2),
+                Some(FrameFormat::YUYV)
+            );
+        }
+
+        #[test]
+        fn guid_mjpeg() {
+            assert_eq!(
+                guid_to_frameformat(MF_VIDEO_FORMAT_MJPEG),
+                Some(FrameFormat::MJPEG)
+            );
+        }
+
+        #[test]
+        fn guid_unknown_returns_none() {
+            let unknown = GUID::from_values(0, 0, 0, [0; 8]);
+            assert_eq!(guid_to_frameformat(unknown), None);
+        }
+    }
 }
 
 #[cfg(any(not(windows), feature = "docs-only"))]
