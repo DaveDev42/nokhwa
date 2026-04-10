@@ -67,9 +67,12 @@ impl AVFoundationCaptureDevice {
         let mut device = AVCaptureDeviceWrapper::new(index)?;
 
         let formats = device.supported_formats()?;
-        let camera_fmt = req_fmt.fulfill(&formats).ok_or_else(|| {
-            NokhwaError::OpenDeviceError("Cannot fulfill request".to_string(), req_fmt.to_string())
-        })?;
+        let camera_fmt = req_fmt
+            .fulfill(&formats)
+            .ok_or_else(|| NokhwaError::OpenDeviceError {
+                device: "Cannot fulfill request".to_string(),
+                error: req_fmt.to_string(),
+            })?;
         device.set_all(camera_fmt)?;
 
         let device_descriptor = device.info().clone();

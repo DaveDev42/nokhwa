@@ -8,7 +8,7 @@
   - [ ] Format conversion correctness (MJPEG, NV12, YUYV decoding validation)
   - [ ] Camera control round-trip (set → get verification)
   - [ ] Robustness against malformed input (e.g. malformed MJPEG)
-- [ ] Restructure `OpenDeviceError(String, String)` tuple variant with structured fields
+- [x] Restructure `OpenDeviceError(String, String)` tuple variant with structured fields
 
 ## Low Priority
 - [ ] Add async support — `frame()` is blocking with no timeout mechanism. Short-term: add `frame_timeout(Duration)`. Long-term: consider `AsyncCaptureBackendTrait` or `Stream`-based API.
