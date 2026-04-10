@@ -1444,7 +1444,7 @@ pub fn yuyv422_predicted_size(size: usize, rgba: bool) -> usize {
 #[inline]
 pub fn yuyv422_to_rgb(data: &[u8], rgba: bool) -> Result<Vec<u8>, NokhwaError> {
     let pixel_size = if rgba { 4 } else { 3 };
-    // yuyv yields 2 3-byte pixels per yuyv chunk
+    // Each 4-byte YUYV chunk yields 2 output pixels (3 bytes each for RGB, 4 for RGBA)
     let rgb_buf_size = (data.len() / 4) * (2 * pixel_size);
 
     let mut dest = vec![0; rgb_buf_size];
@@ -1470,7 +1470,7 @@ pub fn buf_yuyv422_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<()
     }
 
     let pixel_size = if rgba { 4 } else { 3 };
-    // yuyv yields 2 3-byte pixels per yuyv chunk
+    // Each 4-byte YUYV chunk yields 2 output pixels (3 bytes each for RGB, 4 for RGBA)
     let rgb_buf_size = (data.len() / 4) * (2 * pixel_size);
 
     if dest.len() != rgb_buf_size {
@@ -1481,11 +1481,17 @@ pub fn buf_yuyv422_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<()
         });
     }
 
+    let out_pair_size = pixel_size * 2;
+    debug_assert_eq!(
+        data.chunks_exact(4).len(),
+        dest.chunks_exact(out_pair_size).len(),
+        "YUYV input and output chunk counts must match"
+    );
+
     // Conversion math inlined from `yuyv444_to_rgb` for performance: avoids per-pixel
     // intermediate array allocations and iterator overhead on high-resolution frames.
     // Using chunks_exact_mut + zip gives the compiler static proof of chunk bounds,
     // eliminating hidden bounds-check branches in the hot loop.
-    let out_pair_size = pixel_size * 2;
     for (yuyv, out) in data
         .chunks_exact(4)
         .zip(dest.chunks_exact_mut(out_pair_size))
@@ -1502,7 +1508,7 @@ pub fn buf_yuyv422_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<()
         out[0] = ((c1 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
         out[1] = ((c1 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
         out[2] = ((c1 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
-        // `rgba` is loop-invariant; LLVM hoists this branch out of the loop.
+        // `rgba` is loop-invariant and expected to be hoisted by the optimizer.
         if rgba {
             out[3] = 255;
         }
@@ -1515,12 +1521,6 @@ pub fn buf_yuyv422_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<()
             out[pixel_size + 3] = 255;
         }
     }
-
-    debug_assert_eq!(
-        data.chunks_exact(4).len(),
-        dest.chunks_exact(out_pair_size).len(),
-        "YUYV input and output chunk counts must match"
-    );
 
     Ok(())
 }
