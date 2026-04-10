@@ -17,7 +17,7 @@
 #[cfg(target_os = "linux")]
 mod internal {
     use nokhwa_core::{
-        buffer::Buffer,
+        buffer::{Buffer, TimestampKind},
         error::NokhwaError,
         traits::CaptureBackendTrait,
         types::{
@@ -886,6 +886,7 @@ mod internal {
                             data,
                             cam_fmt.format(),
                             wall_ts,
+                            TimestampKind::MonotonicClock,
                         ))
                     }
                     Err(why) => Err(NokhwaError::ReadFrameError(why.to_string())),

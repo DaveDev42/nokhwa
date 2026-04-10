@@ -22,7 +22,7 @@ use crate::session::{
     session_remove_input, session_remove_output, session_start, session_stop,
 };
 use nokhwa_core::{
-    buffer::Buffer,
+    buffer::{Buffer, TimestampKind},
     error::NokhwaError,
     pixel_format::RgbFormat,
     traits::CaptureBackendTrait,
@@ -281,7 +281,13 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
             .frame_buffer_receiver
             .recv()
             .map_err(|why| NokhwaError::ReadFrameError(why.to_string()))?;
-        let buffer = Buffer::with_timestamp(cfmt.resolution(), &bytes, cfmt.format(), capture_ts);
+        let buffer = Buffer::with_timestamp(
+            cfmt.resolution(),
+            &bytes,
+            cfmt.format(),
+            capture_ts,
+            TimestampKind::Presentation,
+        );
         self.frame_buffer_receiver.try_iter().for_each(drop);
         Ok(buffer)
     }
