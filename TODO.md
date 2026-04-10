@@ -23,7 +23,7 @@
 - [x] ~~Remove AVFoundation double copy~~ — Done in #52: eliminated second copy in AVFoundation frame capture pipeline.
 - [x] ~~Optimize YUYV decoder~~ — Done in #58: SIMD-optimized (NEON on aarch64, scalar fallback on other platforms).
 - [x] ~~Optimize NV12 decoder~~ — Done in #53: pre-computed UV row offset and output row offset outside inner loop.
-- [ ] Reduce CallbackCamera lock contention — 3 sequential mutex acquisitions per frame (Camera, Callback, last_frame). Replace `last_frame` with lock-free pattern (e.g. `ArcSwap`), shrink lock scopes.
+- [x] ~~Reduce CallbackCamera lock contention~~ — Replaced `Mutex<Buffer>` last_frame with lock-free `ArcSwap`, reduced per-frame lock acquisitions from 3 to 1.
 - [x] ~~Explore SIMD for pixel format conversion~~ — Done in #58: NEON intrinsics for YUYV/BGR→RGB on aarch64, SSSE3 for BGR→RGB on x86_64, scalar fallback for other architectures.
 - [ ] Explore `unsafe get_unchecked` for YUYV/NV12 inner loops — SIMD fallback and NV12 scalar paths use safe indexing. Within-chunk indexing (`out[pixel_size + 3]`) may still emit bounds checks. Benchmark first; only apply if measurable gain.
 - [ ] Inline `yuyv444_to_rgb` in NV12 decoder — same optimization pattern as YUYV (#58). The NV12 scalar path still calls the helper function with intermediate `[u8; 3]` array allocation per pixel.

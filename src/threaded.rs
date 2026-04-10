@@ -15,6 +15,7 @@
  */
 
 use crate::Camera;
+use arc_swap::ArcSwap;
 use nokhwa_core::{
     buffer::Buffer,
     error::NokhwaError,
@@ -35,6 +36,7 @@ use std::{
 
 type AtomicLock<T> = Arc<Mutex<T>>;
 type HeldCallbackType = Arc<Mutex<Box<dyn FnMut(Buffer) + Send + 'static>>>;
+type SharedFrame = Arc<ArcSwap<Buffer>>;
 
 /// Creates a camera that runs in a different thread that you can use a callback to access the frames of.
 /// It uses a `Arc` and a `Mutex` to ensure that this feels like a normal camera, but callback based.
@@ -53,7 +55,7 @@ pub struct CallbackCamera {
     // Important: this needs a fair mutex so that the capture loop doesn't block other accessors from touching the camera forever.
     camera: Arc<parking_lot::FairMutex<Camera>>,
     frame_callback: HeldCallbackType,
-    last_frame_captured: AtomicLock<Buffer>,
+    last_frame_captured: SharedFrame,
     die_bool: Arc<AtomicBool>,
     current_camera: CameraInfo,
     handle: AtomicLock<Option<JoinHandle<()>>>,
@@ -80,7 +82,7 @@ impl CallbackCamera {
         CallbackCamera {
             camera: Arc::new(parking_lot::FairMutex::new(camera)),
             frame_callback: Arc::new(Mutex::new(Box::new(callback))),
-            last_frame_captured: Arc::new(Mutex::new(Buffer::new(
+            last_frame_captured: Arc::new(ArcSwap::from_pointee(Buffer::new(
                 Resolution::new(0, 0),
                 &[],
                 FrameFormat::GRAY,
@@ -177,11 +179,11 @@ impl CallbackCamera {
     /// # Errors
     /// If you started the stream and the camera rejects the new resolution, this will return an error.
     pub fn set_resolution(&mut self, new_res: Resolution) -> Result<(), NokhwaError> {
-        *self
-            .last_frame_captured
-            .lock()
-            .map_err(|why| NokhwaError::general(why.to_string()))? =
-            Buffer::new(new_res, &[], self.camera_format()?.format());
+        self.last_frame_captured.store(Arc::new(Buffer::new(
+            new_res,
+            &[],
+            self.camera_format()?.format(),
+        )));
         self.camera.lock().set_resolution(new_res)
     }
 
@@ -337,12 +339,9 @@ impl CallbackCamera {
     /// # Errors
     /// This will error if the camera fails to capture a frame.
     pub fn poll_frame(&mut self) -> Result<Buffer, NokhwaError> {
-        let frame = self.camera.lock().frame()?;
-        *self
-            .last_frame_captured
-            .lock()
-            .map_err(|why| NokhwaError::general(why.to_string()))? = frame.clone();
-        Ok(frame)
+        let frame = Arc::new(self.camera.lock().frame()?);
+        self.last_frame_captured.store(Arc::clone(&frame));
+        Ok(Buffer::clone(&frame))
     }
 
     /// Polls the camera for a frame with a timeout, analogous to
@@ -354,23 +353,19 @@ impl CallbackCamera {
     /// # Errors
     /// This will error if the camera fails to capture a frame or the timeout elapses.
     pub fn poll_frame_timeout(&mut self, duration: Duration) -> Result<Buffer, NokhwaError> {
-        let frame = self.camera.lock().frame_timeout(duration)?;
-        *self
-            .last_frame_captured
-            .lock()
-            .map_err(|why| NokhwaError::general(why.to_string()))? = frame.clone();
-        Ok(frame)
+        let frame = Arc::new(self.camera.lock().frame_timeout(duration)?);
+        self.last_frame_captured.store(Arc::clone(&frame));
+        Ok(Buffer::clone(&frame))
     }
 
     /// Gets the last frame captured by the camera.
+    ///
+    /// This operation is lock-free. Returns the initial empty buffer if no
+    /// frame has been captured yet.
     /// # Errors
-    /// This will error if the internal mutex is poisoned.
+    /// Currently infallible; the `Result` return type is retained for API compatibility.
     pub fn last_frame(&self) -> Result<Buffer, NokhwaError> {
-        Ok(self
-            .last_frame_captured
-            .lock()
-            .map_err(|why| NokhwaError::read_frame(why.to_string()))?
-            .clone())
+        Ok(Buffer::clone(&self.last_frame_captured.load()))
     }
 
     /// Checks if stream if open. If it is, it will return true.
@@ -406,7 +401,7 @@ impl Drop for CallbackCamera {
 fn camera_frame_thread_loop(
     camera: &Arc<parking_lot::FairMutex<Camera>>,
     frame_callback: &HeldCallbackType,
-    last_frame_captured: &AtomicLock<Buffer>,
+    last_frame_captured: &SharedFrame,
     die_bool: &Arc<AtomicBool>,
 ) {
     loop {
@@ -414,6 +409,7 @@ fn camera_frame_thread_loop(
             break;
         }
 
+        // Capture frame and release camera lock before callback/storage
         let frame = {
             let mut camera = camera.lock();
             camera.frame()
@@ -421,6 +417,11 @@ fn camera_frame_thread_loop(
 
         match frame {
             Ok(frame) => {
+                // Store last frame using lock-free ArcSwap (no mutex needed)
+                let frame = Arc::new(frame);
+                last_frame_captured.store(Arc::clone(&frame));
+
+                // Invoke callback (only lock held is the callback mutex)
                 let mut cb = match frame_callback.lock() {
                     Ok(cb) => cb,
                     Err(e) => {
@@ -428,17 +429,7 @@ fn camera_frame_thread_loop(
                         continue;
                     }
                 };
-                cb(frame.clone());
-                drop(cb);
-
-                match last_frame_captured.lock() {
-                    Ok(mut last_frame) => {
-                        *last_frame = frame;
-                    }
-                    Err(e) => {
-                        eprintln!("nokhwa: last_frame mutex poisoned: {e}");
-                    }
-                }
+                cb(Buffer::clone(&frame));
             }
             Err(_) => {
                 std::thread::yield_now();
