@@ -391,18 +391,19 @@ impl Camera {
     /// block beyond the requested `duration` while waiting for the background thread to join.
     /// The timeout is best-effort: it detects when the deadline has passed, but cannot
     /// cancel an in-progress backend call. This method spawns a new thread per call and is
-    /// not suited for high-frequency capture loops.
+    /// not suited for high-frequency capture loops. A zero `duration` will return
+    /// [`TimeoutError`](NokhwaError::TimeoutError) immediately.
     ///
     /// # Errors
     /// If the backend fails to get the frame within the timeout, or if the underlying
     /// [`frame()`](CaptureBackendTrait::frame()) call fails, this will error.
     pub fn frame_timeout(&mut self, duration: Duration) -> Result<Buffer, NokhwaError> {
         // SAFETY invariant: `SendPtr` wraps a raw pointer to `self.device`. This is sound
-        // because ALL match arms call `handle.join()` before returning, which guarantees:
+        // because we always call `handle.join()` before returning, which guarantees:
         //   1. The spawned thread has finished using the pointer before we return.
         //   2. No other code can access `self` while this method holds `&mut self`.
         //   3. The pointee (`self.device`) outlives the thread's access.
-        // Do NOT add early returns or code between the match and join calls.
+        // Do NOT add early returns after the thread is spawned.
         struct SendPtr(*mut dyn CaptureBackendTrait);
         unsafe impl Send for SendPtr {}
         impl SendPtr {
@@ -411,6 +412,10 @@ impl Camera {
             unsafe fn frame_timeout(&self, duration: Duration) -> Result<Buffer, NokhwaError> {
                 unsafe { (&mut *self.0).frame_timeout(duration) }
             }
+        }
+
+        if duration.is_zero() {
+            return Err(NokhwaError::TimeoutError(duration));
         }
 
         let start = std::time::Instant::now();
@@ -423,22 +428,17 @@ impl Camera {
             let _ = tx.send(unsafe { ptr.frame_timeout(duration) });
         });
         let remaining = duration.saturating_sub(start.elapsed());
-        match rx.recv_timeout(remaining) {
-            Ok(result) => {
-                let _ = handle.join();
-                result
-            }
+        let result = match rx.recv_timeout(remaining) {
+            Ok(result) => result,
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                let _ = handle.join();
                 Err(NokhwaError::TimeoutError(duration))
             }
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                let _ = handle.join();
-                Err(NokhwaError::ReadFrameError(
-                    "frame capture thread panicked".to_string(),
-                ))
-            }
-        }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(
+                NokhwaError::ReadFrameError("frame capture thread panicked".to_string()),
+            ),
+        };
+        let _ = handle.join();
+        result
     }
 
     /// Will get a frame from the camera **without** any processing applied, meaning you will usually get a frame you need to decode yourself.

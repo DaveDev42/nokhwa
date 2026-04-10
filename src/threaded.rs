@@ -374,6 +374,9 @@ impl CallbackCamera {
     /// Polls the camera for a frame with a timeout, analogous to
     /// [`Camera::frame_timeout`](crate::Camera::frame_timeout).
     ///
+    /// **Note:** The internal camera mutex is held for the entire duration of the call,
+    /// which may block the background capture loop and other camera operations.
+    ///
     /// # Errors
     /// This will error if the camera fails to capture a frame or the timeout elapses.
     pub fn poll_frame_timeout(&mut self, duration: Duration) -> Result<Buffer, NokhwaError> {
