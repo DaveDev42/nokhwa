@@ -44,7 +44,7 @@ use std::{ffi::CString, sync::Arc};
 
 use std::{borrow::Cow, collections::HashMap};
 
-/// The backend struct that interfaces with V4L2.
+/// The backend struct that interfaces with `AVFoundation`.
 /// To see what this does, please see [`CaptureBackendTrait`].
 /// # Quirks
 /// - While working with `iOS` is allowed, it is not officially supported and may not work.
@@ -353,7 +353,7 @@ impl Drop for AVFoundationCaptureDevice {
     }
 }
 
-/// The backend struct that interfaces with V4L2.
+/// The backend struct that interfaces with `AVFoundation`.
 /// To see what this does, please see [`CaptureBackendTrait`].
 /// # Quirks
 /// - While working with `iOS` is allowed, it is not officially supported and may not work.

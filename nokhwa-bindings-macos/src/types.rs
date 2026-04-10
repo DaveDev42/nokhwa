@@ -9,7 +9,6 @@ use objc2_av_foundation::{
     AVMediaTypeSubtitle, AVMediaTypeText, AVMediaTypeTimecode, AVMediaTypeVideo,
 };
 use objc2_foundation::NSString;
-use std::convert::TryFrom;
 
 #[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub enum AVCaptureDeviceTypeLocal {
