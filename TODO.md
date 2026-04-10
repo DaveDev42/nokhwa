@@ -19,12 +19,14 @@
 - [ ] Improve wgpu integration — `frame_texture()` always converts to RGBA regardless of input format. Provide raw texture variants so NV12/YUYV can be decoded via GPU shaders for better performance.
 
 ## Performance
-- [ ] Eliminate redundant frame copies — Buffer::new() always uses `Bytes::copy_from_slice()`. Add `Buffer::from_vec(Vec<u8>)` constructor using `Bytes::from(vec)` for zero-copy ownership transfer. Update all backends to use it.
-- [ ] Remove AVFoundation double copy — CMSampleBuffer → `to_vec()` → `Bytes::copy_from_slice()` causes 2 full copies per frame. Use `Bytes::from(vec)` for the second step; long-term, explore direct CMSampleBuffer → Bytes path.
-- [ ] Optimize YUYV decoder — `types.rs` lines 1460-1536 use per-pixel `flat_map` + intermediate arrays. Replace with `chunks_exact` + direct write to eliminate iterator overhead.
-- [x] ~~Optimize NV12 decoder~~ — Done: pre-computed UV row offset and output row offset outside inner loop (#53)
+- [x] ~~Eliminate redundant frame copies~~ — Done in #56: added `Buffer::from_vec()` and `Buffer::from_vec_with_timestamp()` zero-copy constructors using `Bytes::from(vec)`. Updated all backends to use them.
+- [x] ~~Remove AVFoundation double copy~~ — Done in #52: eliminated second copy in AVFoundation frame capture pipeline.
+- [x] ~~Optimize YUYV decoder~~ — Done in #58: SIMD-optimized (NEON on aarch64, scalar fallback on other platforms).
+- [x] ~~Optimize NV12 decoder~~ — Done in #53: pre-computed UV row offset and output row offset outside inner loop.
 - [ ] Reduce CallbackCamera lock contention — 3 sequential mutex acquisitions per frame (Camera, Callback, last_frame). Replace `last_frame` with lock-free pattern (e.g. `ArcSwap`), shrink lock scopes.
-- [ ] Explore SIMD for pixel format conversion — YUYV/NV12/BGR→RGB decoders use scalar arithmetic. Consider `std::simd` (nightly) or manual intrinsics for 4-8x throughput.
+- [x] ~~Explore SIMD for pixel format conversion~~ — Done in #58: NEON intrinsics for YUYV/BGR→RGB on aarch64, SSSE3 for BGR→RGB on x86_64, scalar fallback for other architectures.
+- [ ] Explore `unsafe get_unchecked` for YUYV/NV12 inner loops — SIMD fallback and NV12 scalar paths use safe indexing. Within-chunk indexing (`out[pixel_size + 3]`) may still emit bounds checks. Benchmark first; only apply if measurable gain.
+- [ ] Inline `yuyv444_to_rgb` in NV12 decoder — same optimization pattern as YUYV (#58). The NV12 scalar path still calls the helper function with intermediate `[u8; 3]` array allocation per pixel.
 
 ## Backlog
 - [ ] Re-implement GStreamer backend (cross-platform, previously 839 lines)
