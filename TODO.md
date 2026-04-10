@@ -11,8 +11,7 @@
 - [ ] Restructure `OpenDeviceError(String, String)` tuple variant with structured fields
 
 ## Low Priority
-- [ ] Add async support — `frame()` is blocking with no timeout mechanism. Short-term: add `frame_timeout(Duration)`. Long-term: consider `AsyncCaptureBackendTrait` or `Stream`-based API.
-- [ ] Improve wgpu integration — `frame_texture()` always converts to RGBA regardless of input format. Provide raw texture variants so NV12/YUYV can be decoded via GPU shaders for better performance.
+(None)
 
 ## Performance
 - [ ] Explore `unsafe get_unchecked` for YUYV/NV12 inner loops — SIMD fallback and NV12 scalar paths use safe indexing. Benchmark first; only apply if measurable gain.
