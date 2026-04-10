@@ -1428,7 +1428,7 @@ pub fn buf_mjpeg_to_rgb(_data: &[u8], _dest: &mut [u8], _rgba: bool) -> Result<(
 #[inline]
 pub fn yuyv422_predicted_size(size: usize, rgba: bool) -> usize {
     let pixel_size = if rgba { 4 } else { 3 };
-    // yuyv yields 2 3-byte pixels per yuyv chunk
+    // Each 4-byte YUYV chunk yields 2 output pixels (3 bytes each for RGB, 4 for RGBA)
     (size / 4) * (2 * pixel_size)
 }
 
