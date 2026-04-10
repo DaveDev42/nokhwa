@@ -102,6 +102,8 @@ impl Buffer {
     }
 
     /// Get the backend-provided capture timestamp and its [`TimestampKind`], if available.
+    ///
+    /// For just the [`Duration`], see [`capture_timestamp`](Self::capture_timestamp).
     #[must_use]
     pub fn capture_timestamp_with_kind(&self) -> Option<(Duration, TimestampKind)> {
         self.capture_timestamp
