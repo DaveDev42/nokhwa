@@ -22,5 +22,6 @@
 pub mod buffer;
 pub mod error;
 pub mod pixel_format;
+pub mod simd;
 pub mod traits;
 pub mod types;

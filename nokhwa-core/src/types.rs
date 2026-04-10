@@ -1479,57 +1479,10 @@ pub fn buf_yuyv422_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<()
         });
     }
 
-    let iter = data.chunks_exact(4);
-
     if rgba {
-        let mut iter = iter
-            .flat_map(|yuyv| {
-                let y1 = i32::from(yuyv[0]);
-                let u = i32::from(yuyv[1]);
-                let y2 = i32::from(yuyv[2]);
-                let v = i32::from(yuyv[3]);
-                let pixel1 = yuyv444_to_rgba(y1, u, v);
-                let pixel2 = yuyv444_to_rgba(y2, u, v);
-                [pixel1, pixel2]
-            })
-            .flatten();
-        for i in dest.iter_mut().take(rgb_buf_size) {
-            *i = match iter.next() {
-                Some(v) => v,
-                None => {
-                    return Err(NokhwaError::ProcessFrameError {
-                        src: FrameFormat::YUYV,
-                        destination: "RGBA8888".to_string(),
-                        error: "Ran out of RGBA YUYV values! (this should not happen, please file an issue: l1npengtul/nokhwa)".to_string()
-                    })
-                }
-            }
-        }
+        crate::simd::yuyv_to_rgba_simd(data, dest);
     } else {
-        let mut iter = iter
-            .flat_map(|yuyv| {
-                let y1 = i32::from(yuyv[0]);
-                let u = i32::from(yuyv[1]);
-                let y2 = i32::from(yuyv[2]);
-                let v = i32::from(yuyv[3]);
-                let pixel1 = yuyv444_to_rgb(y1, u, v);
-                let pixel2 = yuyv444_to_rgb(y2, u, v);
-                [pixel1, pixel2]
-            })
-            .flatten();
-
-        for i in dest.iter_mut().take(rgb_buf_size) {
-            *i = match iter.next() {
-                Some(v) => v,
-                None => {
-                    return Err(NokhwaError::ProcessFrameError {
-                        src: FrameFormat::YUYV,
-                        destination: "RGB888".to_string(),
-                        error: "Ran out of RGB YUYV values! (this should not happen, please file an issue: l1npengtul/nokhwa)".to_string()
-                    })
-                }
-            }
-        }
+        crate::simd::yuyv_to_rgb_simd(data, dest);
     }
 
     Ok(())
@@ -1703,17 +1656,7 @@ pub fn buf_bgr_to_rgb(
         });
     }
 
-    for (idx, chunk) in data.chunks_exact(3).enumerate() {
-        // BGR Format: [Blue, Green, Red]
-        let b = chunk[0];
-        let g = chunk[1];
-        let r = chunk[2];
-
-        let out_idx = idx * 3; // 3 bytes per pixel in RGB
-        out[out_idx] = r; // Red
-        out[out_idx + 1] = g; // Green
-        out[out_idx + 2] = b; // Blue
-    }
+    crate::simd::bgr_to_rgb_simd(data, out);
 
     Ok(())
 }
