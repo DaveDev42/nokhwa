@@ -34,7 +34,7 @@ cargo fmt --all
 git config core.hooksPath .githooks
 ```
 
-The crate uses nightly Rust (configured via flake.nix). The `docs-features` feature requires nightly (`doc_cfg`).
+The crate requires **Rust nightly** (configured via flake.nix) because the `docs-features` feature uses `#![feature(doc_cfg)]`. Regular builds work on stable Rust.
 
 ## Workspace Structure
 
