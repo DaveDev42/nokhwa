@@ -7,6 +7,7 @@
 - Unified all workspace crate versions to `0.11.0` (workspace version inheritance)
 - Moved `CaptureBackendTrait` impl from root crate wrappers into bindings crates (consistent with Linux pattern)
 - Replaced `flume` with `std::sync::mpsc` (API compatible but different error types)
+- Removed `camera-sync-impl` feature flag — `Camera` is now `Send` at the type level via `Box<dyn CaptureBackendTrait + Send>`. The `output-threaded` feature no longer pulls in `camera-sync-impl`. `Camera::with_custom()` now requires `Box<dyn CaptureBackendTrait + Send>` (callers passing a non-Send backend will get a compile error).
 
 ## Performance
 - CallbackCamera threading overhaul: eliminated simultaneous multi-lock, fixed memory ordering (SeqCst → Release/Acquire), added thread join in Drop
