@@ -1527,7 +1527,7 @@ pub fn nv12_to_rgb(
     rgba: bool,
 ) -> Result<Vec<u8>, NokhwaError> {
     let pxsize: usize = if rgba { 4 } else { 3 };
-    let mut dest = vec![0; pxsize * (resolution.width() * resolution.height()) as usize];
+    let mut dest = vec![0; pxsize * resolution.width() as usize * resolution.height() as usize];
     buf_nv12_to_rgb(resolution, data, &mut dest, rgba)?;
     Ok(dest)
 }
@@ -1554,7 +1554,7 @@ pub fn buf_nv12_to_rgb(
         });
     }
 
-    if data.len() != ((resolution.width() * resolution.height() * 3) / 2) as usize {
+    if data.len() != (resolution.width() as usize * resolution.height() as usize * 3) / 2 {
         return Err(NokhwaError::ProcessFrameError {
             src: FrameFormat::NV12,
             destination: "RGB".to_string(),
@@ -1564,7 +1564,7 @@ pub fn buf_nv12_to_rgb(
 
     let pxsize: usize = if rgba { 4 } else { 3 };
 
-    if out.len() != pxsize * (resolution.width() * resolution.height()) as usize {
+    if out.len() != pxsize * resolution.width() as usize * resolution.height() as usize {
         return Err(NokhwaError::ProcessFrameError {
             src: FrameFormat::NV12,
             destination: "RGB".to_string(),
@@ -1572,9 +1572,8 @@ pub fn buf_nv12_to_rgb(
         });
     }
 
-    let y_section = (resolution.width() * resolution.height()) as usize;
-
     let width_usize = resolution.width() as usize;
+    let y_section = width_usize * resolution.height() as usize;
     let out_row_stride = width_usize * pxsize;
 
     // SAFETY overview for the unchecked indexing below:
