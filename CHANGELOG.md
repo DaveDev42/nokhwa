@@ -12,6 +12,7 @@
 
 ## Performance
 - Optimized NV12 decoder: pre-computed UV row offset and output row offset outside inner loop, consolidated UV indexing to eliminate redundant per-pixel division
+- Inlined BT.601 YUV-to-RGB conversion in NV12 scalar decoder, eliminating per-pixel helper function calls and intermediate array allocations
 - CallbackCamera threading overhaul: eliminated simultaneous multi-lock, fixed memory ordering (SeqCst → Release/Acquire), added thread join in Drop
 - CallbackCamera: replaced `Mutex<Buffer>` last_frame with lock-free `ArcSwap`, reducing per-frame lock acquisitions from 3 to 1
 - Replaced `to_vec()` + sort allocations with zero-allocation `max_by_key` iterators in `RequestedFormat::fulfill()`

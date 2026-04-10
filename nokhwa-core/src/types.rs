@@ -1526,8 +1526,8 @@ pub fn nv12_to_rgb(
     data: &[u8],
     rgba: bool,
 ) -> Result<Vec<u8>, NokhwaError> {
-    let pxsize = if rgba { 4 } else { 3 };
-    let mut dest = vec![0; (pxsize * resolution.width() * resolution.height()) as usize];
+    let pxsize: usize = if rgba { 4 } else { 3 };
+    let mut dest = vec![0; pxsize * (resolution.width() * resolution.height()) as usize];
     buf_nv12_to_rgb(resolution, data, &mut dest, rgba)?;
     Ok(dest)
 }
@@ -1538,7 +1538,7 @@ pub fn nv12_to_rgb(
 /// Converts a YUYV 4:2:0 bi-planar (NV12) datastream to a RGB888 Stream and outputs it into a destination buffer. [For further reading](https://en.wikipedia.org/wiki/YUV#Converting_between_Y%E2%80%B2UV_and_RGB)
 /// # Errors
 /// This may error when the data stream size is wrong.
-#[allow(clippy::similar_names)]
+#[allow(clippy::similar_names, clippy::cast_sign_loss)]
 #[inline]
 pub fn buf_nv12_to_rgb(
     resolution: Resolution,
@@ -1562,9 +1562,9 @@ pub fn buf_nv12_to_rgb(
         });
     }
 
-    let pxsize = if rgba { 4 } else { 3 };
+    let pxsize: usize = if rgba { 4 } else { 3 };
 
-    if out.len() != (pxsize * resolution.width() * resolution.height()) as usize {
+    if out.len() != pxsize * (resolution.width() * resolution.height()) as usize {
         return Err(NokhwaError::ProcessFrameError {
             src: FrameFormat::NV12,
             destination: "RGB".to_string(),
@@ -1572,12 +1572,10 @@ pub fn buf_nv12_to_rgb(
         });
     }
 
-    let rgba_size = if rgba { 4 } else { 3 };
-
     let y_section = (resolution.width() * resolution.height()) as usize;
 
     let width_usize = resolution.width() as usize;
-    let out_row_stride = width_usize * rgba_size;
+    let out_row_stride = width_usize * pxsize;
 
     for (hidx, horizontal_row) in data[0..y_section].chunks_exact(width_usize).enumerate() {
         let uv_row_offset = y_section + (hidx / 2) * width_usize;
@@ -1590,30 +1588,39 @@ pub fn buf_nv12_to_rgb(
 
             let y0 = column[0];
             let y1 = column[1];
-            let base_index = out_row_offset + cidx * rgba_size * 2;
+            let base_index = out_row_offset + cidx * pxsize * 2;
+
+            // Inline BT.601 YUV→RGB: avoids intermediate [u8; 3]/[u8; 4] arrays.
+            // d/e = chroma offsets, c298_N = scaled luma for pixel N.
+            let d = i32::from(u) - 128;
+            let e = i32::from(v) - 128;
+
+            let c298_0 = (i32::from(y0) - 16) * 298;
+            let r0 = ((c298_0 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
+            let g0 = ((c298_0 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
+            let b0 = ((c298_0 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
+
+            let c298_1 = (i32::from(y1) - 16) * 298;
+            let r1 = ((c298_1 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
+            let g1 = ((c298_1 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
+            let b1 = ((c298_1 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
 
             if rgba {
-                let px0 = yuyv444_to_rgba(i32::from(y0), i32::from(u), i32::from(v));
-                let px1 = yuyv444_to_rgba(i32::from(y1), i32::from(u), i32::from(v));
-
-                out[base_index] = px0[0];
-                out[base_index + 1] = px0[1];
-                out[base_index + 2] = px0[2];
-                out[base_index + 3] = px0[3];
-                out[base_index + 4] = px1[0];
-                out[base_index + 5] = px1[1];
-                out[base_index + 6] = px1[2];
-                out[base_index + 7] = px1[3];
+                out[base_index] = r0;
+                out[base_index + 1] = g0;
+                out[base_index + 2] = b0;
+                out[base_index + 3] = 255;
+                out[base_index + 4] = r1;
+                out[base_index + 5] = g1;
+                out[base_index + 6] = b1;
+                out[base_index + 7] = 255;
             } else {
-                let px0 = yuyv444_to_rgb(i32::from(y0), i32::from(u), i32::from(v));
-                let px1 = yuyv444_to_rgb(i32::from(y1), i32::from(u), i32::from(v));
-
-                out[base_index] = px0[0];
-                out[base_index + 1] = px0[1];
-                out[base_index + 2] = px0[2];
-                out[base_index + 3] = px1[0];
-                out[base_index + 4] = px1[1];
-                out[base_index + 5] = px1[2];
+                out[base_index] = r0;
+                out[base_index + 1] = g0;
+                out[base_index + 2] = b0;
+                out[base_index + 3] = r1;
+                out[base_index + 4] = g1;
+                out[base_index + 5] = b1;
             }
         }
     }
