@@ -448,118 +448,43 @@ fn figure_out_auto() -> Option<ApiBackend> {
     Some(cap)
 }
 
-macro_rules! cap_impl_fn {
-    {
-        $( ($backend:expr, $init_fn:ident, $cfg:meta, $backend_name:ident) ),+
-    } => {
-        $(
-            paste::paste! {
-                #[cfg ($cfg) ]
-                fn [< init_ $backend_name>](idx: &CameraIndex, setting: RequestedFormat) -> Option<Result<Box<dyn CaptureBackendTrait>, NokhwaError>> {
-                    use crate::backends::capture::$backend;
-                    match <$backend>::$init_fn(idx, setting) {
-                        Ok(cap) => Some(Ok(cap.into())),
-                        Err(why) => Some(Err(why)),
-                    }
-                }
-                #[cfg(not( $cfg ))]
-                fn [< init_ $backend_name>](_idx: &CameraIndex, _setting: RequestedFormat) -> Option<Result<Box<dyn CaptureBackendTrait>, NokhwaError>> {
-                    None
-                }
-            }
-        )+
-    };
-}
-
-macro_rules! cap_impl_matches {
-    {
-        $use_backend: expr, $index:expr, $setting:expr,
-        $( ($feature:expr, $backend:ident, $fn:ident) ),+
-    } => {
-        {
-            let i = $index;
-            let s = $setting;
-            match $use_backend {
-                ApiBackend::Auto => match figure_out_auto() {
-                    Some(cap) => match cap {
-                        $(
-                            ApiBackend::$backend => {
-                                match cfg!(feature = $feature) {
-                                    true => {
-                                        match $fn(i,s) {
-                                            Some(cap) => match cap {
-                                                Ok(c) => c,
-                                                Err(why) => return Err(why),
-                                            }
-                                            None => {
-                                                return Err(NokhwaError::NotImplementedError(
-                                                    "Platform requirements not satisfied (Wrong Platform - Not Implemented).".to_string(),
-                                                ));
-                                            }
-                                        }
-                                    }
-                                    false => {
-                                        return Err(NokhwaError::NotImplementedError(
-                                            "Platform requirements not satisfied. (Wrong Platform - Not Selected)".to_string(),
-                                        ));
-                                    }
-                                }
-                            }
-                        )+
-                        _ => {
-                            return Err(NokhwaError::NotImplementedError(
-                                "Platform requirements not satisfied. (Invalid Backend)".to_string(),
-                            ));
-                        }
-                    }
-                    None => {
-                        return Err(NokhwaError::NotImplementedError(
-                            "Platform requirements not satisfied. (No Selection)".to_string(),
-                        ));
-                    }
-                }
-                $(
-                    ApiBackend::$backend => {
-                        match cfg!(feature = $feature) {
-                            true => {
-                                match $fn(i,s) {
-                                    Some(cap) => match cap {
-                                        Ok(c) => c,
-                                        Err(why) => return Err(why),
-                                    }
-                                    None => {
-                                        return Err(NokhwaError::NotImplementedError(
-                                            "Platform requirements not satisfied (Wrong Platform - Not Implemented).".to_string(),
-                                        ));
-                                    }
-                                }
-                            }
-                            false => {
-                                return Err(NokhwaError::NotImplementedError(
-                                    "Platform requirements not satisfied. (Wrong Platform - Not Selected)".to_string(),
-                                ));
-                            }
-                        }
-                    }
-                )+
-
-                _ => {
-                    return Err(NokhwaError::NotImplementedError(
-                        "Platform requirements not satisfied. (Wrong Platform - Not Selected)".to_string(),
-                    ));
-                }
-            }
+fn create_backend(
+    backend: ApiBackend,
+    index: &CameraIndex,
+    format: RequestedFormat,
+) -> Result<Box<dyn CaptureBackendTrait>, NokhwaError> {
+    match backend {
+        #[cfg(all(feature = "input-v4l", target_os = "linux"))]
+        ApiBackend::Video4Linux => {
+            use crate::backends::capture::V4LCaptureDevice;
+            Ok(Box::new(V4LCaptureDevice::new(index, format)?))
         }
-    }
-}
 
-cap_impl_fn! {
-    // (GStreamerCaptureDevice, new, feature = "input-gst", gst),
-    (OpenCvCaptureDevice, new, feature = "input-opencv", opencv),
-    // (UVCCaptureDevice, create, feature = "input-uvc", uvc),
-    (V4LCaptureDevice, new, all(feature = "input-v4l", target_os = "linux"), v4l),
-    (MediaFoundationCaptureDevice, new, all(feature = "input-msmf", target_os = "windows"), msmf),
-    (AVFoundationCaptureDevice, new, all(feature = "input-avfoundation", any(target_os = "macos", target_os = "ios")), avfoundation)
+        #[cfg(all(feature = "input-msmf", target_os = "windows"))]
+        ApiBackend::MediaFoundation => {
+            use crate::backends::capture::MediaFoundationCaptureDevice;
+            Ok(Box::new(MediaFoundationCaptureDevice::new(index, format)?))
+        }
+
+        #[cfg(all(
+            feature = "input-avfoundation",
+            any(target_os = "macos", target_os = "ios")
+        ))]
+        ApiBackend::AVFoundation => {
+            use crate::backends::capture::AVFoundationCaptureDevice;
+            Ok(Box::new(AVFoundationCaptureDevice::new(index, format)?))
+        }
+
+        #[cfg(feature = "input-opencv")]
+        ApiBackend::OpenCv => {
+            use crate::backends::capture::OpenCvCaptureDevice;
+            Ok(Box::new(OpenCvCaptureDevice::new(index, format)?))
+        }
+
+        _ => Err(NokhwaError::NotImplementedError(format!(
+            "Backend {backend} is not available (not enabled or wrong platform)."
+        ))),
+    }
 }
 
 fn init_camera(
@@ -567,14 +492,16 @@ fn init_camera(
     format: RequestedFormat,
     backend: ApiBackend,
 ) -> Result<Box<dyn CaptureBackendTrait>, NokhwaError> {
-    let camera_backend = cap_impl_matches! {
-            backend, index, format,
-            ("input-v4l", Video4Linux, init_v4l),
-            ("input-msmf", MediaFoundation, init_msmf),
-            ("input-avfoundation", AVFoundation, init_avfoundation),
-            ("input-opencv", OpenCv, init_opencv)
+    let resolved = match backend {
+        ApiBackend::Auto => figure_out_auto().ok_or_else(|| {
+            NokhwaError::NotImplementedError(
+                "No suitable backend found for the current platform.".to_string(),
+            )
+        })?,
+        other => other,
     };
-    Ok(camera_backend)
+
+    create_backend(resolved, index, format)
 }
 
 #[cfg(feature = "camera-sync-impl")]
