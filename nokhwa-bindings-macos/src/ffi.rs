@@ -10,7 +10,7 @@ use objc2::runtime::AnyObject;
 pub type FourCharCode = u32;
 
 pub type CMSampleBufferRef = *mut std::ffi::c_void;
-pub type CMBlockBufferRef = *mut std::ffi::c_void; // CFTypeRef
+pub type CMBlockBufferRef = *mut std::ffi::c_void;
 pub type CMFormatDescriptionRef = *mut std::ffi::c_void;
 
 #[repr(C)]
@@ -55,6 +55,8 @@ pub const kCMVideoCodecType_JPEG_OpenDML: FourCharCode = fourcc(b"dmb1");
 pub const kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange: FourCharCode = fourcc(b"420v");
 #[allow(non_upper_case_globals)]
 pub const kCVPixelFormatType_420YpCbCr8BiPlanarFullRange: FourCharCode = fourcc(b"420f");
+#[allow(non_upper_case_globals)]
+pub const kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange: FourCharCode = fourcc(b"x420");
 
 // CGFloat is f64 on 64-bit Apple platforms (all modern macOS/iOS)
 pub type CGFloat = std::ffi::c_double;
@@ -136,6 +138,7 @@ extern "C" {
 
     pub fn CVPixelBufferGetPixelFormatType(pixelBuffer: CVPixelBufferRef) -> OSType;
 
+    /// CFStringRef in Apple headers; cast to `*mut AnyObject` at usage site.
     pub static kCVPixelBufferPixelFormatTypeKey: *const std::ffi::c_void;
 }
 

@@ -238,19 +238,15 @@ impl AVCaptureDevice {
         let mut err_ptr: *mut AnyObject = std::ptr::null_mut();
         let accepted: bool =
             unsafe { objc2::msg_send![self.inner, lockForConfiguration: &mut err_ptr as *mut _] };
-        if !err_ptr.is_null() {
-            return Err(NokhwaError::SetPropertyError {
-                property: "lockForConfiguration".to_string(),
-                value: "Locked".to_string(),
-                error: "Cannot lock for configuration".to_string(),
-            });
-        }
-        // Space these out for debug purposes
         if !accepted {
             return Err(NokhwaError::SetPropertyError {
                 property: "lockForConfiguration".to_string(),
                 value: "Locked".to_string(),
-                error: "Lock Rejected".to_string(),
+                error: if !err_ptr.is_null() {
+                    "Cannot lock for configuration (NSError returned)".to_string()
+                } else {
+                    "Lock rejected".to_string()
+                },
             });
         }
         self.locked = true;

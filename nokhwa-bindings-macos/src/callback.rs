@@ -1,10 +1,10 @@
 use crate::ffi::AVMediaTypeVideo;
 use crate::ffi::CMSampleBufferRef;
 use crate::ffi::{
-    dispatch_queue_create, CMSampleBufferGetImageBuffer, CMSampleBufferGetPresentationTimeStamp,
-    CVImageBufferRef, CVPixelBufferGetBaseAddress, CVPixelBufferGetDataSize,
-    CVPixelBufferGetPixelFormatType, CVPixelBufferLockBaseAddress, CVPixelBufferUnlockBaseAddress,
-    NSObject,
+    dispatch_queue_create, dispatch_release, CMSampleBufferGetImageBuffer,
+    CMSampleBufferGetPresentationTimeStamp, CVImageBufferRef, CVPixelBufferGetBaseAddress,
+    CVPixelBufferGetDataSize, CVPixelBufferGetPixelFormatType, CVPixelBufferLockBaseAddress,
+    CVPixelBufferUnlockBaseAddress, NSObject,
 };
 use crate::types::{AVAuthorizationStatus, AVMediaType};
 use crate::util::raw_fcc_to_frameformat;
@@ -254,9 +254,8 @@ impl Drop for AVCaptureVideoCallback {
                 let _: () = objc2::msg_send![self.delegate, release];
             }
         }
-        use crate::ffi::dispatch_release;
         unsafe {
-            dispatch_release(self.queue.clone());
+            dispatch_release(NSObject(self.queue.0));
         }
     }
 }

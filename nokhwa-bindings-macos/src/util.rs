@@ -1,6 +1,7 @@
 use crate::ffi::{
     kCMPixelFormat_24RGB, kCMPixelFormat_422YpCbCr8_yuvs, kCMPixelFormat_8IndexedGray_WhiteIsZero,
     kCMVideoCodecType_422YpCbCr8, kCMVideoCodecType_JPEG, kCMVideoCodecType_JPEG_OpenDML,
+    kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
     kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
     kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, OSType,
 };
@@ -113,7 +114,8 @@ pub(crate) fn raw_fcc_to_frameformat(raw: OSType) -> Option<FrameFormat> {
         kCMVideoCodecType_JPEG | kCMVideoCodecType_JPEG_OpenDML => Some(FrameFormat::MJPEG),
         kCMPixelFormat_8IndexedGray_WhiteIsZero => Some(FrameFormat::GRAY),
         kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
-        | kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange => Some(FrameFormat::NV12),
+        | kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        | kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange => Some(FrameFormat::NV12),
         kCMPixelFormat_24RGB => Some(FrameFormat::RAWRGB),
         _ => None,
     }
