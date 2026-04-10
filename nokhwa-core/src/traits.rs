@@ -129,10 +129,9 @@ pub fn raw_texture_layout(
             w * 3,
         )),
         // MJPEG is a compressed format — raw bytes cannot be uploaded directly.
-        FrameFormat::MJPEG => Err(NokhwaError::GeneralError(
+        FrameFormat::MJPEG => Err(NokhwaError::general(
             "frame_texture_raw() cannot be used with MJPEG sources; \
-             use frame_texture() instead"
-                .to_string(),
+             use frame_texture() instead",
         )),
     }
 }

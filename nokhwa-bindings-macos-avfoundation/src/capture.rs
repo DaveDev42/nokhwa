@@ -22,7 +22,7 @@ use crate::session::{
     session_remove_input, session_remove_output, session_start, session_stop,
 };
 use nokhwa_core::{
-    buffer::Buffer,
+    buffer::{Buffer, TimestampKind},
     error::NokhwaError,
     pixel_format::RgbFormat,
     traits::CaptureBackendTrait,
@@ -277,11 +277,19 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
     fn frame(&mut self) -> Result<Buffer, NokhwaError> {
         self.refresh_camera_format()?;
         let cfmt = self.camera_format();
-        let (bytes, _fmt, capture_ts) = self
-            .frame_buffer_receiver
-            .recv()
-            .map_err(|why| NokhwaError::ReadFrameError(why.to_string()))?;
-        let buffer = Buffer::with_timestamp(cfmt.resolution(), &bytes, cfmt.format(), capture_ts);
+        let (bytes, _fmt, capture_ts) =
+            self.frame_buffer_receiver
+                .recv()
+                .map_err(|why| NokhwaError::ReadFrameError {
+                    message: why.to_string(),
+                    format: Some(cfmt.format()),
+                })?;
+        let buffer = Buffer::from_vec_with_timestamp(
+            cfmt.resolution(),
+            bytes,
+            cfmt.format(),
+            capture_ts.map(|ts| (ts, TimestampKind::Presentation)),
+        );
         self.frame_buffer_receiver.try_iter().for_each(drop);
         Ok(buffer)
     }
@@ -289,7 +297,10 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
     fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
         match self.frame_buffer_receiver.recv() {
             Ok(recv) => Ok(Cow::from(recv.0)),
-            Err(why) => Err(NokhwaError::ReadFrameError(why.to_string())),
+            Err(why) => Err(NokhwaError::ReadFrameError {
+                message: why.to_string(),
+                format: Some(self.camera_format().format()),
+            }),
         }
     }
 
@@ -339,3 +350,16 @@ impl Drop for AVFoundationCaptureDevice {
         self.device.unlock();
     }
 }
+
+// SAFETY: AVFoundationCaptureDevice is safe to Send (move) between threads because:
+// - All access goes through &mut self, so after a move the new thread has exclusive
+//   ownership — no aliasing across threads occurs. We do NOT implement Sync.
+// - The Retained<AVCaptureDevice/Session/Input/Output> fields hold reference-counted
+//   ObjC pointers. objc2 conservatively marks them !Send because Apple docs recommend
+//   dispatching calls on a specific queue, but exclusive &mut self access satisfies
+//   that constraint: only one thread touches them at a time.
+// - The GCD DispatchQueue is designed for cross-thread use.
+// - The *mut AnyObject delegate is only accessed during setup and by the GCD queue
+//   callback; it is not touched directly after construction.
+// - The mpsc Sender/Receiver are themselves Send.
+unsafe impl Send for AVFoundationCaptureDevice {}

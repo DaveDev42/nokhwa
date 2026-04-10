@@ -225,7 +225,7 @@ impl CameraIndex {
             CameraIndex::Index(i) => Ok(*i),
             CameraIndex::String(s) => s
                 .parse::<u32>()
-                .map_err(|why| NokhwaError::GeneralError(why.to_string())),
+                .map_err(|why| NokhwaError::general(why.to_string())),
         }
     }
 
@@ -1614,15 +1614,20 @@ pub fn buf_nv12_to_rgb(
     let y_section = (resolution.width() * resolution.height()) as usize;
 
     let width_usize = resolution.width() as usize;
+    let out_row_stride = width_usize * rgba_size;
 
     for (hidx, horizontal_row) in data[0..y_section].chunks_exact(width_usize).enumerate() {
+        let uv_row_offset = y_section + (hidx / 2) * width_usize;
+        let out_row_offset = hidx * out_row_stride;
+
         for (cidx, column) in horizontal_row.chunks_exact(2).enumerate() {
-            let u = data[(y_section) + ((hidx / 2) * width_usize) + (cidx * 2)];
-            let v = data[(y_section) + ((hidx / 2) * width_usize) + (cidx * 2) + 1];
+            let uv_offset = uv_row_offset + cidx * 2;
+            let u = data[uv_offset];
+            let v = data[uv_offset + 1];
 
             let y0 = column[0];
             let y1 = column[1];
-            let base_index = (hidx * width_usize * rgba_size) + cidx * rgba_size * 2;
+            let base_index = out_row_offset + cidx * rgba_size * 2;
 
             if rgba {
                 let px0 = yuyv444_to_rgba(i32::from(y0), i32::from(u), i32::from(v));

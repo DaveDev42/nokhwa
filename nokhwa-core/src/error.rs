@@ -22,14 +22,17 @@ use thiserror::Error;
 #[allow(clippy::module_name_repetitions)]
 #[derive(Error, Debug, Clone)]
 pub enum NokhwaError {
-    #[error("Unitialized Camera. Call `init()` first!")]
-    UnitializedError,
+    #[error("Uninitialized Camera. Call `init()` first!")]
+    UninitializedError,
     #[error("Could not initialize {backend}: {error}")]
     InitializeError { backend: ApiBackend, error: String },
     #[error("Could not shutdown {backend}: {error}")]
     ShutdownError { backend: ApiBackend, error: String },
-    #[error("Error: {0}")]
-    GeneralError(String),
+    #[error("Error{}: {message}", backend.map(|b| format!(" (backend {b})")).unwrap_or_default())]
+    GeneralError {
+        message: String,
+        backend: Option<ApiBackend>,
+    },
     #[error("Could not generate required structure {structure}: {error}")]
     StructureError { structure: String, error: String },
     #[error("Could not open device {0}: {1}")]
@@ -42,22 +45,67 @@ pub enum NokhwaError {
         value: String,
         error: String,
     },
-    #[error("Could not open device stream: {0}")]
-    OpenStreamError(String),
-    #[error("Could not capture frame: {0}")]
-    ReadFrameError(String),
+    #[error("Could not open device stream{}: {message}", backend.map(|b| format!(" (backend {b})")).unwrap_or_default())]
+    OpenStreamError {
+        message: String,
+        backend: Option<ApiBackend>,
+    },
+    #[error("Could not capture frame{}: {message}", format.map(|f| format!(" (format {f})")).unwrap_or_default())]
+    ReadFrameError {
+        message: String,
+        format: Option<FrameFormat>,
+    },
     #[error("Could not process frame {src} to {destination}: {error}")]
     ProcessFrameError {
         src: FrameFormat,
         destination: String,
         error: String,
     },
-    #[error("Could not stop stream: {0}")]
-    StreamShutdownError(String),
+    #[error("Could not stop stream{}: {message}", backend.map(|b| format!(" (backend {b})")).unwrap_or_default())]
+    StreamShutdownError {
+        message: String,
+        backend: Option<ApiBackend>,
+    },
     #[error("This operation is not supported by backend {0}.")]
     UnsupportedOperationError(ApiBackend),
     #[error("This operation is not implemented yet: {0}")]
     NotImplementedError(String),
     #[error("Frame capture timed out after {0:?}")]
     TimeoutError(Duration),
+}
+
+// Helper constructors for backwards compatibility — allow creating structured
+// variants from a plain String, defaulting optional context fields to None.
+impl NokhwaError {
+    #[must_use]
+    pub fn general(message: impl Into<String>) -> Self {
+        Self::GeneralError {
+            message: message.into(),
+            backend: None,
+        }
+    }
+
+    #[must_use]
+    pub fn open_stream(message: impl Into<String>) -> Self {
+        Self::OpenStreamError {
+            message: message.into(),
+            backend: None,
+        }
+    }
+
+    #[must_use]
+    pub fn read_frame(message: impl Into<String>) -> Self {
+        Self::ReadFrameError {
+            message: message.into(),
+            format: None,
+        }
+    }
+
+    #[must_use]
+    pub fn stream_shutdown(message: impl Into<String>) -> Self {
+        Self::StreamShutdownError {
+            message: message.into(),
+            backend: None,
+        }
+    }
 }

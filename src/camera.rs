@@ -35,7 +35,7 @@ use wgpu::{Device as WgpuDevice, Queue as WgpuQueue, Texture as WgpuTexture};
 pub struct Camera {
     idx: CameraIndex,
     api: ApiBackend,
-    device: Box<dyn CaptureBackendTrait>,
+    device: Box<dyn CaptureBackendTrait + Send>,
 }
 
 impl Camera {
@@ -70,7 +70,7 @@ impl Camera {
     pub fn with_custom(
         idx: CameraIndex,
         api: ApiBackend,
-        device: Box<dyn CaptureBackendTrait>,
+        device: Box<dyn CaptureBackendTrait + Send>,
     ) -> Self {
         Self { idx, api, device }
     }
@@ -404,9 +404,9 @@ impl Camera {
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                 Err(NokhwaError::TimeoutError(duration))
             }
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(
-                NokhwaError::ReadFrameError("frame capture thread panicked".to_string()),
-            ),
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                Err(NokhwaError::read_frame("frame capture thread panicked"))
+            }
         };
         let _ = handle.join();
         result
@@ -503,7 +503,7 @@ fn create_backend(
     backend: ApiBackend,
     index: &CameraIndex,
     format: RequestedFormat,
-) -> Result<Box<dyn CaptureBackendTrait>, NokhwaError> {
+) -> Result<Box<dyn CaptureBackendTrait + Send>, NokhwaError> {
     #[cfg(all(
         feature = "input-avfoundation",
         any(target_os = "macos", target_os = "ios")
@@ -548,7 +548,7 @@ fn init_camera(
     index: &CameraIndex,
     format: RequestedFormat,
     backend: ApiBackend,
-) -> Result<Box<dyn CaptureBackendTrait>, NokhwaError> {
+) -> Result<Box<dyn CaptureBackendTrait + Send>, NokhwaError> {
     let resolved = match backend {
         ApiBackend::Auto => figure_out_auto().ok_or_else(|| {
             NokhwaError::NotImplementedError(
@@ -560,6 +560,3 @@ fn init_camera(
 
     create_backend(resolved, index, format)
 }
-
-#[cfg(feature = "camera-sync-impl")]
-unsafe impl Send for Camera {}

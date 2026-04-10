@@ -17,7 +17,7 @@
 #[cfg(target_os = "linux")]
 mod internal {
     use nokhwa_core::{
-        buffer::Buffer,
+        buffer::{Buffer, TimestampKind},
         error::NokhwaError,
         traits::CaptureBackendTrait,
         types::{
@@ -453,9 +453,10 @@ mod internal {
         }
 
         fn lock_device(&self) -> Result<std::sync::MutexGuard<'_, Device>, NokhwaError> {
-            self.device
-                .lock()
-                .map_err(|e| NokhwaError::GeneralError(format!("Failed to lock device: {}", e)))
+            self.device.lock().map_err(|e| NokhwaError::GeneralError {
+                message: format!("Failed to lock device: {}", e),
+                backend: Some(ApiBackend::Video4Linux),
+            })
         }
 
         fn get_resolution_list(&self, fourcc: FrameFormat) -> Result<Vec<Resolution>, NokhwaError> {
@@ -857,7 +858,12 @@ mod internal {
             let mut stream =
                 match MmapStream::new(&*self.lock_device()?, v4l::buffer::Type::VideoCapture) {
                     Ok(s) => s,
-                    Err(why) => return Err(NokhwaError::OpenStreamError(why.to_string())),
+                    Err(why) => {
+                        return Err(NokhwaError::OpenStreamError {
+                            message: why.to_string(),
+                            backend: Some(ApiBackend::Video4Linux),
+                        })
+                    }
                 };
 
             // Explicitly start now, or won't work with the RPi. As a consequence, buffers will only be used as required.
@@ -865,7 +871,12 @@ mod internal {
             #[cfg(feature = "no-arena-buffer")]
             match stream.start() {
                 Ok(s) => s,
-                Err(why) => return Err(NokhwaError::OpenStreamError(why.to_string())),
+                Err(why) => {
+                    return Err(NokhwaError::OpenStreamError {
+                        message: why.to_string(),
+                        backend: Some(ApiBackend::Video4Linux),
+                    })
+                }
             }
             self.stream_handle = Some(stream);
             Ok(())
@@ -885,26 +896,29 @@ mod internal {
                             cam_fmt.resolution(),
                             data,
                             cam_fmt.format(),
-                            wall_ts,
+                            wall_ts.map(|ts| (ts, TimestampKind::WallClock)),
                         ))
                     }
-                    Err(why) => Err(NokhwaError::ReadFrameError(why.to_string())),
+                    Err(why) => Err(NokhwaError::ReadFrameError {
+                        message: why.to_string(),
+                        format: Some(cam_fmt.format()),
+                    }),
                 },
-                None => Err(NokhwaError::ReadFrameError(
-                    "Stream Not Started".to_string(),
-                )),
+                None => Err(NokhwaError::read_frame("Stream Not Started")),
             }
         }
 
         fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
+            let cam_fmt_format = self.camera_format.format();
             match &mut self.stream_handle {
                 Some(sh) => match sh.next() {
                     Ok((data, _)) => Ok(Cow::Borrowed(data)),
-                    Err(why) => Err(NokhwaError::ReadFrameError(why.to_string())),
+                    Err(why) => Err(NokhwaError::ReadFrameError {
+                        message: why.to_string(),
+                        format: Some(cam_fmt_format),
+                    }),
                 },
-                None => Err(NokhwaError::ReadFrameError(
-                    "Stream Not Started".to_string(),
-                )),
+                None => Err(NokhwaError::read_frame("Stream Not Started")),
             }
         }
 

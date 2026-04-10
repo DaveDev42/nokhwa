@@ -180,7 +180,7 @@ impl CallbackCamera {
         *self
             .last_frame_captured
             .lock()
-            .map_err(|why| NokhwaError::GeneralError(why.to_string()))? =
+            .map_err(|why| NokhwaError::general(why.to_string()))? =
             Buffer::new(new_res, &[], self.camera_format()?.format());
         self.camera.lock().set_resolution(new_res)
     }
@@ -312,9 +312,7 @@ impl CallbackCamera {
             *handle_lock = Some(handle);
             Ok(())
         } else {
-            Err(NokhwaError::OpenStreamError(
-                "Stream Already Open".to_string(),
-            ))
+            Err(NokhwaError::open_stream("Stream Already Open"))
         }
     }
 
@@ -343,7 +341,7 @@ impl CallbackCamera {
         *self
             .last_frame_captured
             .lock()
-            .map_err(|why| NokhwaError::GeneralError(why.to_string()))? = frame.clone();
+            .map_err(|why| NokhwaError::general(why.to_string()))? = frame.clone();
         Ok(frame)
     }
 
@@ -360,7 +358,7 @@ impl CallbackCamera {
         *self
             .last_frame_captured
             .lock()
-            .map_err(|why| NokhwaError::GeneralError(why.to_string()))? = frame.clone();
+            .map_err(|why| NokhwaError::general(why.to_string()))? = frame.clone();
         Ok(frame)
     }
 
@@ -371,7 +369,7 @@ impl CallbackCamera {
         Ok(self
             .last_frame_captured
             .lock()
-            .map_err(|why| NokhwaError::ReadFrameError(why.to_string()))?
+            .map_err(|why| NokhwaError::read_frame(why.to_string()))?
             .clone())
     }
 

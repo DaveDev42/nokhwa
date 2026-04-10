@@ -517,7 +517,7 @@ impl FormatDecoder for YuyvFormat {
                 );
                 Ok(i420)
             }
-            _ => Err(NokhwaError::GeneralError("Invalid FrameFormat".into())),
+            _ => Err(NokhwaError::general("Invalid FrameFormat")),
         }
     }
 
@@ -538,7 +538,7 @@ impl FormatDecoder for YuyvFormat {
                 )?;
                 Ok(())
             }
-            _ => Err(NokhwaError::GeneralError("Invalid FrameFormat".into())),
+            _ => Err(NokhwaError::general("Invalid FrameFormat")),
         }
     }
 }
@@ -584,9 +584,7 @@ fn convert_yuyv_to_i420_direct(
 ) -> Result<(), NokhwaError> {
     // Ensure the destination buffer is large enough
     if dest.len() < width * height + 2 * (width / 2) * (height / 2) {
-        return Err(NokhwaError::GeneralError(
-            "Destination buffer is too small".into(),
-        ));
+        return Err(NokhwaError::general("Destination buffer is too small"));
     }
 
     // Split the destination buffer into Y, U, and V planes

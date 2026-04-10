@@ -219,9 +219,10 @@ pub fn current_authorization_status() -> AVAuthorizationStatus {
 /// Wraps an Objective-C delegate and GCD dispatch queue for receiving video frames.
 ///
 /// # Thread Safety
-/// This type is `!Send + !Sync` because it holds raw ObjC pointers. The delegate
-/// and queue are only safe to use from the thread that created them or from the
-/// GCD dispatch queue associated with the AVCaptureSession.
+/// This type holds raw ObjC pointers (`*mut AnyObject` delegate and `DispatchQueue`).
+/// It is `!Send` by default due to the raw pointers, but the containing
+/// `AVFoundationCaptureDevice` implements `Send` because GCD dispatch queues are
+/// thread-safe and the delegate is managed by the session's dispatch queue.
 pub struct AVCaptureVideoCallback {
     pub(crate) delegate: *mut AnyObject,
     pub(crate) queue: DispatchQueue,
