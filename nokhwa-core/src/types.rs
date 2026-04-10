@@ -174,7 +174,7 @@ impl RequestedFormat<'_> {
                 let frame_rates = all_formats
                     .iter()
                     .filter_map(|cfmt| {
-                        if cfmt.format() == c.format() && cfmt.resolution() == c.resolution() {
+                        if cfmt.format() == c.format() && cfmt.resolution() == resolution {
                             return Some(cfmt.frame_rate());
                         }
                         None

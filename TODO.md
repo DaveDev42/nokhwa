@@ -1,18 +1,13 @@
 # TODO
 
 ## High Priority
-- [ ] Re-enable WASM/browser support — `js_camera.rs` (2,715 lines) exists but is disabled behind removed `input-jscam` feature. Requires resolving `wasm-bindgen` non-C enum limitation (see CHANGELOG 0.10.0). Consider using `tsify` or `serde-wasm-bindgen` as alternatives.
-- [x] Replace `core-media-sys` / `core-video-sys` with direct FFI declarations — these pull in legacy `objc 0.2` and `metal 0.18` transitively, conflicting with our `objc2` migration
-- [x] Fix NV12 formats incorrectly mapped to YUYV in macOS bindings (`util.rs:119-121`)
+- [ ] Re-enable WASM/browser support — `js_camera.rs` was removed, needs fresh implementation. Requires resolving `wasm-bindgen` non-C enum limitation. Consider `tsify` or `serde-wasm-bindgen` as alternatives.
+- [ ] Migrate from raw `objc2::msg_send!` to typed `objc2-av-foundation` wrappers — would eliminate ~132 unsafe msg_send! calls and ~176 unsafe blocks in macOS bindings. Crate exists at v0.3.2 with full API coverage (AVCaptureDevice, AVCaptureSession, etc.). Also use `objc2-core-media` and `objc2-core-video` for typed CoreMedia/CoreVideo APIs.
 - [ ] Fix `Closest` format selection using requested resolution instead of computed closest (`types.rs:174-182`)
-- [x] Fix ObjC `lockForConfiguration:` error pointer passed by value — never captures NSError (`device.rs:~465`)
-- [x] Add `Drop` implementation for `AVCaptureVideoCallback` (delegate/queue memory leak)
 
 ## Medium Priority
 - [ ] Split `device.rs` further (1,728 lines) — separate format discovery from device control
-- [ ] Consider `Arc<Buffer>` in `CallbackCamera` to avoid frame clone per callback invocation
 - [ ] Add integration tests for each platform backend (currently only core unit tests)
 
 ## Low Priority
-- [ ] Document minimum supported Rust version (currently requires nightly)
-- [ ] Investigate replacing `flume` with `std::sync::mpsc` or `crossbeam-channel` to reduce dependencies
+- [ ] Investigate replacing `flume` with `std::sync::mpsc` or `crossbeam-channel` — currently only 3 unbounded channel usages, low priority

@@ -210,3 +210,33 @@ fn control_value_description_verify_setter() {
     assert!(desc.verify_setter(&ControlValueSetter::Integer(75)));
     assert!(!desc.verify_setter(&ControlValueSetter::Float(3.14)));
 }
+
+#[test]
+fn closest_format_when_exact_resolution_unavailable() {
+    let available = vec![
+        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30),
+        CameraFormat::new_from(1920, 1080, FrameFormat::MJPEG, 30),
+        CameraFormat::new_from(1920, 1080, FrameFormat::MJPEG, 60),
+    ];
+
+    // Request 1280x720 which doesn't exist in the available formats
+    let requested_fmt = CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 30);
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::Closest(requested_fmt),
+        &[FrameFormat::MJPEG],
+    );
+
+    let result = req.fulfill(&available);
+    assert!(
+        result.is_some(),
+        "Closest should return a format even when exact resolution is unavailable"
+    );
+
+    let result = result.unwrap();
+    // 640x480 is the closest by Euclidean distance:
+    // dist(1280,720 -> 640,480)   = sqrt(640^2 + 240^2) ≈ 683
+    // dist(1280,720 -> 1920,1080) = sqrt(640^2 + 360^2) ≈ 734
+    assert_eq!(result.resolution(), Resolution::new(640, 480));
+    assert_eq!(result.format(), FrameFormat::MJPEG);
+    assert_eq!(result.frame_rate(), 30);
+}

@@ -75,6 +75,10 @@ The default feature includes nothing. You **must** enable at least one `input-*`
 - `decoding`: MJPEG decoding via `mozjpeg` (enabled by default)
 - `serialize`: `serde` support for core types
 
+## Minimum Supported Rust Version
+
+Regular builds work on **stable Rust**. The `docs-features` feature requires **nightly** (`#![feature(doc_cfg)]`). Development environment is configured via `flake.nix` (nightly).
+
 ## Issues
 If you are making an issue, please make sure that
  - It has not been made yet
