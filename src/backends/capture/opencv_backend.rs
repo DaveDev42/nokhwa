@@ -525,9 +525,10 @@ impl CaptureBackendTrait for OpenCvCaptureDevice {
                 if open {
                     return Ok(());
                 }
-                Err(NokhwaError::open_stream(
-                    "Stream is not opened after stream open attempt opencv",
-                ))
+                Err(NokhwaError::OpenStreamError {
+                    message: "Stream is not opened after stream open attempt opencv".to_string(),
+                    backend: Some(ApiBackend::OpenCv),
+                })
             }
             Err(why) => Err(NokhwaError::GetPropertyError {
                 property: "Is Stream Open After Open Stream".to_string(),
