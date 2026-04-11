@@ -1,7 +1,7 @@
 # TODO
 
 ## High Priority
-(None)
+- [x] ~~Improve API ergonomics: rename `camera_controls_string()` → `camera_controls_by_name()`, `camera_controls_known_camera_controls()` → `camera_controls_by_id()`, add convenience constructors, fix 'fufill' typo~~
 
 ## Medium Priority
 - [ ] Add integration tests for each platform backend (currently only core unit tests + macOS format tests)

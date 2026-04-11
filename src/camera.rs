@@ -75,6 +75,30 @@ impl Camera {
         Self { idx, api, device }
     }
 
+    /// Create a new camera from an `index`, automatically selecting the highest available resolution.
+    /// # Errors
+    /// This will error if you either have a bad platform configuration (e.g. `input-v4l` but not on linux) or the backend cannot create the camera (e.g. permission denied).
+    pub fn new_with_highest_resolution(index: CameraIndex) -> Result<Self, NokhwaError> {
+        Camera::new(
+            index,
+            RequestedFormat::new::<nokhwa_core::pixel_format::RgbFormat>(
+                RequestedFormatType::AbsoluteHighestResolution,
+            ),
+        )
+    }
+
+    /// Create a new camera from an `index`, automatically selecting the highest available frame rate.
+    /// # Errors
+    /// This will error if you either have a bad platform configuration (e.g. `input-v4l` but not on linux) or the backend cannot create the camera (e.g. permission denied).
+    pub fn new_with_highest_framerate(index: CameraIndex) -> Result<Self, NokhwaError> {
+        Camera::new(
+            index,
+            RequestedFormat::new::<nokhwa_core::pixel_format::RgbFormat>(
+                RequestedFormatType::AbsoluteHighestFrameRate,
+            ),
+        )
+    }
+
     /// Gets the current Camera's index.
     #[must_use]
     pub fn index(&self) -> &CameraIndex {
@@ -159,7 +183,7 @@ impl Camera {
             .fulfill(self.device.compatible_camera_formats()?.as_slice())
             .ok_or(NokhwaError::GetPropertyError {
                 property: "Compatible Camera Format by request".to_string(),
-                error: "Failed to fufill".to_string(),
+                error: "Failed to fulfill".to_string(),
             })?;
         self.device.set_camera_format(new_format)?;
         Ok(new_format)
@@ -265,7 +289,7 @@ impl Camera {
     /// Gets the current supported list of [`CameraControl`]s keyed by its name as a `String`.
     /// # Errors
     /// If the list cannot be collected, this will error. This can be treated as a "nothing supported".
-    pub fn camera_controls_string(&self) -> Result<HashMap<String, CameraControl>, NokhwaError> {
+    pub fn camera_controls_by_name(&self) -> Result<HashMap<String, CameraControl>, NokhwaError> {
         let known_controls = self.supported_camera_controls()?;
         let maybe_camera_controls = known_controls
             .iter()
@@ -282,10 +306,10 @@ impl Camera {
         Ok(control_map)
     }
 
-    /// Gets the current supported list of [`CameraControl`]s keyed by its name as a `String`.
+    /// Gets the current supported list of [`CameraControl`]s keyed by [`KnownCameraControl`].
     /// # Errors
     /// If the list cannot be collected, this will error. This can be treated as a "nothing supported".
-    pub fn camera_controls_known_camera_controls(
+    pub fn camera_controls_by_id(
         &self,
     ) -> Result<HashMap<KnownCameraControl, CameraControl>, NokhwaError> {
         let known_controls = self.supported_camera_controls()?;
@@ -302,6 +326,24 @@ impl Camera {
         }
 
         Ok(control_map)
+    }
+
+    /// Use [`camera_controls_by_name()`](Camera::camera_controls_by_name) instead.
+    /// # Errors
+    /// See [`camera_controls_by_name()`](Camera::camera_controls_by_name).
+    #[deprecated(since = "0.11.0", note = "renamed to camera_controls_by_name()")]
+    pub fn camera_controls_string(&self) -> Result<HashMap<String, CameraControl>, NokhwaError> {
+        self.camera_controls_by_name()
+    }
+
+    /// Use [`camera_controls_by_id()`](Camera::camera_controls_by_id) instead.
+    /// # Errors
+    /// See [`camera_controls_by_id()`](Camera::camera_controls_by_id).
+    #[deprecated(since = "0.11.0", note = "renamed to camera_controls_by_id()")]
+    pub fn camera_controls_known_camera_controls(
+        &self,
+    ) -> Result<HashMap<KnownCameraControl, CameraControl>, NokhwaError> {
+        self.camera_controls_by_id()
     }
 
     /// Gets the value of [`KnownCameraControl`].
