@@ -161,7 +161,7 @@ pub(crate) fn yuyv_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
 
 /// Scalar YUYV-to-RGB fallback.
 ///
-/// # Safety invariants (upheld by callers `yuyv_to_rgb_simd`):
+/// # Safety invariants (upheld by caller `yuyv_to_rgb_simd`):
 ///   - `src.len()` is a multiple of 4 (asserted).
 ///   - `dst.len() == (src.len() / 4) * 6` (asserted).
 ///
@@ -216,7 +216,7 @@ fn yuyv_to_rgb_scalar(src: &[u8], dst: &mut [u8]) {
 
 /// Scalar YUYV-to-RGBA fallback.
 ///
-/// # Safety invariants (upheld by callers `yuyv_to_rgba_simd`):
+/// # Safety invariants (upheld by caller `yuyv_to_rgba_simd`):
 ///   - `src.len()` is a multiple of 4 (asserted).
 ///   - `dst.len() == (src.len() / 4) * 8` (asserted).
 ///
