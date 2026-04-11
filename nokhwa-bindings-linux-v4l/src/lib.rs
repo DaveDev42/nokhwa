@@ -66,15 +66,13 @@ mod internal {
         V4L2_CID_FOCUS_RELATIVE,
     ];
 
-    /// Attempts to convert a [`KnownCameraControl`] into a V4L2 Control ID.
-    /// If the associated control is not found, this will return `None` (`ColorEnable`, `Roll`)
+    /// Converts a [`KnownCameraControl`] into a V4L2 Control ID.
     pub fn known_camera_control_to_id(ctrl: KnownCameraControl) -> u32 {
         ctrl.to_platform_id(&V4L2_CONTROL_IDS)
-            .expect("to_platform_id returns Some for all variants")
     }
 
-    /// Attempts to convert a [`u32`] V4L2 Control ID into a [`KnownCameraControl`]
-    /// If the associated control is not found, this will return `None` (`ColorEnable`, `Roll`)
+    /// Converts a V4L2 Control ID into a [`KnownCameraControl`].
+    /// Unrecognised IDs are returned as `Other(id)`.
     pub fn id_to_known_camera_control(id: u32) -> KnownCameraControl {
         KnownCameraControl::from_platform_id(id, &V4L2_CONTROL_IDS)
     }

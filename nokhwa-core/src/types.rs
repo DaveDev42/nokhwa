@@ -791,11 +791,14 @@ impl KnownCameraControl {
     ///
     /// `platform_ids` must have exactly [`STANDARD_COUNT`](Self::STANDARD_COUNT)
     /// entries, one per canonical index.
+    ///
+    /// **Note:** This helper uses `u32` platform IDs, which is suitable for
+    /// V4L2 CIDs.  Windows Media Foundation uses GUIDs that do not fit in
+    /// `u32`; MSMF should use its own mapping rather than this function.
     #[must_use]
     pub fn from_platform_id(platform_id: u32, platform_ids: &[u32; Self::STANDARD_COUNT]) -> Self {
         for (idx, &pid) in platform_ids.iter().enumerate() {
             if pid == platform_id {
-                // SAFETY: idx is always 0..14 because STANDARD_COUNT == 15.
                 // idx is always 0..14 because STANDARD_COUNT == 15, so this cast is safe.
                 #[allow(clippy::cast_possible_truncation)]
                 if let Some(ctrl) = Self::from_index(idx as u8) {
@@ -809,13 +812,21 @@ impl KnownCameraControl {
     /// Convert a [`KnownCameraControl`] to a platform-specific ID using a
     /// table that maps canonical indices to platform IDs.
     ///
-    /// Returns `None` for `Other` variants whose ID is not in the table.
+    /// For standard controls the corresponding entry in `platform_ids` is
+    /// returned.  For `Other(id)` the stored value is truncated to `u32`.
+    ///
+    /// **Note:** This helper uses `u32` platform IDs, which is suitable for
+    /// V4L2 CIDs.  Windows Media Foundation uses GUIDs that do not fit in
+    /// `u32`; MSMF should use its own mapping rather than this function.
     #[must_use]
-    pub fn to_platform_id(&self, platform_ids: &[u32; Self::STANDARD_COUNT]) -> Option<u32> {
-        match self {
-            #[allow(clippy::cast_possible_truncation)]
-            Self::Other(id) => Some(*id as u32),
-            ctrl => ctrl.as_index().map(|i| platform_ids[i as usize]),
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn to_platform_id(&self, platform_ids: &[u32; Self::STANDARD_COUNT]) -> u32 {
+        match self.as_index() {
+            Some(i) => platform_ids[i as usize],
+            None => match self {
+                Self::Other(id) => *id as u32,
+                _ => 0, // unreachable: as_index returns Some for all non-Other variants
+            },
         }
     }
 }
