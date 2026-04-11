@@ -13,7 +13,7 @@
 (None)
 
 ## Performance
-- [ ] Explore `unsafe get_unchecked` for YUYV/NV12 inner loops — SIMD fallback and NV12 scalar paths use safe indexing. Benchmark first; only apply if measurable gain.
+- [ ] Explore `unsafe get_unchecked` for YUYV scalar inner loops — NV12 done in #70, YUYV scalar fallback path still uses safe indexing.
 
 ## Backlog
 - [ ] Re-implement GStreamer backend (cross-platform, previously 839 lines)
