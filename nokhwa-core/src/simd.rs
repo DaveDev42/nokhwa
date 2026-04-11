@@ -87,6 +87,11 @@ fn bgr_to_rgb_neon(src: &[u8], dst: &mut [u8]) {
 #[cfg(target_arch = "x86_64")]
 #[inline]
 unsafe fn bgr_to_rgb_sse2(src: &[u8], dst: &mut [u8]) {
+    if is_x86_feature_detected!("avx2") {
+        bgr_to_rgb_avx2(src, dst);
+        return;
+    }
+
     // SSSE3 (pshufb) is widely available on all x86_64 CPUs since 2006.
     if is_x86_feature_detected!("ssse3") {
         bgr_to_rgb_ssse3(src, dst);
@@ -95,6 +100,48 @@ unsafe fn bgr_to_rgb_sse2(src: &[u8], dst: &mut [u8]) {
 
     // Pure SSE2 fallback — scalar, since SSE2 shuffle is awkward for 3-byte stride
     bgr_to_rgb_scalar(src, dst);
+}
+
+/// AVX2 BGR→RGB: processes 30 bytes (10 pixels) per iteration using 256-bit shuffle.
+/// `vpshufb` operates independently within each 128-bit lane, so the same
+/// 15-byte swap mask is replicated across both lanes.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn bgr_to_rgb_avx2(src: &[u8], dst: &mut [u8]) {
+    use std::arch::x86_64::{
+        _mm256_loadu_si256, _mm256_setr_epi8, _mm256_shuffle_epi8, _mm256_storeu_si256,
+    };
+
+    let len = src.len();
+
+    // Same 15-byte shuffle pattern in both 128-bit lanes
+    let shuffle = _mm256_setr_epi8(
+        2, 1, 0, 5, 4, 3, 8, 7, 6, 11, 10, 9, 14, 13, 12, -1, // lane 0
+        2, 1, 0, 5, 4, 3, 8, 7, 6, 11, 10, 9, 14, 13, 12, -1, // lane 1
+    );
+
+    // Each iteration loads 32 bytes but only uses 30 (15 per lane).
+    // We need idx + 32 <= len for a safe load.
+    let simd_limit = len.saturating_sub(31);
+    let mut idx = 0;
+
+    while idx < simd_limit {
+        // SAFETY: idx + 32 <= len, pointers are valid for 32-byte read
+        let vec = _mm256_loadu_si256(src.as_ptr().add(idx).cast());
+        let shuffled = _mm256_shuffle_epi8(vec, shuffle);
+        let mut tmp = [0u8; 32];
+        _mm256_storeu_si256(tmp.as_mut_ptr().cast(), shuffled);
+        // Lane 0 produced 15 valid bytes, lane 1 produced 15 valid bytes.
+        // Lane 0 covers src[idx..idx+15], lane 1 covers src[idx+16..idx+31].
+        // But we want contiguous output covering src[idx..idx+30] (10 BGR pixels).
+        // Lane 0 = tmp[0..15], lane 1 = tmp[16..31].
+        dst[idx..idx + 15].copy_from_slice(&tmp[..15]);
+        dst[idx + 15..idx + 30].copy_from_slice(&tmp[16..31]);
+        idx += 30;
+    }
+
+    // Fall through to SSSE3 for the remainder (which itself has a scalar tail)
+    bgr_to_rgb_ssse3(&src[idx..], &mut dst[idx..]);
 }
 
 #[cfg(target_arch = "x86_64")]
