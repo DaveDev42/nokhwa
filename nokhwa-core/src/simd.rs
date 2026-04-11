@@ -171,12 +171,15 @@ pub(crate) fn yuyv_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
 #[inline]
 #[allow(clippy::cast_sign_loss)]
 fn yuyv_to_rgb_scalar(src: &[u8], dst: &mut [u8]) {
+    debug_assert!(src.len().is_multiple_of(4));
+    debug_assert_eq!(dst.len(), (src.len() / 4) * 6);
+
     let n = src.len() / 4;
     let mut si = 0;
     let mut di = 0;
 
     for _ in 0..n {
-        // SAFETY: si+3 < src.len() because si = i*4 and i < N = src.len()/4 (see proof above).
+        // SAFETY: si+3 <= src.len()-1 because si = i*4 and i < N = src.len()/4 (see proof above).
         let luma0 = unsafe { i32::from(*src.get_unchecked(si)) };
         let cb = unsafe { i32::from(*src.get_unchecked(si + 1)) };
         let luma1 = unsafe { i32::from(*src.get_unchecked(si + 2)) };
@@ -196,7 +199,7 @@ fn yuyv_to_rgb_scalar(src: &[u8], dst: &mut [u8]) {
         let g1 = ((c298_1 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
         let b1 = ((c298_1 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
 
-        // SAFETY: di+5 < dst.len() because di = i*6 and i < N, so di+5 = i*6+5 ≤ (N-1)*6+5 = N*6-1 = dst.len()-1 (see proof above).
+        // SAFETY: di+5 <= dst.len()-1 because di = i*6 and i < N, so di+5 = i*6+5 ≤ (N-1)*6+5 = N*6-1 = dst.len()-1 (see proof above).
         unsafe {
             *dst.get_unchecked_mut(di) = r0;
             *dst.get_unchecked_mut(di + 1) = g0;
@@ -223,12 +226,15 @@ fn yuyv_to_rgb_scalar(src: &[u8], dst: &mut [u8]) {
 #[inline]
 #[allow(clippy::cast_sign_loss)]
 fn yuyv_to_rgba_scalar(src: &[u8], dst: &mut [u8]) {
+    debug_assert!(src.len().is_multiple_of(4));
+    debug_assert_eq!(dst.len(), (src.len() / 4) * 8);
+
     let n = src.len() / 4;
     let mut si = 0;
     let mut di = 0;
 
     for _ in 0..n {
-        // SAFETY: si+3 < src.len() because si = i*4 and i < N = src.len()/4 (see proof above).
+        // SAFETY: si+3 <= src.len()-1 because si = i*4 and i < N = src.len()/4 (see proof above).
         let luma0 = unsafe { i32::from(*src.get_unchecked(si)) };
         let cb = unsafe { i32::from(*src.get_unchecked(si + 1)) };
         let luma1 = unsafe { i32::from(*src.get_unchecked(si + 2)) };
@@ -248,7 +254,7 @@ fn yuyv_to_rgba_scalar(src: &[u8], dst: &mut [u8]) {
         let g1 = ((c298_1 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
         let b1 = ((c298_1 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
 
-        // SAFETY: di+7 < dst.len() because di = i*8 and i < N, so di+7 = i*8+7 ≤ (N-1)*8+7 = N*8-1 = dst.len()-1 (see proof above).
+        // SAFETY: di+7 <= dst.len()-1 because di = i*8 and i < N, so di+7 = i*8+7 ≤ (N-1)*8+7 = N*8-1 = dst.len()-1 (see proof above).
         unsafe {
             *dst.get_unchecked_mut(di) = r0;
             *dst.get_unchecked_mut(di + 1) = g0;
