@@ -1,11 +1,10 @@
 # TODO
 
 ## High Priority
-- [x] Fix release-please config to prevent premature 1.0.0 bumps on breaking changes (`bump-major-pre-major: false`)
+(None)
 
 ## Medium Priority
-- [x] Add MJPEG unit tests — Frame<Mjpeg> into_rgb/into_rgba/into_luma + write_to + malformed/empty error cases added
-- [x] Port OpenCV Mat methods to new Frame<F> API (removed Buffer::decode_opencv_mat in 0.12.0)
+(None)
 
 ## Low Priority
 - [ ] Add platform integration tests (requires physical camera, gated behind `device-test` feature)
