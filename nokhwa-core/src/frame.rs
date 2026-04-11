@@ -456,14 +456,16 @@ pub(crate) fn convert_to_rgba(
         FrameFormat::MJPEG => mjpeg_to_rgb(data, true),
         FrameFormat::YUYV => yuyv422_to_rgb(data, true),
         FrameFormat::NV12 => nv12_to_rgb(resolution, data, true),
-        FrameFormat::RAWRGB => Ok(data
-            .chunks_exact(3)
-            .flat_map(|x| [x[0], x[1], x[2], 255])
-            .collect()),
-        FrameFormat::RAWBGR => Ok(data
-            .chunks_exact(3)
-            .flat_map(|x| [x[2], x[1], x[0], 255])
-            .collect()),
+        FrameFormat::RAWRGB => {
+            let mut rgba = vec![0u8; (data.len() / 3) * 4];
+            crate::simd::rgb_to_rgba_simd(data, &mut rgba);
+            Ok(rgba)
+        }
+        FrameFormat::RAWBGR => {
+            let mut rgba = vec![0u8; (data.len() / 3) * 4];
+            crate::simd::bgr_to_rgba_simd(data, &mut rgba);
+            Ok(rgba)
+        }
         FrameFormat::GRAY => Ok(data.iter().flat_map(|&x| [x, x, x, 255]).collect()),
     }
 }
@@ -490,13 +492,7 @@ pub(crate) fn convert_to_rgba_buffer(
                     ),
                 });
             }
-            data.chunks_exact(3).enumerate().for_each(|(idx, px)| {
-                let i = idx * 4;
-                dest[i] = px[0];
-                dest[i + 1] = px[1];
-                dest[i + 2] = px[2];
-                dest[i + 3] = 255;
-            });
+            crate::simd::rgb_to_rgba_simd(data, dest);
             Ok(())
         }
         FrameFormat::RAWBGR => {
@@ -511,13 +507,7 @@ pub(crate) fn convert_to_rgba_buffer(
                     ),
                 });
             }
-            data.chunks_exact(3).enumerate().for_each(|(idx, px)| {
-                let i = idx * 4;
-                dest[i] = px[2];
-                dest[i + 1] = px[1];
-                dest[i + 2] = px[0];
-                dest[i + 3] = 255;
-            });
+            crate::simd::bgr_to_rgba_simd(data, dest);
             Ok(())
         }
         FrameFormat::GRAY => {
