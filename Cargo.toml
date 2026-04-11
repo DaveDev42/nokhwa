@@ -52,7 +52,7 @@ input-v4l-no-arena-buffer = [ "nokhwa-bindings-linux-v4l/no-arena-buffer" ]
 # Automatically selects the right backend for the current OS.
 # Alias: input-auto
 input-native              = [ "input-avfoundation", "input-v4l", "input-msmf" ]
-# Convenience alias for input-native — selects the right backend for the current OS
+# Convenience alias for input-native
 input-auto                = [ "input-native" ]
 # Cross-platform OpenCV backend (requires OpenCV system library)
 input-opencv = [
