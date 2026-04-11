@@ -9,13 +9,18 @@ use std::{
 };
 
 /// Tells the init function what camera format to pick.
-/// - `AbsoluteHighestResolution`: Pick the highest [`Resolution`], then pick the highest frame rate of those provided.
-/// - `AbsoluteHighestFrameRate`: Pick the highest frame rate, then the highest [`Resolution`].
-/// - `HighestResolution(Option<u32>)`: Pick the highest [`Resolution`] for the given framerate (the `Option<u32>`). If its `None`, it will pick the highest possible [`Resolution`]
-/// - `HighestFrameRate(Option<Resolution>)`: Pick the highest frame rate for the given [`Resolution`] (the `Option<Resolution>`). If it is `None`, it will pick the highest possinle framerate.
-/// - `Exact`: Pick the exact [`CameraFormat`] provided.
-/// - `Closest`: Pick the closest [`CameraFormat`] provided in order of [`FrameFormat`], [`Resolution`], and FPS. Note that if the [`FrameFormat`] does not exist, this will fail to resolve.
-/// - `None`: Pick a random [`CameraFormat`]
+///
+/// # Variants
+///
+/// | Variant | Behaviour |
+/// |---------|-----------|
+/// | `AbsoluteHighestResolution` | Pick the highest [`Resolution`], then the highest frame rate at that resolution. |
+/// | `AbsoluteHighestFrameRate` | Pick the highest frame rate, then the highest [`Resolution`] at that rate. |
+/// | `HighestResolution(Resolution)` | Pick the highest frame rate for the given [`Resolution`]. |
+/// | `HighestFrameRate(u32)` | Pick the highest [`Resolution`] for the given frame rate. |
+/// | `Exact(CameraFormat)` | Pick the exact [`CameraFormat`] provided, or fail. |
+/// | `Closest(CameraFormat)` | Pick the closest match by [`FrameFormat`], then [`Resolution`], then FPS. Fails if the [`FrameFormat`] is unavailable. |
+/// | `None` | Pick the first available format (default). |
 #[derive(Copy, Clone, Debug, Default, Hash, Ord, PartialOrd, Eq, PartialEq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub enum RequestedFormatType {
@@ -35,7 +40,79 @@ impl Display for RequestedFormatType {
     }
 }
 
-/// A request to the camera for a valid [`CameraFormat`]
+/// A request to the camera for a valid [`CameraFormat`].
+///
+/// Combines a [`RequestedFormatType`] (what resolution/framerate strategy to use) with
+/// a set of acceptable [`FrameFormat`]s (pixel formats the caller can decode).
+///
+/// # Examples
+///
+/// **Highest resolution (most common):**
+///
+/// ```ignore
+/// use nokhwa_core::pixel_format::RgbFormat;
+/// use nokhwa_core::types::{RequestedFormat, RequestedFormatType};
+///
+/// let req = RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution);
+/// ```
+///
+/// **Highest frame rate:**
+///
+/// ```ignore
+/// use nokhwa_core::pixel_format::RgbFormat;
+/// use nokhwa_core::types::{RequestedFormat, RequestedFormatType};
+///
+/// let req = RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
+/// ```
+///
+/// **Exact format:**
+///
+/// ```ignore
+/// use nokhwa_core::pixel_format::RgbFormat;
+/// use nokhwa_core::types::{
+///     CameraFormat, FrameFormat, RequestedFormat, RequestedFormatType, Resolution,
+/// };
+///
+/// let fmt = CameraFormat::new(Resolution::new(1920, 1080), FrameFormat::MJPEG, 30);
+/// let req = RequestedFormat::new::<RgbFormat>(RequestedFormatType::Exact(fmt));
+/// ```
+///
+/// **Closest match:**
+///
+/// ```ignore
+/// use nokhwa_core::pixel_format::RgbFormat;
+/// use nokhwa_core::types::{
+///     CameraFormat, FrameFormat, RequestedFormat, RequestedFormatType, Resolution,
+/// };
+///
+/// // Ask for 1080p@60; the library will find the closest the hardware supports.
+/// let target = CameraFormat::new(Resolution::new(1920, 1080), FrameFormat::MJPEG, 60);
+/// let req = RequestedFormat::new::<RgbFormat>(RequestedFormatType::Closest(target));
+/// ```
+///
+/// **Highest resolution at a specific frame rate:**
+///
+/// ```ignore
+/// use nokhwa_core::pixel_format::RgbFormat;
+/// use nokhwa_core::types::{RequestedFormat, RequestedFormatType};
+///
+/// // Best resolution that can do 30 FPS
+/// let req = RequestedFormat::new::<RgbFormat>(RequestedFormatType::HighestResolution(
+///     nokhwa_core::types::Resolution::new(0, 0), // placeholder — filtered by FPS below
+/// ));
+/// ```
+///
+/// **Custom frame format list (without a `FormatDecoder`):**
+///
+/// ```ignore
+/// use nokhwa_core::types::{FrameFormat, RequestedFormat, RequestedFormatType};
+///
+/// let formats = &[FrameFormat::MJPEG, FrameFormat::YUYV];
+/// let req = RequestedFormat::with_formats(
+///     RequestedFormatType::AbsoluteHighestResolution,
+///     formats,
+/// );
+/// ```
 #[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub struct RequestedFormat<'a> {
     requested_format: RequestedFormatType,
