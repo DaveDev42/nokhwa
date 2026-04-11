@@ -21,7 +21,6 @@
 
 ## Refactoring
 - Renamed `camera_controls_string()` → `camera_controls_by_name()` and `camera_controls_known_camera_controls()` → `camera_controls_by_id()` on `Camera` and `CallbackCamera` (old names kept as `#[deprecated]` aliases)
-- Added convenience constructors `Camera::new_with_highest_resolution()` and `Camera::new_with_highest_framerate()`
 - Fixed 'fufill' → 'fulfill' typo in `set_camera_request()` error message
 - **Restructured error types**: replaced `String`-based variants (`GeneralError`, `OpenStreamError`, `ReadFrameError`, `StreamShutdownError`) with structured fields (`backend: Option<ApiBackend>`, `format: Option<FrameFormat>`). Binding crates now populate context. Added helper constructors for backwards compatibility.
 - Fixed `UnitializedError` typo → `UninitializedError`
@@ -30,6 +29,7 @@
 - Fixed UB: `from_raw_parts_mut` → `from_raw_parts` in CVPixelBuffer callback
 
 ## Features
+- Added convenience constructors `Camera::new_with_highest_resolution()` and `Camera::new_with_highest_framerate()`
 - Added sensor capture timestamp support across all backends (cherry-picked from upstream l1npengtul/nokhwa#234)
   - `Buffer::with_timestamp()` constructor and `Buffer::capture_timestamp()` accessor
   - macOS: `CMSampleBufferGetPresentationTimeStamp` → wall clock conversion
