@@ -45,7 +45,7 @@ input-msmf         = [ "nokhwa-bindings-windows-msmf" ]
 # Linux Video4Linux2 backend
 input-v4l          = [ "nokhwa-bindings-linux-v4l" ]
 # Disable arena buffer on v4l.
-# This should fix crash on Raspberry Pi that have faulty v4l driver.
+# This should fix crashes on Raspberry Pis that have a faulty v4l driver.
 # WARNING: This creates a performance regression — half of the frames will be dropped.
 # You shouldn't enable this unless you have to.
 input-v4l-no-arena-buffer = [ "nokhwa-bindings-linux-v4l/no-arena-buffer" ]

@@ -40,7 +40,7 @@
 )))]
 compile_error!(
     "nokhwa requires at least one input-* feature to be enabled \
-     (e.g. input-native, input-avfoundation, input-v4l, input-msmf, input-opencv)"
+     (e.g. input-native / input-auto, input-avfoundation, input-v4l, input-msmf, input-opencv)"
 );
 
 /// Raw access to each of Nokhwa's backends.
