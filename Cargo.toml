@@ -32,17 +32,29 @@ crate-type = [ "cdylib", "rlib" ]
 
 [features]
 default            = [ "decoding" ]
+# Enable serde Serialize/Deserialize on core types
 serialize          = [ "serde", "nokhwa-core/serialize" ]
+# MJPEG decoding support (enabled by default)
 decoding           = [ "nokhwa-core/mjpeg" ]
+
+# ── Input backends (enable at least one) ──────────────────────────────
+# macOS AVFoundation backend
 input-avfoundation = [ "nokhwa-bindings-macos-avfoundation" ]
+# Windows Media Foundation backend
 input-msmf         = [ "nokhwa-bindings-windows-msmf" ]
+# Linux Video4Linux2 backend
 input-v4l          = [ "nokhwa-bindings-linux-v4l" ]
-# Disable arena buffer on v4l
+# Disable arena buffer on v4l.
 # This should fix crash on Raspberry Pi that have faulty v4l driver.
-# WARNING: This create a performance regression, half of the frames will be dropped
+# WARNING: This creates a performance regression — half of the frames will be dropped.
 # You shouldn't enable this unless you have to.
 input-v4l-no-arena-buffer = [ "nokhwa-bindings-linux-v4l/no-arena-buffer" ]
+# Automatically selects the right backend for the current OS.
+# Alias: input-auto
 input-native              = [ "input-avfoundation", "input-v4l", "input-msmf" ]
+# Convenience alias for input-native — selects the right backend for the current OS
+input-auto                = [ "input-native" ]
+# Cross-platform OpenCV backend (requires OpenCV system library)
 input-opencv = [
     "opencv",
     "opencv/videoio",
@@ -50,8 +62,15 @@ input-opencv = [
     "opencv/clang-runtime",
     "nokhwa-core/opencv-mat",
 ]
+
+# ── Output features ───────────────────────────────────────────────────
+# Copy frames directly into wgpu textures
 output-wgpu = [ "wgpu", "nokhwa-core/wgpu-types" ]
+# CallbackCamera: runs capture on a background thread with user-supplied callbacks
 output-threaded  = [ "parking_lot", "arc-swap" ]
+
+# ── Documentation / CI helpers ────────────────────────────────────────
+# Enables all features for documentation builds (used by docs.rs)
 docs-only = [
     "input-native",
     "input-opencv",
@@ -59,7 +78,9 @@ docs-only = [
     "output-threaded",
     "serialize",
 ]
+# Build docs without linking platform libraries (for cross-platform doc checks)
 docs-nolink = [ "nokhwa-core/docs-features" ]
+# Enables #[doc(cfg(…))] annotations (requires nightly Rust)
 docs-features = [  ]
 # Gates integration tests that require a physical camera device (CI only)
 device-test = [  ]
