@@ -589,12 +589,41 @@ pub(crate) fn convert_to_luma_buffer(
 ) -> Result<(), NokhwaError> {
     match fcc {
         FrameFormat::GRAY => {
+            if dest.len() != data.len() {
+                return Err(NokhwaError::ProcessFrameError {
+                    src: fcc,
+                    destination: "Luma".to_string(),
+                    error: format!(
+                        "destination buffer size mismatch (expected {}, got {})",
+                        data.len(),
+                        dest.len()
+                    ),
+                });
+            }
             dest.copy_from_slice(data);
             Ok(())
         }
         FrameFormat::YUYV => buf_yuyv_extract_luma(data, dest),
         FrameFormat::NV12 => buf_nv12_extract_luma(resolution, data, dest),
-        FrameFormat::MJPEG | FrameFormat::RAWRGB | FrameFormat::RAWBGR => {
+        FrameFormat::RAWRGB | FrameFormat::RAWBGR => {
+            let pixel_count = data.len() / 3;
+            if dest.len() != pixel_count {
+                return Err(NokhwaError::ProcessFrameError {
+                    src: fcc,
+                    destination: "Luma".to_string(),
+                    error: format!(
+                        "destination buffer size mismatch (expected {pixel_count}, got {})",
+                        dest.len()
+                    ),
+                });
+            }
+            #[allow(clippy::cast_possible_truncation)]
+            for (idx, px) in data.chunks_exact(3).enumerate() {
+                dest[idx] = ((u16::from(px[0]) + u16::from(px[1]) + u16::from(px[2])) / 3) as u8;
+            }
+            Ok(())
+        }
+        FrameFormat::MJPEG => {
             let luma = convert_to_luma(fcc, resolution, data)?;
             if dest.len() < luma.len() {
                 return Err(NokhwaError::ProcessFrameError {

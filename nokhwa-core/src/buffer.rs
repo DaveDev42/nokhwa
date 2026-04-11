@@ -48,11 +48,10 @@ pub enum TimestampKind {
 #[allow(clippy::struct_field_names)]
 #[derive(Clone, Debug, Hash, PartialOrd, PartialEq, Eq)]
 pub struct Buffer {
-    /// Width and height of the frame.
-    pub(crate) resolution: Resolution,
-    pub(crate) data: Bytes,
-    pub(crate) source_frame_format: FrameFormat,
-    pub(crate) capture_timestamp: Option<(Duration, TimestampKind)>,
+    resolution: Resolution,
+    data: Bytes,
+    source_frame_format: FrameFormat,
+    capture_timestamp: Option<(Duration, TimestampKind)>,
 }
 
 impl Buffer {

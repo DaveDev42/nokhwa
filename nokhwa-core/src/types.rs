@@ -136,8 +136,8 @@ impl RequestedFormat<'_> {
     /// The format constraint is derived from `F::FRAME_FORMAT`.
     #[must_use]
     pub fn new<F: CaptureFormat>(requested: RequestedFormatType) -> RequestedFormat<'static> {
-        // Leak a single-element slice so we get a 'static lifetime.
-        // This is a one-time allocation per format type.
+        // FRAME_FORMAT is a const, so &[F::FRAME_FORMAT] is promoted to static memory
+        // by the compiler (constant promotion). No heap allocation occurs.
         let formats: &'static [FrameFormat] = &[F::FRAME_FORMAT];
         RequestedFormat {
             requested_format: requested,

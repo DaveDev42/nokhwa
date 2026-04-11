@@ -118,6 +118,19 @@ impl Camera {
         let formats = &[F::FRAME_FORMAT];
         let req = RequestedFormat::with_formats(requested, formats);
         let camera_backend = init_camera(&index, req, backend.clone())?;
+        let actual_format = camera_backend.frame_format();
+        if actual_format != F::FRAME_FORMAT {
+            return Err(NokhwaError::SetPropertyError {
+                property: "FrameFormat".to_string(),
+                value: format!("{actual_format:?}"),
+                error: format!(
+                    "camera negotiated {:?} but Camera<{:?}> requires {:?}",
+                    actual_format,
+                    F::FRAME_FORMAT,
+                    F::FRAME_FORMAT
+                ),
+            });
+        }
 
         Ok(Camera {
             idx: index,
