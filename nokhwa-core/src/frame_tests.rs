@@ -231,7 +231,7 @@ const JPEG_RED_2X2: &[u8] = &[
 /// The `channels` parameter is used only for diagnostic formatting (pixel index / channel id).
 #[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
 fn assert_pixels_near(actual: &[u8], expected: &[u8], channels: usize, tolerance: u8) {
-    debug_assert_ne!(channels, 0, "channels must be non-zero");
+    assert_ne!(channels, 0, "channels must be non-zero");
     assert_eq!(
         actual.len(),
         expected.len(),
@@ -273,7 +273,8 @@ fn mjpeg_into_rgba_produces_correct_output() {
     assert_eq!(img.width(), 2);
     assert_eq!(img.height(), 2);
     // All 4 pixels should be close to red with full alpha.
-    // Alpha is always exactly 255 (not lossy), so tolerance 5 covers the RGB channels.
+    // Alpha is always exactly 255 (not lossy); the tolerance applies uniformly to all
+    // channels but alpha matches exactly since expected == actual == 255.
     let expected = [255, 0, 0, 255].repeat(4);
     assert_pixels_near(img.as_raw(), &expected, 4, 5);
 }
@@ -287,15 +288,8 @@ fn mjpeg_into_luma_produces_correct_output() {
     assert_eq!(img.width(), 2);
     assert_eq!(img.height(), 2);
     // Luma = (R+G+B)/3. For near-red (≈255,0,0) that's ≈85.
-    for y in 0..2 {
-        for x in 0..2 {
-            let luma = img.get_pixel(x, y).0[0];
-            assert!(
-                (80..=90).contains(&luma),
-                "pixel ({x},{y}): luma={luma}, expected 80..=90"
-            );
-        }
-    }
+    let expected = [85u8; 4];
+    assert_pixels_near(img.as_raw(), &expected, 1, 5);
 }
 
 #[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
@@ -308,6 +302,28 @@ fn mjpeg_rgb_write_to() {
     // Same tolerance check as materialize — near-red pixels
     let expected = [255, 0, 0].repeat(4);
     assert_pixels_near(&dest, &expected, 3, 5);
+}
+
+#[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
+#[test]
+fn mjpeg_rgba_write_to() {
+    let buf = Buffer::new(Resolution::new(2, 2), JPEG_RED_2X2, FrameFormat::MJPEG);
+    let frame: Frame<Mjpeg> = Frame::new(buf);
+    let mut dest = vec![0u8; 2 * 2 * 4];
+    frame.into_rgba().write_to(&mut dest).unwrap();
+    let expected = [255, 0, 0, 255].repeat(4);
+    assert_pixels_near(&dest, &expected, 4, 5);
+}
+
+#[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
+#[test]
+fn mjpeg_luma_write_to() {
+    let buf = Buffer::new(Resolution::new(2, 2), JPEG_RED_2X2, FrameFormat::MJPEG);
+    let frame: Frame<Mjpeg> = Frame::new(buf);
+    let mut dest = vec![0u8; 2 * 2];
+    frame.into_luma().write_to(&mut dest).unwrap();
+    let expected = [85u8; 4];
+    assert_pixels_near(&dest, &expected, 1, 5);
 }
 
 #[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
