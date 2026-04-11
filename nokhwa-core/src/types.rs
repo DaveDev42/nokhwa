@@ -1799,86 +1799,13 @@ pub fn buf_nv12_to_rgb(
         });
     }
 
-    let width_usize = resolution.width() as usize;
-    let y_section = width_usize * resolution.height() as usize;
-    let out_row_stride = width_usize * pxsize;
-
-    // SAFETY overview for the unchecked indexing below:
-    //
-    // Input `data` has exactly `width * height * 3 / 2` bytes (validated above).
-    //   - Y plane: data[0 .. width*height]
-    //   - UV plane: data[width*height .. width*height*3/2]
-    //
-    // Output `out` has exactly `pxsize * width * height` bytes (validated above).
-    //
-    // The outer loop iterates `hidx` over 0..height (chunks_exact of the Y plane).
-    // The inner loop iterates `cidx` over 0..width/2 (chunks_exact(2) of each row).
-    //
-    // UV access: uv_offset = y_section + (hidx/2)*width + cidx*2
-    //   Max uv_offset+1 = y_section + (height/2 - 1)*width + (width - 2) + 1
-    //                    = y_section + height*width/2 - 1 = data.len() - 1  ✓
-    //
-    // Output access: base_index = hidx*width*pxsize + cidx*pxsize*2
-    //   For RGB (pxsize=3): max base_index+5 = (height-1)*width*3 + (width/2-1)*6 + 5
-    //                                        = 3*width*height - 1 = out.len() - 1  ✓
-    //   For RGBA (pxsize=4): max base_index+7 = (height-1)*width*4 + (width/2-1)*8 + 7
-    //                                         = 4*width*height - 1 = out.len() - 1  ✓
-
-    for (hidx, horizontal_row) in data[0..y_section].chunks_exact(width_usize).enumerate() {
-        let uv_row_offset = y_section + (hidx / 2) * width_usize;
-        let out_row_offset = hidx * out_row_stride;
-
-        for (cidx, column) in horizontal_row.chunks_exact(2).enumerate() {
-            let uv_offset = uv_row_offset + cidx * 2;
-            // SAFETY: uv_offset+1 ≤ y_section + height*width/2 - 1 = data.len()-1
-            // because cidx < width/2 and hidx < height (see proof above).
-            let u = unsafe { *data.get_unchecked(uv_offset) };
-            let v = unsafe { *data.get_unchecked(uv_offset + 1) };
-
-            let y0 = column[0];
-            let y1 = column[1];
-            let base_index = out_row_offset + cidx * pxsize * 2;
-
-            // Inline BT.601 YUV→RGB: avoids intermediate [u8; 3]/[u8; 4] arrays.
-            // d/e = chroma offsets, c298_N = scaled luma for pixel N.
-            let d = i32::from(u) - 128;
-            let e = i32::from(v) - 128;
-
-            let c298_0 = (i32::from(y0) - 16) * 298;
-            let r0 = ((c298_0 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
-            let g0 = ((c298_0 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
-            let b0 = ((c298_0 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
-
-            let c298_1 = (i32::from(y1) - 16) * 298;
-            let r1 = ((c298_1 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
-            let g1 = ((c298_1 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
-            let b1 = ((c298_1 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
-
-            if rgba {
-                // SAFETY: base_index+7 ≤ out.len()-1 for pxsize=4 (see proof above).
-                unsafe {
-                    *out.get_unchecked_mut(base_index) = r0;
-                    *out.get_unchecked_mut(base_index + 1) = g0;
-                    *out.get_unchecked_mut(base_index + 2) = b0;
-                    *out.get_unchecked_mut(base_index + 3) = 255;
-                    *out.get_unchecked_mut(base_index + 4) = r1;
-                    *out.get_unchecked_mut(base_index + 5) = g1;
-                    *out.get_unchecked_mut(base_index + 6) = b1;
-                    *out.get_unchecked_mut(base_index + 7) = 255;
-                }
-            } else {
-                // SAFETY: base_index+5 ≤ out.len()-1 for pxsize=3 (see proof above).
-                unsafe {
-                    *out.get_unchecked_mut(base_index) = r0;
-                    *out.get_unchecked_mut(base_index + 1) = g0;
-                    *out.get_unchecked_mut(base_index + 2) = b0;
-                    *out.get_unchecked_mut(base_index + 3) = r1;
-                    *out.get_unchecked_mut(base_index + 4) = g1;
-                    *out.get_unchecked_mut(base_index + 5) = b1;
-                }
-            }
-        }
-    }
+    crate::simd::nv12_to_rgb_simd(
+        resolution.width() as usize,
+        resolution.height() as usize,
+        data,
+        out,
+        rgba,
+    );
 
     Ok(())
 }
