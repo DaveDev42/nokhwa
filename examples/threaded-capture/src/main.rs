@@ -15,12 +15,12 @@
  */
 
 use nokhwa::{
-    nokhwa_initialize,
-    pixel_format::{RgbAFormat, RgbFormat},
-    query,
+    nokhwa_initialize, query,
     utils::{ApiBackend, RequestedFormat, RequestedFormatType},
     CallbackCamera,
 };
+use nokhwa_core::format_types::Mjpeg;
+use nokhwa_core::frame::{Frame, IntoRgba};
 
 fn main() {
     // only needs to be run on OSX
@@ -30,12 +30,13 @@ fn main() {
     let cameras = query(ApiBackend::Auto).unwrap();
     cameras.iter().for_each(|cam| println!("{:?}", cam));
 
-    let format = RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
+    let format = RequestedFormat::new::<Mjpeg>(RequestedFormatType::AbsoluteHighestFrameRate);
 
     let first_camera = cameras.first().unwrap();
 
     let mut threaded = CallbackCamera::new(first_camera.index().clone(), format, |buffer| {
-        let image = buffer.decode_image::<RgbAFormat>().unwrap();
+        let frame: Frame<Mjpeg> = Frame::new(buffer);
+        let image = frame.into_rgba().materialize().unwrap();
         println!("{}x{} {}", image.width(), image.height(), image.len());
     })
     .unwrap();
@@ -43,7 +44,8 @@ fn main() {
     #[allow(clippy::empty_loop)] // keep it running
     loop {
         let frame = threaded.poll_frame().unwrap();
-        let image = frame.decode_image::<RgbAFormat>().unwrap();
+        let typed: Frame<Mjpeg> = Frame::new(frame);
+        let image = typed.into_rgba().materialize().unwrap();
         println!(
             "{}x{} {} naripoggers",
             image.width(),

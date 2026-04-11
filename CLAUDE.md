@@ -60,13 +60,13 @@ This is a Cargo workspace with these crates:
 
 Almost everything is behind feature flags. A build **must** enable at least one `input-*` feature to be functional. The `input-native` meta-feature selects the right backend for the current OS. Key combinations:
 - `input-native` = `input-avfoundation` + `input-v4l` + `input-msmf`
-- `decoding` (default) = MJPEG decoding via `mozjpeg`
+- `mjpeg` (default) = MJPEG decoding via `mozjpeg`
 - `output-wgpu` = Direct frame-to-wgpu-texture copy
 - `output-threaded` = `CallbackCamera` with `parking_lot`
 
 ### Frame pipeline
 
-`CaptureBackendTrait::frame()` → `nokhwa_core::buffer::Buffer` (raw bytes + format metadata) → `Buffer::decode_image::<FormatDecoder>()` → `image::ImageBuffer`. Pixel format decoders implement `FormatDecoder` trait in `nokhwa-core/src/pixel_format.rs`.
+`Camera<F>::frame_typed()` → `Frame<F>` (typed handle over `Buffer`) → `frame.into_rgb().materialize()` → `image::ImageBuffer`. Format marker types (`Mjpeg`, `Yuyv`, etc.) implement `CaptureFormat` trait in `nokhwa-core/src/format_types.rs`. Conversion traits (`IntoRgb`, `IntoRgba`, `IntoLuma`) in `nokhwa-core/src/frame.rs` are selectively implemented per format (e.g. `Frame<Gray>` cannot convert to RGB).
 
 ## Git & GitHub Rules
 

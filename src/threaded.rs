@@ -16,6 +16,7 @@
 
 use crate::Camera;
 use arc_swap::ArcSwap;
+use nokhwa_core::format_types::{CaptureFormat, Mjpeg};
 use nokhwa_core::{
     buffer::Buffer,
     error::NokhwaError,
@@ -42,6 +43,9 @@ type SharedFrame = Arc<ArcSwap<Buffer>>;
 /// It uses a `Arc` and a `Mutex` to ensure that this feels like a normal camera, but callback based.
 /// See [`Camera`] for more details on the camera itself.
 ///
+/// `CallbackCamera<F>` is parameterized by the same [`CaptureFormat`] as [`Camera<F>`].
+/// The default type parameter is [`Mjpeg`].
+///
 /// Your function is called every time there is a new frame. In order to avoid frame loss, it should
 /// complete before a new frame is available. If you need to do heavy image processing, it may be
 /// beneficial to directly pipe the data to a new thread to process it there.
@@ -51,9 +55,9 @@ type SharedFrame = Arc<ArcSwap<Buffer>>;
 /// The `Mutex` guarantees exclusive access to the underlying camera struct. They should be safe to
 /// impl `Send` on.
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "output-threaded")))]
-pub struct CallbackCamera {
+pub struct CallbackCamera<F: CaptureFormat = Mjpeg> {
     // Important: this needs a fair mutex so that the capture loop doesn't block other accessors from touching the camera forever.
-    camera: Arc<parking_lot::FairMutex<Camera>>,
+    camera: Arc<parking_lot::FairMutex<Camera<F>>>,
     frame_callback: HeldCallbackType,
     last_frame_captured: SharedFrame,
     die_bool: Arc<AtomicBool>,
@@ -61,8 +65,8 @@ pub struct CallbackCamera {
     handle: AtomicLock<Option<JoinHandle<()>>>,
 }
 
-impl CallbackCamera {
-    /// Create a new `ThreadedCamera` from a [`CameraIndex`] and [`format`]
+impl<F: CaptureFormat> CallbackCamera<F> {
+    /// Create a new `CallbackCamera` from a [`CameraIndex`] and [`format`]
     ///
     /// # Errors
     /// This will error if you either have a bad platform configuration (e.g. `input-v4l` but not on linux) or the backend cannot create the camera (e.g. permission denied).
@@ -74,10 +78,10 @@ impl CallbackCamera {
         Ok(Self::with_custom(Camera::new(index, format)?, callback))
     }
 
-    /// Allows creation of a [`Camera`] with a custom backend. This is useful if you are creating e.g. a custom module.
+    /// Allows creation of a [`CallbackCamera`] with a custom [`Camera`]. This is useful if you are creating e.g. a custom module.
     ///
     /// You **must** have set a format beforehand.
-    pub fn with_custom(camera: Camera, callback: impl FnMut(Buffer) + Send + 'static) -> Self {
+    pub fn with_custom(camera: Camera<F>, callback: impl FnMut(Buffer) + Send + 'static) -> Self {
         let current_camera = camera.info().clone();
         CallbackCamera {
             camera: Arc::new(parking_lot::FairMutex::new(camera)),
@@ -113,7 +117,7 @@ impl CallbackCamera {
     /// # Errors
     /// This wraps an infallible call and should not return an error.
     pub fn backend(&self) -> Result<ApiBackend, NokhwaError> {
-        Ok(self.camera.lock().backend())
+        Ok(self.camera.lock().backend().clone())
     }
 
     /// Sets the current Camera's backend. Note that this re-initializes the camera.
@@ -295,11 +299,8 @@ impl CallbackCamera {
     }
 
     /// Sets the control to `control` in the camera.
-    /// Usually, the pipeline is calling [`camera_control()`](crate::camera_traits::CaptureBackendTrait::camera_control), getting a camera control that way
-    /// then calling [`value()`](crate::utils::CameraControl::value()) to get a [`ControlValueSetter`](crate::utils::ControlValueSetter) and setting the value that way.
     /// # Errors
-    /// If the `control` is not supported, the value is invalid (less than min, greater than max, not in step), or there was an error setting the control,
-    /// this will error.
+    /// If the `control` is not supported, the value is invalid, or there was an error setting the control, this will error.
     pub fn set_camera_control(
         &mut self,
         id: KnownCameraControl,
@@ -308,7 +309,7 @@ impl CallbackCamera {
         self.camera.lock().set_camera_control(id, control)
     }
 
-    /// Will open the camera stream with set parameters. This will be called internally if you try and call [`frame()`](crate::Camera::frame()) before you call [`open_stream()`](crate::Camera::open_stream()).
+    /// Will open the camera stream with set parameters.
     /// The callback will be called every frame.
     /// # Errors
     /// If the specific backend fails to open the camera (e.g. already taken, busy, doesn't exist anymore) this will error.
@@ -362,12 +363,7 @@ impl CallbackCamera {
         Ok(Buffer::clone(&frame))
     }
 
-    /// Polls the camera for a frame with a timeout, analogous to
-    /// [`Camera::frame_timeout`](crate::Camera::frame_timeout).
-    ///
-    /// **Note:** The internal camera mutex is held for the entire duration of the call,
-    /// which may block the background capture loop and other camera operations.
-    ///
+    /// Polls the camera for a frame with a timeout.
     /// # Errors
     /// This will error if the camera fails to capture a frame or the timeout elapses.
     pub fn poll_frame_timeout(&mut self, duration: Duration) -> Result<Buffer, NokhwaError> {
@@ -410,14 +406,14 @@ impl CallbackCamera {
     }
 }
 
-impl Drop for CallbackCamera {
+impl<F: CaptureFormat> Drop for CallbackCamera<F> {
     fn drop(&mut self) {
         let _ = self.stop_stream();
     }
 }
 
-fn camera_frame_thread_loop(
-    camera: &Arc<parking_lot::FairMutex<Camera>>,
+fn camera_frame_thread_loop<F: CaptureFormat>(
+    camera: &Arc<parking_lot::FairMutex<Camera<F>>>,
     frame_callback: &HeldCallbackType,
     last_frame_captured: &SharedFrame,
     die_bool: &Arc<AtomicBool>,

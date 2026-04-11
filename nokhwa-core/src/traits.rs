@@ -306,19 +306,7 @@ pub trait CaptureBackendTrait {
     /// Captures a frame from the camera as a [`Buffer`].
     ///
     /// The returned [`Buffer`] contains raw frame data along with format metadata.
-    /// Use [`Buffer::decode_image`] to decode it into an `image::ImageBuffer`.
-    ///
-    /// ```ignore
-    /// # fn example(camera: &mut nokhwa::Camera) -> Result<(), nokhwa_core::error::NokhwaError> {
-    /// use nokhwa::pixel_format::RgbFormat;
-    ///
-    /// camera.open_stream()?;
-    /// let frame = camera.frame()?;
-    /// let decoded = frame.decode_image::<RgbFormat>()?;
-    /// println!("frame: {}x{}", decoded.width(), decoded.height());
-    /// # Ok(())
-    /// # }
-    /// ```
+    /// Wrap it in a [`Frame<F>`](crate::frame::Frame) for type-safe conversions.
     ///
     /// # Errors
     /// If the backend fails to get the frame (e.g. already taken, busy, doesn't exist anymore),
@@ -382,12 +370,10 @@ pub trait CaptureBackendTrait {
         (resolution.width() * resolution.height() * pxwidth) as usize
     }
 
-    #[cfg(all(feature = "wgpu-types", feature = "decoding"))]
-    #[cfg_attr(
-        feature = "docs-features",
-        doc(cfg(all(feature = "wgpu-types", feature = "decoding")))
-    )]
-    /// Directly copies a frame to a Wgpu texture. This will automatically convert the frame into a RGBA frame.
+    #[cfg(feature = "wgpu-types")]
+    #[cfg_attr(feature = "docs-features", doc(cfg(feature = "wgpu-types")))]
+    /// Directly copies a frame to a Wgpu texture as RGBA. Uses the new
+    /// Frame conversion API internally.
     /// # Errors
     /// If the frame cannot be captured or the resolution is 0 on any axis, this will error.
     fn frame_texture(
@@ -396,14 +382,26 @@ pub trait CaptureBackendTrait {
         queue: &WgpuQueue,
         label: Option<&str>,
     ) -> Result<WgpuTexture, NokhwaError> {
+        use crate::frame;
         use wgpu::{Origin3d, TexelCopyTextureInfoBase};
 
-        use crate::pixel_format::RgbAFormat;
-        let frame = self.frame()?.decode_image::<RgbAFormat>()?;
+        let buffer = self.frame()?;
+        let resolution = buffer.resolution();
+        let fcc = buffer.source_frame_format();
+
+        // Convert to RGBA using the internal conversion path
+        let rgba_data = frame::convert_to_rgba(fcc, resolution, buffer.buffer())?;
+        let img: image::ImageBuffer<image::Rgba<u8>, Vec<u8>> =
+            image::ImageBuffer::from_raw(resolution.width_x, resolution.height_y, rgba_data)
+                .ok_or(NokhwaError::ProcessFrameError {
+                    src: fcc,
+                    destination: "Rgba".to_string(),
+                    error: "Failed to create ImageBuffer".to_string(),
+                })?;
 
         let texture_size = Extent3d {
-            width: frame.width(),
-            height: frame.height(),
+            width: img.width(),
+            height: img.height(),
             depth_or_array_layers: 1,
         };
 
@@ -418,22 +416,18 @@ pub trait CaptureBackendTrait {
             view_formats: &[],
         });
 
-        let width_nonzero = 4 * frame.width();
-
-        let height_nonzero = frame.height();
-
         queue.write_texture(
             TexelCopyTextureInfoBase {
                 texture: &texture,
-                mip_level: 1,
+                mip_level: 0,
                 origin: Origin3d { x: 0, y: 0, z: 0 },
                 aspect: TextureAspect::All,
             },
-            &frame,
+            &img,
             TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(width_nonzero),
-                rows_per_image: Some(height_nonzero),
+                bytes_per_row: Some(4 * img.width()),
+                rows_per_image: Some(img.height()),
             },
             texture_size,
         );
