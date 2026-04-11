@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 #![cfg_attr(feature = "docs-features", feature(doc_cfg))]
+
 //! # nokhwa
 //! A Simple-to-use, cross-platform Rust Webcam Capture Library
 //!
@@ -24,10 +25,23 @@
 //!
 //! The [`Camera`] struct is what you will likely use.
 //!
-//! The recommended default feature to enable is `input-native`. The library will not work without
-//! at least one `input-*` feature enabled.
+//! The recommended default feature to enable is `input-native` (also available as `input-auto`).
+//! The library will not work without at least one `input-*` feature enabled.
 //!
 //! Please read the README.md for more.
+
+// Ensure at least one input backend is enabled (skip during docs-only builds).
+#[cfg(not(feature = "docs-only"))]
+#[cfg(not(any(
+    feature = "input-avfoundation",
+    feature = "input-v4l",
+    feature = "input-msmf",
+    feature = "input-opencv"
+)))]
+compile_error!(
+    "nokhwa requires at least one input-* feature to be enabled \
+     (e.g. input-native / input-auto, input-avfoundation, input-v4l, input-msmf, input-opencv)"
+);
 
 /// Raw access to each of Nokhwa's backends.
 pub mod backends;
