@@ -1,4 +1,53 @@
-# 0.11.0 (unreleased, fork: DaveDev42/nokhwa)
+# Changelog
+
+## [0.11.1](https://github.com/DaveDev42/nokhwa/compare/v0.11.0...v0.11.1) (2026-04-11)
+
+
+### Features
+
+* add structured logging behind optional feature flag ([#76](https://github.com/DaveDev42/nokhwa/issues/76)) ([485eebc](https://github.com/DaveDev42/nokhwa/commit/485eebcc2397cceb6f2d2c95e6b9ddaecef85d8b))
+
+
+### Bug Fixes
+
+* **ci:** switch release-please to simple type for workspace compatibility ([#63](https://github.com/DaveDev42/nokhwa/issues/63)) ([4bd8243](https://github.com/DaveDev42/nokhwa/commit/4bd8243eda4ae623c743822ad20f91fdd1dab11a))
+
+
+### Performance
+
+* inline YUV-to-RGB conversion in NV12 decoder ([#67](https://github.com/DaveDev42/nokhwa/issues/67)) ([576e19b](https://github.com/DaveDev42/nokhwa/commit/576e19b09baeabf0fa149240b14fbc8302c74f3a))
+* use unchecked indexing in NV12 scalar decoder hot loops ([#70](https://github.com/DaveDev42/nokhwa/issues/70)) ([031dfe2](https://github.com/DaveDev42/nokhwa/commit/031dfe2b095f9ad1bd0e0e2e5e7f2eb5fd213f73))
+* use unchecked indexing in YUYV scalar decoder hot loops ([#73](https://github.com/DaveDev42/nokhwa/issues/73)) ([73576aa](https://github.com/DaveDev42/nokhwa/commit/73576aab676b4aa88a5d231ae869821b9fe12270))
+* use unchecked indexing in YUYV/NV12 scalar decoder hot loops ([#69](https://github.com/DaveDev42/nokhwa/issues/69)) ([52cfa3f](https://github.com/DaveDev42/nokhwa/commit/52cfa3feb406bc1beca34bd6b6108021b1eb075d))
+
+
+### Refactoring
+
+* extract common backend logic to nokhwa-core, normalize query function names ([#80](https://github.com/DaveDev42/nokhwa/issues/80)) ([1adddeb](https://github.com/DaveDev42/nokhwa/commit/1adddeb767e83966ec03d8038910d0aa8069bbfa))
+* improve Camera API ergonomics ([#77](https://github.com/DaveDev42/nokhwa/issues/77)) ([2b9a4d7](https://github.com/DaveDev42/nokhwa/commit/2b9a4d706e7992598f4a2c769bd63719945804b2))
+* **macos:** reduce unsafe surface area with safe wrapper methods ([#78](https://github.com/DaveDev42/nokhwa/issues/78)) ([5b834f7](https://github.com/DaveDev42/nokhwa/commit/5b834f79634787382eb6cc4adf0d19e0eda048e2))
+* restructure OpenDeviceError with named fields ([#66](https://github.com/DaveDev42/nokhwa/issues/66)) ([21c1471](https://github.com/DaveDev42/nokhwa/commit/21c1471d9b808e559b397688d8229107836ac8a1))
+
+
+### Infrastructure
+
+* gitignore Claude Code runtime files ([#82](https://github.com/DaveDev42/nokhwa/issues/82)) ([7108742](https://github.com/DaveDev42/nokhwa/commit/7108742987709041431b7e27aea3c8b2ee0e8391))
+* improve feature flag discoverability with compile-time checks and documentation ([#74](https://github.com/DaveDev42/nokhwa/issues/74)) ([5af7c79](https://github.com/DaveDev42/nokhwa/commit/5af7c798dcb0a3af671a01d3aa6aa3b81ba1e29c))
+* make image crate dependency optional, gated behind decoding feature ([#81](https://github.com/DaveDev42/nokhwa/issues/81)) ([addbe44](https://github.com/DaveDev42/nokhwa/commit/addbe4495f4c7f0fa3cae8a3143a2c3b24bc4a3c))
+* replace once_cell with std::sync::LazyLock ([#75](https://github.com/DaveDev42/nokhwa/issues/75)) ([f436290](https://github.com/DaveDev42/nokhwa/commit/f43629095b582950531fb154290a6ad69f992da3))
+* set up release-please for automated patch versioning ([#62](https://github.com/DaveDev42/nokhwa/issues/62)) ([3f606f1](https://github.com/DaveDev42/nokhwa/commit/3f606f1abcd674ecfefafaefe595fb1ab83a3d38))
+
+
+### Documentation
+
+* add new improvement items to TODO.md, add gw TODO rule to CLAUDE.md ([#72](https://github.com/DaveDev42/nokhwa/issues/72)) ([e5c1a7f](https://github.com/DaveDev42/nokhwa/commit/e5c1a7f65f3a16047be931600aa8eae26d5222c8))
+* clean up TODO.md — remove all completed items from recent PRs ([#83](https://github.com/DaveDev42/nokhwa/issues/83)) ([11427f3](https://github.com/DaveDev42/nokhwa/commit/11427f32545a3cfa8332b37d49de9509e9938dd6))
+* improve Camera, lib.rs, RequestedFormat, CaptureBackendTrait, and examples documentation ([#79](https://github.com/DaveDev42/nokhwa/issues/79)) ([6f5bf2d](https://github.com/DaveDev42/nokhwa/commit/6f5bf2d6249e1369575435ff9c4dda291cd05a2a))
+* remove completed OpenDeviceError and NV12 inline items from TODO.md ([#68](https://github.com/DaveDev42/nokhwa/issues/68)) ([fe8e1d4](https://github.com/DaveDev42/nokhwa/commit/fe8e1d4ee33d681dda3a4f00af1e335a09d40a66))
+* update TODO.md — reflect NV12 unchecked indexing done in [#70](https://github.com/DaveDev42/nokhwa/issues/70) ([#71](https://github.com/DaveDev42/nokhwa/issues/71)) ([f3c5a2e](https://github.com/DaveDev42/nokhwa/commit/f3c5a2e32f066d9f4d80d692011e6f8d91ce4bc0))
+* update TODO.md — remove completed items, clean up stale entries ([#65](https://github.com/DaveDev42/nokhwa/issues/65)) ([3c6f5bb](https://github.com/DaveDev42/nokhwa/commit/3c6f5bb485c0491d6d44148754e76135c0c4fb2f))
+
+## 0.11.0 (unreleased, fork: DaveDev42/nokhwa)
 
 ## Breaking
 - Removed deprecated `Camera::new_with()` (use `Camera::new()` or `Camera::with_backend()` instead)
@@ -75,7 +124,7 @@
 - Removed dead code: empty `VirtualBackendTrait`, commented-out module declarations, obsolete code blocks
 - Removed obsolete `make-npm.sh` (JS bindings removed in 0.10.0)
 
-# 0.10.0
+## 0.10.0
 - Split core types and traits into `nokhwa-core`
   - Now you can use `nokhwa`'s Camera types in your own packages, to e.g. create `nokhwa` extensions or use `nokhwa`'s decoders.  
 - Removed support for JS Bindings
@@ -98,23 +147,23 @@
 - Added warning about decoding on main thread reducing performance
 - After a year in development, We hope it was worth the wait.
 
-# 0.9.0
+## 0.9.0
 - Fixed Camera Controls for V4L2
 - Disabled UVC Backend.
 - Added polling and last frame to `ThreadedCamera`
 - Updated the `CameraControl` related Camera APIs
 
-# 0.8.0
+## 0.8.0
 - Media Foundation Access Violation fix (#13)
 
-# 0.7.0
+## 0.7.0
 - Bumped some dependencies.
 
-# 0.5.0
+## 0.5.0
  - Fixed `msmf`
  - Relicensed to Apache-2.0
 
-# 0.4.0
+## 0.4.0
 - Added AVFoundation, MSMF, WASM
 - `.get_info()` returns a `&CameraInfo`
 - Added Threaded Camera
@@ -123,14 +172,14 @@
 - Added `query()`, which uses `CaptureAPIBackend::Auto` by default.
 - Fixed/Added examples
 
-# 0.3.2
+## 0.3.2
 - Bumped `ouroboros` to avoid potential UB
 - [INTERNAL] Removed `Box<T>` from many internal struct fields of `UVCCaptureDevice`
 
-# 0.3.1
+## 0.3.1
 - Added feature hacks to prevent gstreamer/opencv docs.rs build failure
 
-# 0.3.0
+## 0.3.0
 - Added `query_devices()` to query available devices on system
 - Added `GStreamer` and `OpenCV` backends
 - Added `NetworkCamera`
@@ -141,7 +190,7 @@
 - General bugfixes/performance enhancements
 
 
-# 0.2.0
+## 0.2.0
 First release
 - UVC/V4L backends
 - `Camera` struct for simplification
