@@ -1880,6 +1880,90 @@ pub fn buf_nv12_to_rgb(
     Ok(())
 }
 
+/// Extracts the Y (luma) channel from a YUYV 4:2:2 stream.
+///
+/// YUYV stores pairs of pixels as [Y0, U, Y1, V]. This function extracts
+/// every Y byte without any color-space conversion, producing one luma byte
+/// per pixel.
+///
+/// # Errors
+/// Returns an error if the input size is not divisible by 4, or the
+/// destination buffer is the wrong size.
+#[inline]
+pub fn buf_yuyv_extract_luma(data: &[u8], dest: &mut [u8]) -> Result<(), NokhwaError> {
+    if !data.len().is_multiple_of(4) {
+        return Err(NokhwaError::ProcessFrameError {
+            src: FrameFormat::YUYV,
+            destination: "Luma".to_string(),
+            error: "YUYV stream length not divisible by 4".to_string(),
+        });
+    }
+
+    let pixel_count = data.len() / 2;
+    if dest.len() != pixel_count {
+        return Err(NokhwaError::ProcessFrameError {
+            src: FrameFormat::YUYV,
+            destination: "Luma".to_string(),
+            error: format!(
+                "destination buffer size mismatch (expected {pixel_count}, got {})",
+                dest.len()
+            ),
+        });
+    }
+
+    for (chunk, out) in data.chunks_exact(4).zip(dest.chunks_exact_mut(2)) {
+        out[0] = chunk[0]; // Y0
+        out[1] = chunk[2]; // Y1
+    }
+
+    Ok(())
+}
+
+/// Extracts the Y (luma) plane from an NV12 (YUV 4:2:0 bi-planar) stream.
+///
+/// NV12 stores a full-resolution Y plane followed by a half-resolution
+/// interleaved UV plane. This function copies only the Y plane, producing
+/// one luma byte per pixel with zero color-space conversion.
+///
+/// # Errors
+/// Returns an error if the input or destination buffer sizes are incorrect.
+#[inline]
+pub fn buf_nv12_extract_luma(
+    resolution: Resolution,
+    data: &[u8],
+    dest: &mut [u8],
+) -> Result<(), NokhwaError> {
+    let w = resolution.width() as usize;
+    let h = resolution.height() as usize;
+    let y_size = w * h;
+    let expected_input = y_size * 3 / 2;
+
+    if data.len() != expected_input {
+        return Err(NokhwaError::ProcessFrameError {
+            src: FrameFormat::NV12,
+            destination: "Luma".to_string(),
+            error: format!(
+                "NV12 input size mismatch (expected {expected_input}, got {})",
+                data.len()
+            ),
+        });
+    }
+
+    if dest.len() != y_size {
+        return Err(NokhwaError::ProcessFrameError {
+            src: FrameFormat::NV12,
+            destination: "Luma".to_string(),
+            error: format!(
+                "destination buffer size mismatch (expected {y_size}, got {})",
+                dest.len()
+            ),
+        });
+    }
+
+    dest.copy_from_slice(&data[..y_size]);
+    Ok(())
+}
+
 /// Converts a BGR datastream to RGB, writing into the provided output buffer.
 /// # Errors
 /// Returns `NokhwaError::ProcessFrameError` if the resolution or data size is invalid.
