@@ -108,6 +108,8 @@ pub mod backends;
 mod camera;
 mod init;
 
+#[cfg(feature = "decoding")]
+#[cfg_attr(feature = "docs-features", doc(cfg(feature = "decoding")))]
 pub use nokhwa_core::pixel_format::FormatDecoder;
 mod query;
 /// A camera that runs in a different thread and can call your code based on callbacks.
@@ -139,6 +141,8 @@ pub mod camera_traits {
     pub use nokhwa_core::traits::*;
 }
 
+#[cfg(feature = "decoding")]
+#[cfg_attr(feature = "docs-features", doc(cfg(feature = "decoding")))]
 pub mod pixel_format {
     pub use nokhwa_core::pixel_format::*;
 }

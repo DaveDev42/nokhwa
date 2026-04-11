@@ -382,8 +382,11 @@ pub trait CaptureBackendTrait {
         (resolution.width() * resolution.height() * pxwidth) as usize
     }
 
-    #[cfg(feature = "wgpu-types")]
-    #[cfg_attr(feature = "docs-features", doc(cfg(feature = "wgpu-types")))]
+    #[cfg(all(feature = "wgpu-types", feature = "decoding"))]
+    #[cfg_attr(
+        feature = "docs-features",
+        doc(cfg(all(feature = "wgpu-types", feature = "decoding")))
+    )]
     /// Directly copies a frame to a Wgpu texture. This will automatically convert the frame into a RGBA frame.
     /// # Errors
     /// If the frame cannot be captured or the resolution is 0 on any axis, this will error.

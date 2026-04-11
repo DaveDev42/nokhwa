@@ -64,6 +64,7 @@
 - Added pre-commit hook (cargo fmt + clippy)
 - Added 24 unit tests for nokhwa-core
 - Clippy pedantic: 30 errors → 0
+- Made `image` crate dependency optional in both `nokhwa` and `nokhwa-core`, gated behind the `decoding` feature flag. Building without `decoding` no longer pulls in the `image` crate, reducing compile times and dependency count for users who only need raw frame capture.
 
 ## Cleanup
 - Replaced `flume` crate with `std::sync::mpsc` to reduce external dependencies (all channel usages migrated in library and examples)

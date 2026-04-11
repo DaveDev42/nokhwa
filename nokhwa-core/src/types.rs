@@ -1,4 +1,6 @@
-use crate::{error::NokhwaError, pixel_format::FormatDecoder};
+use crate::error::NokhwaError;
+#[cfg(feature = "decoding")]
+use crate::pixel_format::FormatDecoder;
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
 use std::{
@@ -132,6 +134,8 @@ pub struct RequestedFormat<'a> {
 impl RequestedFormat<'_> {
     /// Creates a new [`RequestedFormat`] by using the [`RequestedFormatType`] and getting the [`FrameFormat`]
     /// constraints from a generic type.
+    #[cfg(feature = "decoding")]
+    #[cfg_attr(feature = "docs-features", doc(cfg(feature = "decoding")))]
     #[must_use]
     pub fn new<Decoder: FormatDecoder>(requested: RequestedFormatType) -> RequestedFormat<'static> {
         RequestedFormat {
