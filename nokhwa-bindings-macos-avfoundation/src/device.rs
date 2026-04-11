@@ -278,89 +278,106 @@ fn device_with_unique_id(id: &objc2_foundation::NSString) -> Option<Retained<AVC
 // -- Safe wrappers for AVCaptureDevice mutating operations --
 // These require the device to be locked for configuration first.
 
-// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid `AVCaptureDevice` reference.
+// Caller must lock the device for configuration before calling this.
 fn device_set_active_format(device: &AVCaptureDevice, format: &AVCaptureDeviceFormat) {
     unsafe { device.setActiveFormat(format) }
 }
 
-// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid `AVCaptureDevice` reference.
+// Caller must lock the device for configuration before calling this.
 fn device_set_active_video_min_frame_duration(device: &AVCaptureDevice, duration: CMTime) {
     unsafe { device.setActiveVideoMinFrameDuration(duration) }
 }
 
-// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid `AVCaptureDevice` reference.
+// Caller must lock the device for configuration before calling this.
 fn device_set_active_video_max_frame_duration(device: &AVCaptureDevice, duration: CMTime) {
     unsafe { device.setActiveVideoMaxFrameDuration(duration) }
 }
 
-// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid `AVCaptureDevice` reference.
+// Caller must lock the device for configuration before calling this.
 fn device_set_focus_mode(device: &AVCaptureDevice, mode: AVCaptureFocusMode) {
     unsafe { device.setFocusMode(mode) }
 }
 
-// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid `AVCaptureDevice` reference.
+// Caller must lock the device for configuration before calling this.
 fn device_set_focus_poi(device: &AVCaptureDevice, point: CGPoint) {
     unsafe { device.setFocusPointOfInterest(point) }
 }
 
-// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid `AVCaptureDevice` reference.
+// Caller must lock the device for configuration before calling this.
 fn device_set_focus_mode_locked_with_lens_position(device: &AVCaptureDevice, position: c_float) {
     unsafe { device.setFocusModeLockedWithLensPosition_completionHandler(position, None) }
 }
 
-// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid `AVCaptureDevice` reference.
+// Caller must lock the device for configuration before calling this.
 fn device_set_exposure_mode(device: &AVCaptureDevice, mode: AVCaptureExposureMode) {
     unsafe { device.setExposureMode(mode) }
 }
 
-// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid `AVCaptureDevice` reference.
+// Caller must lock the device for configuration before calling this.
 fn device_set_exposure_poi(device: &AVCaptureDevice, point: CGPoint) {
     unsafe { device.setExposurePointOfInterest(point) }
 }
 
-// SAFETY: Mutating method on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Mutating method on a valid `AVCaptureDevice` reference.
+// Caller must lock the device for configuration before calling this.
 fn device_set_exposure_custom(device: &AVCaptureDevice, duration: CMTime, iso: c_float) {
     unsafe { device.setExposureModeCustomWithDuration_ISO_completionHandler(duration, iso, None) }
 }
 
-// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid `AVCaptureDevice` reference.
+// Caller must lock the device for configuration before calling this.
 fn device_set_exposure_target_bias(device: &AVCaptureDevice, bias: c_float) {
     unsafe { device.setExposureTargetBias_completionHandler(bias, None) }
 }
 
-// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid `AVCaptureDevice` reference.
+// Caller must lock the device for configuration before calling this.
 fn device_set_auto_adjusts_face_driven_auto_exposure(device: &AVCaptureDevice, enabled: bool) {
     unsafe { device.setAutomaticallyAdjustsFaceDrivenAutoExposureEnabled(enabled) }
 }
 
-// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid `AVCaptureDevice` reference.
+// Caller must lock the device for configuration before calling this.
 fn device_set_white_balance_mode(device: &AVCaptureDevice, mode: AVCaptureWhiteBalanceMode) {
     unsafe { device.setWhiteBalanceMode(mode) }
 }
 
-// SAFETY: Mutating method on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Mutating method on a valid `AVCaptureDevice` reference.
+// Caller must lock the device for configuration before calling this.
 fn device_set_white_balance_gains(device: &AVCaptureDevice, gains: AVCaptureWhiteBalanceGains) {
     unsafe {
         device.setWhiteBalanceModeLockedWithDeviceWhiteBalanceGains_completionHandler(gains, None)
     }
 }
 
-// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid `AVCaptureDevice` reference.
+// Caller must lock the device for configuration before calling this.
 fn device_set_auto_low_light_boost(device: &AVCaptureDevice, enabled: bool) {
     unsafe { device.setAutomaticallyEnablesLowLightBoostWhenAvailable(enabled) }
 }
 
-// SAFETY: Mutating method on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Mutating method on a valid `AVCaptureDevice` reference.
+// Caller must lock the device for configuration before calling this.
 fn device_ramp_to_video_zoom_factor(device: &AVCaptureDevice, factor: CGFloat, rate: c_float) {
     unsafe { device.rampToVideoZoomFactor_withRate(factor, rate) }
 }
 
-// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid `AVCaptureDevice` reference.
+// Caller must lock the device for configuration before calling this.
 fn device_set_torch_mode(device: &AVCaptureDevice, mode: AVCaptureTorchMode) {
     unsafe { device.setTorchMode(mode) }
 }
 
-// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid `AVCaptureDevice` reference.
+// Caller must lock the device for configuration before calling this.
 fn device_set_geometric_distortion_correction_enabled(device: &AVCaptureDevice, enabled: bool) {
     unsafe { device.setGeometricDistortionCorrectionEnabled(enabled) }
 }
@@ -436,18 +453,22 @@ fn range_min_frame_duration(range: &AVFrameRateRange) -> CMTime {
 
 // -- Safe wrappers for CMFormatDescription C FFI calls --
 
-// SAFETY: `description_ref` is a valid pointer derived from a `Retained<CMFormatDescription>`
-// obtained via `format.formatDescription()`. The pointer remains valid for the lifetime of
-// the `Retained` value.
-fn cm_video_format_get_dimensions(description_ref: CMFormatDescriptionRef) -> CMVideoDimensions {
-    unsafe { CMVideoFormatDescriptionGetDimensions(description_ref) }
+// SAFETY: The reference is converted to a raw pointer for the C FFI call. The pointer
+// remains valid for the duration of the call because the borrow on `desc` keeps the
+// underlying `Retained<CMFormatDescription>` alive.
+fn cm_video_format_get_dimensions(
+    desc: &objc2_core_media::CMFormatDescription,
+) -> CMVideoDimensions {
+    let ptr = desc as *const _ as CMFormatDescriptionRef;
+    unsafe { CMVideoFormatDescriptionGetDimensions(ptr) }
 }
 
-// SAFETY: `description_ref` is a valid pointer derived from a `Retained<CMFormatDescription>`
-// obtained via `format.formatDescription()`. The pointer remains valid for the lifetime of
-// the `Retained` value.
-fn cm_format_get_media_sub_type(description_ref: CMFormatDescriptionRef) -> u32 {
-    unsafe { CMFormatDescriptionGetMediaSubType(description_ref) }
+// SAFETY: The reference is converted to a raw pointer for the C FFI call. The pointer
+// remains valid for the duration of the call because the borrow on `desc` keeps the
+// underlying `Retained<CMFormatDescription>` alive.
+fn cm_format_get_media_sub_type(desc: &objc2_core_media::CMFormatDescription) -> u32 {
+    let ptr = desc as *const _ as CMFormatDescriptionRef;
+    unsafe { CMFormatDescriptionGetMediaSubType(ptr) }
 }
 
 // -- Safe wrappers for global sentinel constants --
@@ -548,9 +569,8 @@ impl AVCaptureDeviceFormatWrapper {
         fps_list.dedup();
 
         let description_obj = format_description(format);
-        let description_ref = &*description_obj as *const _ as CMFormatDescriptionRef;
-        let resolution = cm_video_format_get_dimensions(description_ref);
-        let fcc_raw = cm_format_get_media_sub_type(description_ref);
+        let resolution = cm_video_format_get_dimensions(&description_obj);
+        let fcc_raw = cm_format_get_media_sub_type(&description_obj);
 
         #[allow(non_upper_case_globals)]
         let fourcc = match raw_fcc_to_frameformat(fcc_raw) {
@@ -703,8 +723,7 @@ impl AVCaptureDeviceWrapper {
         for i in 0..formats.count() {
             let format = formats.objectAtIndex(i);
             let fmt_desc = format_description(&format);
-            let fmt_desc_ref = &*fmt_desc as *const _ as CMFormatDescriptionRef;
-            let dimensions = cm_video_format_get_dimensions(fmt_desc_ref);
+            let dimensions = cm_video_format_get_dimensions(&fmt_desc);
 
             if dimensions.height == descriptor.resolution().height() as i32
                 && dimensions.width == descriptor.resolution().width() as i32
