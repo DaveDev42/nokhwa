@@ -102,39 +102,45 @@ unsafe fn bgr_to_rgb_sse2(src: &[u8], dst: &mut [u8]) {
     bgr_to_rgb_scalar(src, dst);
 }
 
-/// AVX2 BGR→RGB: processes 30 bytes (10 pixels) per iteration using 256-bit shuffle.
-/// `vpshufb` operates independently within each 128-bit lane, so the same
-/// 15-byte swap mask is replicated across both lanes.
+/// AVX2 BGR→RGB: processes 30 bytes (10 pixels) per iteration.
+///
+/// `vpshufb` operates independently within each 128-bit lane, so we must
+/// load two 128-bit chunks at correct 15-byte offsets (pixel boundaries)
+/// and combine them into a 256-bit register. A single 256-bit load would
+/// misalign lane 1 since 15 is not a power of 2.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
 unsafe fn bgr_to_rgb_avx2(src: &[u8], dst: &mut [u8]) {
     use std::arch::x86_64::{
-        _mm256_loadu_si256, _mm256_setr_epi8, _mm256_shuffle_epi8, _mm256_storeu_si256,
+        _mm256_set_m128i, _mm256_setr_epi8, _mm256_shuffle_epi8, _mm256_storeu_si256,
+        _mm_loadu_si128,
     };
 
     let len = src.len();
 
-    // Same 15-byte shuffle pattern in both 128-bit lanes
+    // Same 15-byte swap pattern in both 128-bit lanes
     let shuffle = _mm256_setr_epi8(
         2, 1, 0, 5, 4, 3, 8, 7, 6, 11, 10, 9, 14, 13, 12, -1, // lane 0
         2, 1, 0, 5, 4, 3, 8, 7, 6, 11, 10, 9, 14, 13, 12, -1, // lane 1
     );
 
-    // Each iteration loads 32 bytes but only uses 30 (15 per lane).
-    // We need idx + 32 <= len for a safe load.
-    let simd_limit = len.saturating_sub(31);
+    // Each iteration processes 30 bytes (10 BGR pixels → 10 RGB pixels).
+    // We need idx + 15 + 16 <= len for the second 128-bit load to be safe.
+    let simd_limit = len.saturating_sub(30);
     let mut idx = 0;
 
     while idx < simd_limit {
-        // SAFETY: idx + 32 <= len, pointers are valid for 32-byte read
-        let vec = _mm256_loadu_si256(src.as_ptr().add(idx).cast());
-        let shuffled = _mm256_shuffle_epi8(vec, shuffle);
+        // SAFETY: idx + 31 <= len, both 128-bit loads are in bounds.
+        // Load two 128-bit halves at pixel-aligned offsets (0 and 15 bytes apart).
+        let lo = _mm_loadu_si128(src.as_ptr().add(idx).cast());
+        let hi = _mm_loadu_si128(src.as_ptr().add(idx + 15).cast());
+        let combined = _mm256_set_m128i(hi, lo);
+        let shuffled = _mm256_shuffle_epi8(combined, shuffle);
+
         let mut tmp = [0u8; 32];
         _mm256_storeu_si256(tmp.as_mut_ptr().cast(), shuffled);
-        // Lane 0 produced 15 valid bytes, lane 1 produced 15 valid bytes.
-        // Lane 0 covers src[idx..idx+15], lane 1 covers src[idx+16..idx+31].
-        // But we want contiguous output covering src[idx..idx+30] (10 BGR pixels).
-        // Lane 0 = tmp[0..15], lane 1 = tmp[16..31].
+        // Lane 0 (tmp[0..15]): 5 swapped pixels from src[idx..idx+15]
+        // Lane 1 (tmp[16..31]): 5 swapped pixels from src[idx+15..idx+30]
         dst[idx..idx + 15].copy_from_slice(&tmp[..15]);
         dst[idx + 15..idx + 30].copy_from_slice(&tmp[16..31]);
         idx += 30;
@@ -1051,7 +1057,7 @@ unsafe fn nv12_to_rgb_sse41(width: usize, height: usize, data: &[u8], out: &mut 
         _mm_add_epi32, _mm_loadl_epi64, _mm_max_epi16, _mm_mullo_epi32, _mm_packs_epi32,
         _mm_packus_epi16, _mm_set1_epi16, _mm_set1_epi32, _mm_setr_epi8, _mm_setzero_si128,
         _mm_shuffle_epi8, _mm_srai_epi32, _mm_storeu_si128, _mm_sub_epi16, _mm_sub_epi32,
-        _mm_unpackhi_epi16, _mm_unpacklo_epi8,
+        _mm_unpacklo_epi8,
     };
 
     let pxsize = if rgba { 4 } else { 3 };
@@ -1185,8 +1191,8 @@ unsafe fn nv12_to_rgb_sse41(width: usize, height: usize, data: &[u8], out: &mut 
 /// `src.len()` must be a multiple of 3 and `dst.len()` must be `(src.len() / 3) * 4`.
 #[inline]
 pub(crate) fn rgb_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
-    debug_assert!(src.len().is_multiple_of(3));
-    debug_assert_eq!(dst.len(), (src.len() / 3) * 4);
+    assert!(src.len().is_multiple_of(3));
+    assert_eq!(dst.len(), (src.len() / 3) * 4);
 
     #[cfg(target_arch = "aarch64")]
     rgb_to_rgba_neon(src, dst);
@@ -1204,8 +1210,8 @@ pub(crate) fn rgb_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
 /// Expand BGR888 to RGBA8888 (swap R/B + alpha=255) using SIMD where available.
 #[inline]
 pub(crate) fn bgr_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
-    debug_assert!(src.len().is_multiple_of(3));
-    debug_assert_eq!(dst.len(), (src.len() / 3) * 4);
+    assert!(src.len().is_multiple_of(3));
+    assert_eq!(dst.len(), (src.len() / 3) * 4);
 
     #[cfg(target_arch = "aarch64")]
     bgr_to_rgba_neon(src, dst);
@@ -1383,8 +1389,8 @@ unsafe fn bgr_to_rgba_ssse3(src: &[u8], dst: &mut [u8]) {
 /// `src.len()` must be a multiple of 4, `dst.len()` must be `src.len() / 2`.
 #[inline]
 pub(crate) fn yuyv_extract_luma_simd(src: &[u8], dst: &mut [u8]) {
-    debug_assert!(src.len().is_multiple_of(4));
-    debug_assert_eq!(dst.len(), src.len() / 2);
+    assert!(src.len().is_multiple_of(4));
+    assert_eq!(dst.len(), src.len() / 2);
 
     #[cfg(target_arch = "aarch64")]
     yuyv_extract_luma_neon(src, dst);
@@ -1473,8 +1479,8 @@ unsafe fn yuyv_extract_luma_ssse3(src: &[u8], dst: &mut [u8]) {
 /// `src.len()` must be a multiple of 3, `dst.len()` must be `src.len() / 3`.
 #[inline]
 pub(crate) fn rgb_to_luma_simd(src: &[u8], dst: &mut [u8]) {
-    debug_assert!(src.len().is_multiple_of(3));
-    debug_assert_eq!(dst.len(), src.len() / 3);
+    assert!(src.len().is_multiple_of(3));
+    assert_eq!(dst.len(), src.len() / 3);
 
     #[cfg(target_arch = "aarch64")]
     rgb_to_luma_neon(src, dst);

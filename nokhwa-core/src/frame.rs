@@ -561,6 +561,7 @@ pub(crate) fn convert_to_luma(
                 (sum / 3) as u8
             })
             .collect()),
+        // RAWBGR works with the same function: (R+G+B)/3 == (B+G+R)/3 (addition is commutative)
         FrameFormat::RAWRGB | FrameFormat::RAWBGR => {
             let mut luma = vec![0u8; data.len() / 3];
             crate::simd::rgb_to_luma_simd(data, &mut luma);
@@ -593,6 +594,7 @@ pub(crate) fn convert_to_luma_buffer(
         }
         FrameFormat::YUYV => buf_yuyv_extract_luma(data, dest),
         FrameFormat::NV12 => buf_nv12_extract_luma(resolution, data, dest),
+        // RAWBGR works with the same function: (R+G+B)/3 == (B+G+R)/3 (addition is commutative)
         FrameFormat::RAWRGB | FrameFormat::RAWBGR => {
             let pixel_count = data.len() / 3;
             if dest.len() != pixel_count {
