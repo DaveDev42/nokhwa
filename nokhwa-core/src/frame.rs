@@ -52,11 +52,11 @@ impl<F: CaptureFormat> Frame<F> {
     /// Creates a new `Frame` from a [`Buffer`].
     ///
     /// # Panics
-    /// Panics in debug builds if the buffer's [`FrameFormat`] does not match
-    /// `F::FRAME_FORMAT`.
+    /// Panics if the buffer's [`FrameFormat`] does not match `F::FRAME_FORMAT`.
+    /// Use [`try_new`](Self::try_new) for a fallible version.
     #[must_use]
     pub fn new(buffer: Buffer) -> Self {
-        debug_assert_eq!(
+        assert_eq!(
             buffer.source_frame_format(),
             F::FRAME_FORMAT,
             "Buffer FrameFormat {:?} does not match expected {:?}",
@@ -67,6 +67,28 @@ impl<F: CaptureFormat> Frame<F> {
             buffer,
             _format: PhantomData,
         }
+    }
+
+    /// Fallible version of [`new`](Self::new). Returns an error if the buffer's
+    /// [`FrameFormat`] does not match `F::FRAME_FORMAT`.
+    /// # Errors
+    /// Returns [`NokhwaError::ProcessFrameError`] on format mismatch.
+    pub fn try_new(buffer: Buffer) -> Result<Self, NokhwaError> {
+        if buffer.source_frame_format() != F::FRAME_FORMAT {
+            return Err(NokhwaError::ProcessFrameError {
+                src: buffer.source_frame_format(),
+                destination: format!("Frame<{:?}>", F::FRAME_FORMAT),
+                error: format!(
+                    "expected {:?}, got {:?}",
+                    F::FRAME_FORMAT,
+                    buffer.source_frame_format()
+                ),
+            });
+        }
+        Ok(Self {
+            buffer,
+            _format: PhantomData,
+        })
     }
 
     /// Returns the frame resolution.
@@ -161,6 +183,7 @@ pub trait IntoLuma {
 
 /// Lazy RGB conversion. Call [`materialize()`](Self::materialize) to perform
 /// the actual pixel conversion.
+#[must_use = "conversion is lazy; call .materialize() or .write_to() to perform it"]
 pub struct RgbConversion {
     buffer: Buffer,
 }
@@ -201,6 +224,7 @@ impl RgbConversion {
     /// # Errors
     /// Returns an error if pixel conversion or PNG encoding fails.
     pub fn write_png<W: Write + Seek>(self, writer: W) -> Result<(), NokhwaError> {
+        let fcc = self.buffer.source_frame_format();
         let img = self.materialize()?;
         let dyn_image = image::DynamicImage::ImageRgb8(img);
         dyn_image
@@ -209,7 +233,7 @@ impl RgbConversion {
                 image::ImageFormat::Png,
             )
             .map_err(|e| NokhwaError::ProcessFrameError {
-                src: FrameFormat::RAWRGB,
+                src: fcc,
                 destination: "PNG".to_string(),
                 error: e.to_string(),
             })
@@ -218,6 +242,7 @@ impl RgbConversion {
 
 /// Lazy RGBA conversion. Call [`materialize()`](Self::materialize) to perform
 /// the actual pixel conversion.
+#[must_use = "conversion is lazy; call .materialize() or .write_to() to perform it"]
 pub struct RgbaConversion {
     buffer: Buffer,
 }
@@ -257,6 +282,7 @@ impl RgbaConversion {
 
 /// Lazy luma (grayscale) conversion. Call [`materialize()`](Self::materialize)
 /// to perform the actual pixel conversion.
+#[must_use = "conversion is lazy; call .materialize() or .write_to() to perform it"]
 pub struct LumaConversion {
     buffer: Buffer,
 }
@@ -387,6 +413,17 @@ pub(crate) fn convert_to_rgb_buffer(
         FrameFormat::YUYV => buf_yuyv422_to_rgb(data, dest, false),
         FrameFormat::NV12 => buf_nv12_to_rgb(resolution, data, dest, false),
         FrameFormat::RAWRGB => {
+            if dest.len() != data.len() {
+                return Err(NokhwaError::ProcessFrameError {
+                    src: fcc,
+                    destination: "RGB".to_string(),
+                    error: format!(
+                        "destination buffer size mismatch (expected {}, got {})",
+                        data.len(),
+                        dest.len()
+                    ),
+                });
+            }
             dest.copy_from_slice(data);
             Ok(())
         }
@@ -442,6 +479,17 @@ pub(crate) fn convert_to_rgba_buffer(
         FrameFormat::YUYV => buf_yuyv422_to_rgb(data, dest, true),
         FrameFormat::NV12 => buf_nv12_to_rgb(resolution, data, dest, true),
         FrameFormat::RAWRGB => {
+            let expected = (data.len() / 3) * 4;
+            if dest.len() != expected {
+                return Err(NokhwaError::ProcessFrameError {
+                    src: fcc,
+                    destination: "RGBA".to_string(),
+                    error: format!(
+                        "destination buffer size mismatch (expected {expected}, got {})",
+                        dest.len()
+                    ),
+                });
+            }
             data.chunks_exact(3).enumerate().for_each(|(idx, px)| {
                 let i = idx * 4;
                 dest[i] = px[0];
@@ -452,6 +500,17 @@ pub(crate) fn convert_to_rgba_buffer(
             Ok(())
         }
         FrameFormat::RAWBGR => {
+            let expected = (data.len() / 3) * 4;
+            if dest.len() != expected {
+                return Err(NokhwaError::ProcessFrameError {
+                    src: fcc,
+                    destination: "RGBA".to_string(),
+                    error: format!(
+                        "destination buffer size mismatch (expected {expected}, got {})",
+                        dest.len()
+                    ),
+                });
+            }
             data.chunks_exact(3).enumerate().for_each(|(idx, px)| {
                 let i = idx * 4;
                 dest[i] = px[2];
@@ -481,6 +540,9 @@ pub(crate) fn convert_to_rgba_buffer(
     }
 }
 
+/// Note: For YUYV and NV12, luma is extracted directly from the Y channel
+/// (BT.601 weighted). For MJPEG, RAWRGB, and RAWBGR, a simple average
+/// `(R+G+B)/3` is used rather than perceptual luminance weights.
 #[allow(clippy::cast_possible_truncation)]
 #[allow(clippy::cast_sign_loss)]
 pub(crate) fn convert_to_luma(
