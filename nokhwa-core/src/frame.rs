@@ -644,16 +644,17 @@ pub(crate) fn convert_to_luma_buffer(
 
 /// Helper: create an owned `opencv::core::Mat` from decoded pixel data.
 ///
-/// The caller provides the decoded bytes, resolution, and the OpenCV type
-/// constant (`CV_8UC1`, `CV_8UC3`, `CV_8UC4`). A deep copy is made so the
+/// The caller provides the decoded bytes, resolution, the OpenCV type
+/// constant (`CV_8UC1`, `CV_8UC3`, `CV_8UC4`), and the original source
+/// [`FrameFormat`] for error reporting. A deep copy is made so the
 /// returned `Mat` owns its data.
 #[cfg(feature = "opencv-mat")]
-#[cfg_attr(feature = "docs-features", doc(cfg(feature = "opencv-mat")))]
 #[allow(clippy::cast_possible_wrap)]
 fn mat_from_decoded(
     data: &[u8],
     resolution: Resolution,
     cv_type: i32,
+    src_format: FrameFormat,
 ) -> Result<opencv::core::Mat, NokhwaError> {
     use opencv::core::{Mat, Mat_AUTO_STEP};
 
@@ -669,13 +670,13 @@ fn mat_from_decoded(
             Mat_AUTO_STEP,
         )
         .map_err(|why| NokhwaError::ProcessFrameError {
-            src: FrameFormat::RAWRGB,
+            src: src_format,
             destination: "OpenCV Mat".to_string(),
             error: why.to_string(),
         })?;
 
         tmp.clone().map_err(|why| NokhwaError::ProcessFrameError {
-            src: FrameFormat::RAWRGB,
+            src: src_format,
             destination: "OpenCV Mat".to_string(),
             error: why.to_string(),
         })
@@ -685,12 +686,12 @@ fn mat_from_decoded(
 /// Helper: write decoded pixel data into an existing `opencv::core::Mat`,
 /// re-allocating it if empty, or validating dimensions/type if already allocated.
 #[cfg(feature = "opencv-mat")]
-#[cfg_attr(feature = "docs-features", doc(cfg(feature = "opencv-mat")))]
 #[allow(clippy::cast_possible_wrap)]
 fn mat_write_decoded(
     data: &[u8],
     resolution: Resolution,
     cv_type: i32,
+    src_format: FrameFormat,
     dst: &mut opencv::core::Mat,
 ) -> Result<(), NokhwaError> {
     use opencv::core::{Mat, MatTraitConst, MatTraitManual, Scalar};
@@ -703,38 +704,35 @@ fn mat_write_decoded(
             Scalar::default(),
         )
         .map_err(|why| NokhwaError::ProcessFrameError {
-            src: FrameFormat::RAWRGB,
+            src: src_format,
             destination: "OpenCV Mat".to_string(),
             error: why.to_string(),
         })?;
-    } else {
-        if dst.typ() != cv_type {
-            return Err(NokhwaError::ProcessFrameError {
-                src: FrameFormat::RAWRGB,
-                destination: "OpenCV Mat".to_string(),
-                error: "Matrix type mismatch".to_string(),
-            });
-        }
-        if dst.rows() != resolution.height_y as i32 || dst.cols() != resolution.width_x as i32 {
-            return Err(NokhwaError::ProcessFrameError {
-                src: FrameFormat::RAWRGB,
-                destination: "OpenCV Mat".to_string(),
-                error: "Matrix dimensions mismatch".to_string(),
-            });
-        }
+    } else if dst.typ() != cv_type {
+        return Err(NokhwaError::ProcessFrameError {
+            src: src_format,
+            destination: "OpenCV Mat".to_string(),
+            error: "Matrix type mismatch".to_string(),
+        });
+    } else if dst.rows() != resolution.height_y as i32 || dst.cols() != resolution.width_x as i32 {
+        return Err(NokhwaError::ProcessFrameError {
+            src: src_format,
+            destination: "OpenCV Mat".to_string(),
+            error: "Matrix dimensions mismatch".to_string(),
+        });
     }
 
     let bytes = dst
         .data_bytes_mut()
         .map_err(|_| NokhwaError::ProcessFrameError {
-            src: FrameFormat::RAWRGB,
+            src: src_format,
             destination: "OpenCV Mat".to_string(),
             error: "Matrix must be continuous".to_string(),
         })?;
 
     if bytes.len() != data.len() {
         return Err(NokhwaError::ProcessFrameError {
-            src: FrameFormat::RAWRGB,
+            src: src_format,
             destination: "OpenCV Mat".to_string(),
             error: format!(
                 "Buffer size mismatch (mat has {}, data has {})",
@@ -762,10 +760,13 @@ impl RgbConversion {
         let data = self.buffer.buffer();
         let fcc = self.buffer.source_frame_format();
         let rgb_data = convert_to_rgb(fcc, resolution, data)?;
-        mat_from_decoded(&rgb_data, resolution, opencv::core::CV_8UC3)
+        mat_from_decoded(&rgb_data, resolution, opencv::core::CV_8UC3, fcc)
     }
 
     /// Converts the frame to RGB and writes into an existing OpenCV `Mat` (CV_8UC3).
+    ///
+    /// Note: OpenCV uses BGR channel ordering internally. If you need BGR,
+    /// call `opencv::imgproc::cvt_color` with `COLOR_RGB2BGR` on the result.
     /// # Errors
     /// Returns an error if pixel conversion fails, or the destination Mat has
     /// incompatible type/dimensions.
@@ -774,7 +775,7 @@ impl RgbConversion {
         let data = self.buffer.buffer();
         let fcc = self.buffer.source_frame_format();
         let rgb_data = convert_to_rgb(fcc, resolution, data)?;
-        mat_write_decoded(&rgb_data, resolution, opencv::core::CV_8UC3, dst)
+        mat_write_decoded(&rgb_data, resolution, opencv::core::CV_8UC3, fcc, dst)
     }
 }
 
@@ -789,7 +790,7 @@ impl RgbaConversion {
         let data = self.buffer.buffer();
         let fcc = self.buffer.source_frame_format();
         let rgba_data = convert_to_rgba(fcc, resolution, data)?;
-        mat_from_decoded(&rgba_data, resolution, opencv::core::CV_8UC4)
+        mat_from_decoded(&rgba_data, resolution, opencv::core::CV_8UC4, fcc)
     }
 
     /// Converts the frame to RGBA and writes into an existing OpenCV `Mat` (CV_8UC4).
@@ -801,7 +802,7 @@ impl RgbaConversion {
         let data = self.buffer.buffer();
         let fcc = self.buffer.source_frame_format();
         let rgba_data = convert_to_rgba(fcc, resolution, data)?;
-        mat_write_decoded(&rgba_data, resolution, opencv::core::CV_8UC4, dst)
+        mat_write_decoded(&rgba_data, resolution, opencv::core::CV_8UC4, fcc, dst)
     }
 }
 
@@ -816,7 +817,7 @@ impl LumaConversion {
         let data = self.buffer.buffer();
         let fcc = self.buffer.source_frame_format();
         let luma_data = convert_to_luma(fcc, resolution, data)?;
-        mat_from_decoded(&luma_data, resolution, opencv::core::CV_8UC1)
+        mat_from_decoded(&luma_data, resolution, opencv::core::CV_8UC1, fcc)
     }
 
     /// Converts the frame to grayscale and writes into an existing OpenCV `Mat` (CV_8UC1).
@@ -828,7 +829,7 @@ impl LumaConversion {
         let data = self.buffer.buffer();
         let fcc = self.buffer.source_frame_format();
         let luma_data = convert_to_luma(fcc, resolution, data)?;
-        mat_write_decoded(&luma_data, resolution, opencv::core::CV_8UC1, dst)
+        mat_write_decoded(&luma_data, resolution, opencv::core::CV_8UC1, fcc, dst)
     }
 }
 
