@@ -43,7 +43,7 @@ pub use callback::{
 };
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use device::{
-    get_raw_device_info, query_avfoundation, AVCaptureDeviceFormatWrapper, AVCaptureDeviceWrapper,
+    get_raw_device_info, query, AVCaptureDeviceFormatWrapper, AVCaptureDeviceWrapper,
     AVFrameRateRangeWrapper,
 };
 #[cfg(any(target_os = "macos", target_os = "ios"))]

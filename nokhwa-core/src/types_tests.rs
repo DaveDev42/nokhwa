@@ -1122,3 +1122,105 @@ fn control_value_setter_rgb() {
     assert!((g - 0.2).abs() < f64::EPSILON);
     assert!((b - 0.3).abs() < f64::EPSILON);
 }
+
+// ─── FrameFormat FourCC helpers ───
+
+#[test]
+fn frame_format_fourcc_roundtrip() {
+    for &fmt in frame_formats() {
+        assert_eq!(
+            FrameFormat::from_fourcc(fmt.to_fourcc()),
+            Some(fmt),
+            "round-trip failed for {fmt:?}"
+        );
+    }
+}
+
+#[test]
+fn frame_format_from_fourcc_unknown_returns_none() {
+    assert_eq!(FrameFormat::from_fourcc("H264"), None);
+    assert_eq!(FrameFormat::from_fourcc(""), None);
+    assert_eq!(FrameFormat::from_fourcc("XXXX"), None);
+}
+
+#[test]
+fn frame_format_to_fourcc_is_four_bytes() {
+    for &fmt in frame_formats() {
+        assert_eq!(
+            fmt.to_fourcc().len(),
+            4,
+            "FourCC for {fmt:?} is not 4 bytes"
+        );
+    }
+}
+
+// ─── KnownCameraControl index helpers ───
+
+#[test]
+fn known_camera_control_index_roundtrip() {
+    for ctrl in all_known_camera_controls() {
+        let idx = ctrl.as_index().expect("standard control should have index");
+        assert_eq!(
+            KnownCameraControl::from_index(idx),
+            Some(ctrl),
+            "round-trip failed for {ctrl:?}"
+        );
+    }
+}
+
+#[test]
+fn known_camera_control_other_has_no_index() {
+    assert_eq!(KnownCameraControl::Other(42).as_index(), None);
+}
+
+#[test]
+fn known_camera_control_from_index_out_of_range() {
+    assert_eq!(KnownCameraControl::from_index(15), None);
+    assert_eq!(KnownCameraControl::from_index(255), None);
+}
+
+#[test]
+fn known_camera_control_standard_count_matches_all() {
+    assert_eq!(
+        KnownCameraControl::STANDARD_COUNT,
+        all_known_camera_controls().len(),
+        "STANDARD_COUNT and all_known_camera_controls() length must agree"
+    );
+}
+
+// ─── KnownCameraControl platform-ID helpers ───
+
+#[test]
+fn known_camera_control_platform_id_roundtrip() {
+    // Synthetic table: platform ID = canonical index * 100.
+    let table: [u32; KnownCameraControl::STANDARD_COUNT] =
+        core::array::from_fn(|i| (i as u32) * 100);
+
+    for ctrl in all_known_camera_controls() {
+        let pid = ctrl.to_platform_id(&table);
+        let back = KnownCameraControl::from_platform_id(pid, &table);
+        assert_eq!(back, ctrl, "round-trip failed for {ctrl:?}");
+    }
+}
+
+#[test]
+fn known_camera_control_from_platform_id_unknown_falls_back_to_other() {
+    let table: [u32; KnownCameraControl::STANDARD_COUNT] =
+        core::array::from_fn(|i| (i as u32) * 100);
+    let unknown_id = 9999_u32;
+    assert_eq!(
+        KnownCameraControl::from_platform_id(unknown_id, &table),
+        KnownCameraControl::Other(u128::from(unknown_id)),
+    );
+}
+
+#[test]
+fn known_camera_control_other_to_platform_id_truncates() {
+    let table = [0_u32; KnownCameraControl::STANDARD_COUNT];
+    let large_id: u128 = u128::from(u32::MAX) + 1;
+    // Truncation: (u32::MAX + 1) as u32 == 0
+    assert_eq!(
+        KnownCameraControl::Other(large_id).to_platform_id(&table),
+        0
+    );
+}

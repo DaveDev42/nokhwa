@@ -270,7 +270,7 @@ fn query_v4l() -> Result<Vec<CameraInfo>, NokhwaError> {
 // please refer to https://docs.microsoft.com/en-us/windows/win32/medfound/enumerating-video-capture-devices
 #[cfg(all(feature = "input-msmf", target_os = "windows"))]
 fn query_msmf() -> Result<Vec<CameraInfo>, NokhwaError> {
-    nokhwa_bindings_windows_msmf::wmf::query_media_foundation_descriptors()
+    nokhwa_bindings_windows_msmf::wmf::query()
 }
 
 #[cfg(any(not(feature = "input-msmf"), not(target_os = "windows")))]
@@ -285,11 +285,7 @@ fn query_msmf() -> Result<Vec<CameraInfo>, NokhwaError> {
     any(target_os = "macos", target_os = "ios")
 ))]
 fn query_avfoundation() -> Result<Vec<CameraInfo>, NokhwaError> {
-    use nokhwa_bindings_macos_avfoundation::query_avfoundation;
-
-    Ok(query_avfoundation()?
-        .into_iter()
-        .collect::<Vec<CameraInfo>>())
+    nokhwa_bindings_macos_avfoundation::query()
 }
 
 #[cfg(not(all(

@@ -432,7 +432,7 @@ pub mod wmf {
         ))
     }
 
-    pub fn query_media_foundation_descriptors() -> Result<Vec<CameraInfo>, NokhwaError> {
+    pub fn query() -> Result<Vec<CameraInfo>, NokhwaError> {
         let mut device_list = vec![];
 
         for (index, activate_ptr) in query_activate_pointers()?.into_iter().enumerate() {
@@ -583,7 +583,7 @@ pub mod wmf {
                     })
                 }
                 CameraIndex::String(s) => {
-                    let devicelist = query_media_foundation_descriptors()?;
+                    let devicelist = query()?;
                     let mut id_eq = None;
 
                     for mfdev in devicelist {
@@ -605,7 +605,7 @@ pub mod wmf {
         }
         //
         // pub fn with_string(unique_id: &[u16]) -> Result<Self, NokhwaError> {
-        //     let devicelist = query_media_foundation_descriptors()?;
+        //     let devicelist = query()?;
         //     let mut id_eq = None;
         //
         //     for mfdev in devicelist {
@@ -1291,7 +1291,7 @@ pub mod wmf {
         ))
     }
 
-    pub fn query_msmf() -> Result<Vec<CameraInfo>, NokhwaError> {
+    pub fn query() -> Result<Vec<CameraInfo>, NokhwaError> {
         Err(NokhwaError::NotImplementedError(
             "Not on windows".to_string(),
         ))

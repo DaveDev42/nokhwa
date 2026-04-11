@@ -20,6 +20,7 @@
 - Removed unnecessary `Vec::default()` allocations in CallbackCamera
 
 ## Refactoring
+- **Extracted common backend logic into nokhwa-core**: added `FrameFormat::from_fourcc()`/`to_fourcc()` for canonical FourCC string mapping, `KnownCameraControl::as_index()`/`from_index()`/`from_platform_id()`/`to_platform_id()` for shared control-ID mapping via lookup tables. V4L2 backend updated to use shared helpers. Normalized query function names: `query_media_foundation_descriptors()` → `query()` in MSMF, `query_avfoundation()` → `query()` in AVFoundation.
 - Renamed `camera_controls_string()` → `camera_controls_by_name()` and `camera_controls_known_camera_controls()` → `camera_controls_by_id()` on `Camera` and `CallbackCamera` (old names kept as `#[deprecated]` aliases)
 - Fixed 'fufill' → 'fulfill' typo in `set_camera_request()` error message
 - **Restructured error types**: replaced `String`-based variants (`GeneralError`, `OpenStreamError`, `ReadFrameError`, `StreamShutdownError`) with structured fields (`backend: Option<ApiBackend>`, `format: Option<FrameFormat>`). Binding crates now populate context. Added helper constructors for backwards compatibility.

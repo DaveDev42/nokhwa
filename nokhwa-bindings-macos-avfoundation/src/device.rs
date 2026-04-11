@@ -23,7 +23,7 @@ use objc2_core_media::CMTime;
 use objc2_foundation::NSArray;
 use std::{cmp::Ordering, collections::BTreeMap, ffi::c_float};
 
-pub fn query_avfoundation() -> Result<Vec<CameraInfo>, NokhwaError> {
+pub fn query() -> Result<Vec<CameraInfo>, NokhwaError> {
     let session = discovery_session_with_types(&[
         AVCaptureDeviceTypeLocal::UltraWide,
         AVCaptureDeviceTypeLocal::WideAngle,
@@ -608,7 +608,7 @@ impl AVCaptureDeviceWrapper {
     pub fn new(index: &CameraIndex) -> Result<Self, NokhwaError> {
         match &index {
             CameraIndex::Index(idx) => {
-                let devices = query_avfoundation()?;
+                let devices = query()?;
 
                 match devices.get(*idx as usize) {
                     Some(device) => Ok(Self::from_id(&device.misc(), Some(index.clone()))?),
