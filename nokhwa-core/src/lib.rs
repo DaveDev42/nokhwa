@@ -22,12 +22,7 @@
 pub mod buffer;
 pub mod error;
 pub mod format_types;
-#[cfg(feature = "decoding")]
-#[cfg_attr(feature = "docs-features", doc(cfg(feature = "decoding")))]
 pub mod frame;
-#[cfg(feature = "decoding")]
-#[cfg_attr(feature = "docs-features", doc(cfg(feature = "decoding")))]
-pub mod pixel_format;
 pub(crate) mod simd;
 pub mod traits;
 pub mod types;

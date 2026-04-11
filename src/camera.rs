@@ -15,10 +15,7 @@
  */
 
 use nokhwa_core::format_types::{CaptureFormat, Mjpeg};
-#[cfg(feature = "decoding")]
 use nokhwa_core::frame::Frame;
-#[cfg(feature = "decoding")]
-use nokhwa_core::pixel_format::FormatDecoder;
 #[cfg(feature = "output-wgpu")]
 use nokhwa_core::traits::RawTextureData;
 use nokhwa_core::types::RequestedFormatType;
@@ -211,8 +208,6 @@ impl<F: CaptureFormat> Camera<F> {
     ///
     /// # Errors
     /// Returns an error if the stream is not open or frame capture fails.
-    #[cfg(feature = "decoding")]
-    #[cfg_attr(feature = "docs-features", doc(cfg(feature = "decoding")))]
     pub fn frame_typed(&mut self) -> Result<Frame<F>, NokhwaError> {
         let buffer = self.device.frame()?;
         Ok(Frame::new(buffer))
@@ -539,31 +534,16 @@ impl<F: CaptureFormat> Camera<F> {
         self.device.frame_raw()
     }
 
-    /// Directly writes the current frame into said `buffer`.
-    /// # Errors
-    /// If the backend fails to get the frame or decoding fails, this will error.
-    #[cfg(feature = "decoding")]
-    #[cfg_attr(feature = "docs-features", doc(cfg(feature = "decoding")))]
-    pub fn write_frame_to_buffer<D: FormatDecoder>(
-        &mut self,
-        buffer: &mut [u8],
-    ) -> Result<(), NokhwaError> {
-        self.device.frame()?.decode_image_to_buffer::<D>(buffer)
-    }
-
-    #[cfg(all(feature = "output-wgpu", feature = "decoding"))]
-    #[cfg_attr(
-        feature = "docs-features",
-        doc(cfg(all(feature = "output-wgpu", feature = "decoding")))
-    )]
-    /// Directly copies a frame to a Wgpu texture. This will automatically convert the frame into a RGBA frame.
+    #[cfg(feature = "output-wgpu")]
+    #[cfg_attr(feature = "docs-features", doc(cfg(feature = "output-wgpu")))]
+    /// Directly copies a frame to a Wgpu texture as RGBA.
     /// # Errors
     /// If the frame cannot be captured or the resolution is 0 on any axis, this will error.
-    pub fn frame_texture<'a, D: FormatDecoder>(
+    pub fn frame_texture(
         &mut self,
         device: &WgpuDevice,
         queue: &WgpuQueue,
-        label: Option<&'a str>,
+        label: Option<&str>,
     ) -> Result<WgpuTexture, NokhwaError> {
         self.device.frame_texture(device, queue, label)
     }

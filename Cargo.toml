@@ -31,11 +31,11 @@ exclude = [
 crate-type = [ "cdylib", "rlib" ]
 
 [features]
-default            = [ "decoding" ]
+default            = [ "mjpeg" ]
 # Enable serde Serialize/Deserialize on core types
 serialize          = [ "serde", "nokhwa-core/serialize" ]
 # MJPEG decoding support (enabled by default)
-decoding           = [ "nokhwa-core/mjpeg", "image" ]
+mjpeg              = [ "nokhwa-core/mjpeg" ]
 
 # ── Input backends (enable at least one) ──────────────────────────────
 # macOS AVFoundation backend
@@ -105,7 +105,6 @@ optional = true
 [dependencies.image]
 version          = "0.25"
 default-features = false
-optional         = true
 
 [dependencies.wgpu]
 version          = "27"

@@ -352,7 +352,7 @@ impl_into_luma!(Yuyv, Nv12, Mjpeg, Gray, RawRgb, RawBgr);
 // Internal conversion dispatchers
 // ---------------------------------------------------------------------------
 
-fn convert_to_rgb(
+pub(crate) fn convert_to_rgb(
     fcc: FrameFormat,
     resolution: Resolution,
     data: &[u8],
@@ -376,7 +376,7 @@ fn convert_to_rgb(
     }
 }
 
-fn convert_to_rgb_buffer(
+pub(crate) fn convert_to_rgb_buffer(
     fcc: FrameFormat,
     resolution: Resolution,
     data: &[u8],
@@ -410,7 +410,7 @@ fn convert_to_rgb_buffer(
     }
 }
 
-fn convert_to_rgba(
+pub(crate) fn convert_to_rgba(
     fcc: FrameFormat,
     resolution: Resolution,
     data: &[u8],
@@ -431,7 +431,7 @@ fn convert_to_rgba(
     }
 }
 
-fn convert_to_rgba_buffer(
+pub(crate) fn convert_to_rgba_buffer(
     fcc: FrameFormat,
     resolution: Resolution,
     data: &[u8],
@@ -483,7 +483,7 @@ fn convert_to_rgba_buffer(
 
 #[allow(clippy::cast_possible_truncation)]
 #[allow(clippy::cast_sign_loss)]
-fn convert_to_luma(
+pub(crate) fn convert_to_luma(
     fcc: FrameFormat,
     resolution: Resolution,
     data: &[u8],
@@ -519,7 +519,7 @@ fn convert_to_luma(
     }
 }
 
-fn convert_to_luma_buffer(
+pub(crate) fn convert_to_luma_buffer(
     fcc: FrameFormat,
     resolution: Resolution,
     data: &[u8],

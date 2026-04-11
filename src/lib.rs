@@ -27,30 +27,27 @@
 //! The recommended default feature to enable is `input-native` (also available as `input-auto`).
 //! The library will not work without at least one `input-*` feature enabled.
 //!
-//! Enable the `logging` feature to get diagnostic messages (e.g. backend auto-detection failures)
-//! via the [`log`](https://docs.rs/log) crate. A `log` backend such as `env_logger` or
-//! `tracing-log` is required to see the output.
-//!
 //! ## Quick start
 //!
 //! ```no_run
 //! use nokhwa::Camera;
-//! use nokhwa::pixel_format::RgbFormat;
-//! use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
+//! use nokhwa::utils::{CameraIndex, RequestedFormatType};
+//! use nokhwa_core::format_types::Mjpeg;
+//! use nokhwa_core::frame::IntoRgb;
 //!
-//! // Open the first camera at its highest resolution.
-//! let mut camera = Camera::new(
+//! // Open the first camera capturing MJPEG at highest resolution.
+//! let mut camera = Camera::open::<Mjpeg>(
 //!     CameraIndex::Index(0),
-//!     RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution),
+//!     RequestedFormatType::AbsoluteHighestResolution,
 //! )?;
 //!
-//! // Start the stream and grab a frame.
+//! // Start the stream and grab a typed frame.
 //! camera.open_stream()?;
-//! let frame = camera.frame()?;
+//! let frame = camera.frame_typed()?;
 //! println!("captured {}x{}", frame.resolution().width(), frame.resolution().height());
 //!
 //! // Decode to an `image` RgbImage.
-//! let image = frame.decode_image::<RgbFormat>()?;
+//! let image = frame.into_rgb().materialize()?;
 //! # Ok::<(), nokhwa::NokhwaError>(())
 //! ```
 //!
@@ -72,7 +69,7 @@
 //!
 //! | Feature            | Description                                            |
 //! |--------------------|--------------------------------------------------------|
-//! | `decoding`         | MJPEG decoding via `mozjpeg` (enabled by default)      |
+//! | `mjpeg`            | MJPEG decoding via `mozjpeg` (enabled by default)      |
 //! | `output-threaded`  | [`CallbackCamera`] — background capture with callbacks |
 //! | `output-wgpu`      | Direct frame-to-wgpu texture copy                      |
 //!
@@ -80,10 +77,10 @@
 //!
 //! - [`Camera`] — main capture struct (start here)
 //! - [`CallbackCamera`](crate::threaded::CallbackCamera) — callback-based background capture (`output-threaded`)
-//! - [`Buffer`] — raw frame data with metadata; decode via [`Buffer::decode_image`]
+//! - [`Frame`](nokhwa_core::frame::Frame) — type-safe frame handle with compile-time format tag
+//! - [`Buffer`] — raw frame data with metadata
 //! - [`CaptureBackendTrait`](crate::camera_traits::CaptureBackendTrait) — trait implemented by every backend
-//! - [`RequestedFormat`](crate::utils::RequestedFormat) — describes desired camera format
-//! - [`CameraFormat`](crate::utils::CameraFormat) — concrete resolution + frame rate + pixel format
+//! - [`CaptureFormat`](nokhwa_core::format_types::CaptureFormat) — marker trait for format types
 //!
 //! ## Backend access
 //!
@@ -107,10 +104,6 @@ compile_error!(
 pub mod backends;
 mod camera;
 mod init;
-
-#[cfg(feature = "decoding")]
-#[cfg_attr(feature = "docs-features", doc(cfg(feature = "decoding")))]
-pub use nokhwa_core::pixel_format::FormatDecoder;
 mod query;
 /// A camera that runs in a different thread and can call your code based on callbacks.
 #[cfg(feature = "output-threaded")]
@@ -122,8 +115,6 @@ pub use init::*;
 pub use nokhwa_core::buffer::{Buffer, TimestampKind};
 pub use nokhwa_core::error::NokhwaError;
 pub use nokhwa_core::format_types;
-#[cfg(feature = "decoding")]
-#[cfg_attr(feature = "docs-features", doc(cfg(feature = "decoding")))]
 pub use nokhwa_core::frame;
 #[cfg(feature = "output-wgpu")]
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "output-wgpu")))]
@@ -143,12 +134,6 @@ pub mod error {
 
 pub mod camera_traits {
     pub use nokhwa_core::traits::*;
-}
-
-#[cfg(feature = "decoding")]
-#[cfg_attr(feature = "docs-features", doc(cfg(feature = "decoding")))]
-pub mod pixel_format {
-    pub use nokhwa_core::pixel_format::*;
 }
 
 pub mod buffer {

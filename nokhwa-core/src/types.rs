@@ -1,6 +1,5 @@
 use crate::error::NokhwaError;
-#[cfg(feature = "decoding")]
-use crate::pixel_format::FormatDecoder;
+use crate::format_types::CaptureFormat;
 #[cfg(feature = "serialize")]
 use serde::{Deserialize, Serialize};
 use std::{
@@ -52,54 +51,54 @@ impl Display for RequestedFormatType {
 /// **Highest resolution (most common):**
 ///
 /// ```ignore
-/// use nokhwa_core::pixel_format::RgbFormat;
+/// use nokhwa_core::format_types::Mjpeg;
 /// use nokhwa_core::types::{RequestedFormat, RequestedFormatType};
 ///
-/// let req = RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution);
+/// let req = RequestedFormat::new::<Mjpeg>(RequestedFormatType::AbsoluteHighestResolution);
 /// ```
 ///
 /// **Highest frame rate:**
 ///
 /// ```ignore
-/// use nokhwa_core::pixel_format::RgbFormat;
+/// use nokhwa_core::format_types::Mjpeg;
 /// use nokhwa_core::types::{RequestedFormat, RequestedFormatType};
 ///
-/// let req = RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
+/// let req = RequestedFormat::new::<Mjpeg>(RequestedFormatType::AbsoluteHighestFrameRate);
 /// ```
 ///
 /// **Exact format:**
 ///
 /// ```ignore
-/// use nokhwa_core::pixel_format::RgbFormat;
+/// use nokhwa_core::format_types::Mjpeg;
 /// use nokhwa_core::types::{
 ///     CameraFormat, FrameFormat, RequestedFormat, RequestedFormatType, Resolution,
 /// };
 ///
 /// let fmt = CameraFormat::new(Resolution::new(1920, 1080), FrameFormat::MJPEG, 30);
-/// let req = RequestedFormat::new::<RgbFormat>(RequestedFormatType::Exact(fmt));
+/// let req = RequestedFormat::new::<Mjpeg>(RequestedFormatType::Exact(fmt));
 /// ```
 ///
 /// **Closest match:**
 ///
 /// ```ignore
-/// use nokhwa_core::pixel_format::RgbFormat;
+/// use nokhwa_core::format_types::Mjpeg;
 /// use nokhwa_core::types::{
 ///     CameraFormat, FrameFormat, RequestedFormat, RequestedFormatType, Resolution,
 /// };
 ///
 /// // Ask for 1080p@60; the library will find the closest the hardware supports.
 /// let target = CameraFormat::new(Resolution::new(1920, 1080), FrameFormat::MJPEG, 60);
-/// let req = RequestedFormat::new::<RgbFormat>(RequestedFormatType::Closest(target));
+/// let req = RequestedFormat::new::<Mjpeg>(RequestedFormatType::Closest(target));
 /// ```
 ///
 /// **Best frame rate at a specific resolution (e.g. 1080p):**
 ///
 /// ```ignore
-/// use nokhwa_core::pixel_format::RgbFormat;
+/// use nokhwa_core::format_types::Mjpeg;
 /// use nokhwa_core::types::{RequestedFormat, RequestedFormatType, Resolution};
 ///
 /// // Find the highest frame rate available at 1920x1080
-/// let req = RequestedFormat::new::<RgbFormat>(RequestedFormatType::HighestResolution(
+/// let req = RequestedFormat::new::<Mjpeg>(RequestedFormatType::HighestResolution(
 ///     Resolution::new(1920, 1080),
 /// ));
 /// ```
@@ -107,14 +106,14 @@ impl Display for RequestedFormatType {
 /// **Best resolution at a specific frame rate (e.g. 30 FPS):**
 ///
 /// ```ignore
-/// use nokhwa_core::pixel_format::RgbFormat;
+/// use nokhwa_core::format_types::Mjpeg;
 /// use nokhwa_core::types::{RequestedFormat, RequestedFormatType};
 ///
 /// // Find the highest resolution available at 30 FPS
-/// let req = RequestedFormat::new::<RgbFormat>(RequestedFormatType::HighestFrameRate(30));
+/// let req = RequestedFormat::new::<Mjpeg>(RequestedFormatType::HighestFrameRate(30));
 /// ```
 ///
-/// **Custom frame format list (without a `FormatDecoder`):**
+/// **Custom frame format list:**
 ///
 /// ```ignore
 /// use nokhwa_core::types::{FrameFormat, RequestedFormat, RequestedFormatType};
@@ -132,15 +131,17 @@ pub struct RequestedFormat<'a> {
 }
 
 impl RequestedFormat<'_> {
-    /// Creates a new [`RequestedFormat`] by using the [`RequestedFormatType`] and getting the [`FrameFormat`]
-    /// constraints from a generic type.
-    #[cfg(feature = "decoding")]
-    #[cfg_attr(feature = "docs-features", doc(cfg(feature = "decoding")))]
+    /// Creates a new [`RequestedFormat`] from a [`CaptureFormat`] type.
+    ///
+    /// The format constraint is derived from `F::FRAME_FORMAT`.
     #[must_use]
-    pub fn new<Decoder: FormatDecoder>(requested: RequestedFormatType) -> RequestedFormat<'static> {
+    pub fn new<F: CaptureFormat>(requested: RequestedFormatType) -> RequestedFormat<'static> {
+        // Leak a single-element slice so we get a 'static lifetime.
+        // This is a one-time allocation per format type.
+        let formats: &'static [FrameFormat] = &[F::FRAME_FORMAT];
         RequestedFormat {
             requested_format: requested,
-            wanted_decoder: Decoder::FORMATS,
+            wanted_decoder: formats,
         }
     }
 

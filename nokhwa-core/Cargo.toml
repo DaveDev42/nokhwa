@@ -11,10 +11,9 @@ keywords    = [ "camera", "webcam", "capture", "cross-platform" ]
 [features]
 default            = [  ]
 serialize          = [ "serde" ]
-decoding           = [ "image" ]
 wgpu-types         = [ "wgpu" ]
-mjpeg              = [ "mozjpeg", "decoding" ]
-opencv-mat         = [ "opencv", "opencv/clang-runtime", "bytemuck", "decoding" ]
+mjpeg              = [ "mozjpeg" ]
+opencv-mat         = [ "opencv", "opencv/clang-runtime", "bytemuck" ]
 docs-features      = [ "serialize", "wgpu-types", "mjpeg" ]
 test-fail-warnings = [  ]
 
@@ -26,7 +25,6 @@ bytes     = "1.3"
 [dependencies.image]
 version          = "0.25"
 default-features = false
-optional         = true
 
 [dependencies.serde]
 version  = "1.0"
