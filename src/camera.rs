@@ -273,7 +273,7 @@ impl Camera {
             .collect())
     }
 
-    /// Gets the current supported list of [`CameraControl`]s keyed by its name as a `String`.
+    /// Gets the current supported list of [`CameraControl`]s.
     /// # Errors
     /// If the list cannot be collected, this will error. This can be treated as a "nothing supported".
     pub fn camera_controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
