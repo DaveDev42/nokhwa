@@ -146,32 +146,14 @@ pub fn raw_texture_layout(
 /// Many backends are **blocking** — if the camera device is occupied the call will
 /// block until it becomes available.
 ///
-/// # Typical usage through `Camera`
+/// # Typical lifecycle
 ///
-/// ```no_run
-/// # fn main() -> Result<(), nokhwa_core::error::NokhwaError> {
-/// // This example shows the typical pattern. In practice you use `nokhwa::Camera`
-/// // which delegates to the trait methods shown here.
-/// use nokhwa_core::traits::CaptureBackendTrait;
-///
-/// // Assume `backend` is a type implementing CaptureBackendTrait:
-/// // 1. Open the stream
-/// // backend.open_stream()?;
-/// //
-/// // 2. Capture a decoded frame
-/// // let frame = backend.frame()?;
-/// //
-/// // 3. Or capture a raw (unprocessed) frame
-/// // let raw = backend.frame_raw()?;
-/// //
-/// // 4. Query camera controls
-/// // let controls = backend.camera_controls()?;
-/// //
-/// // 5. Stop when done
-/// // backend.stop_stream()?;
-/// # Ok(())
-/// # }
-/// ```
+/// 1. **Open the stream** — call [`open_stream()`](CaptureBackendTrait::open_stream)
+/// 2. **Capture frames** — call [`frame()`](CaptureBackendTrait::frame) for decoded
+///    frames, or [`frame_raw()`](CaptureBackendTrait::frame_raw) for unprocessed bytes
+/// 3. **Query/set controls** — use [`camera_controls()`](CaptureBackendTrait::camera_controls)
+///    and [`set_camera_control()`](CaptureBackendTrait::set_camera_control)
+/// 4. **Stop** — call [`stop_stream()`](CaptureBackendTrait::stop_stream) (also runs on drop)
 ///
 /// # Notes
 ///

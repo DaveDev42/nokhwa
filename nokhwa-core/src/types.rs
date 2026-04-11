@@ -16,8 +16,8 @@ use std::{
 /// |---------|-----------|
 /// | `AbsoluteHighestResolution` | Pick the highest [`Resolution`], then the highest frame rate at that resolution. |
 /// | `AbsoluteHighestFrameRate` | Pick the highest frame rate, then the highest [`Resolution`] at that rate. |
-/// | `HighestResolution(Resolution)` | Pick the highest frame rate for the given [`Resolution`]. |
-/// | `HighestFrameRate(u32)` | Pick the highest [`Resolution`] for the given frame rate. |
+/// | `HighestResolution(Resolution)` | Given a specific [`Resolution`], pick the highest frame rate available at that resolution. |
+/// | `HighestFrameRate(u32)` | Given a specific frame rate, pick the highest [`Resolution`] available at that rate. |
 /// | `Exact(CameraFormat)` | Pick the exact [`CameraFormat`] provided, or fail. |
 /// | `Closest(CameraFormat)` | Pick the closest match by [`FrameFormat`], then [`Resolution`], then FPS. Fails if the [`FrameFormat`] is unavailable. |
 /// | `None` | Pick the first available format (default). |
@@ -90,16 +90,26 @@ impl Display for RequestedFormatType {
 /// let req = RequestedFormat::new::<RgbFormat>(RequestedFormatType::Closest(target));
 /// ```
 ///
-/// **Highest resolution at a specific frame rate:**
+/// **Best frame rate at a specific resolution (e.g. 1080p):**
+///
+/// ```ignore
+/// use nokhwa_core::pixel_format::RgbFormat;
+/// use nokhwa_core::types::{RequestedFormat, RequestedFormatType, Resolution};
+///
+/// // Find the highest frame rate available at 1920x1080
+/// let req = RequestedFormat::new::<RgbFormat>(RequestedFormatType::HighestResolution(
+///     Resolution::new(1920, 1080),
+/// ));
+/// ```
+///
+/// **Best resolution at a specific frame rate (e.g. 30 FPS):**
 ///
 /// ```ignore
 /// use nokhwa_core::pixel_format::RgbFormat;
 /// use nokhwa_core::types::{RequestedFormat, RequestedFormatType};
 ///
-/// // Best resolution that can do 30 FPS
-/// let req = RequestedFormat::new::<RgbFormat>(RequestedFormatType::HighestResolution(
-///     nokhwa_core::types::Resolution::new(0, 0), // placeholder — filtered by FPS below
-/// ));
+/// // Find the highest resolution available at 30 FPS
+/// let req = RequestedFormat::new::<RgbFormat>(RequestedFormatType::HighestFrameRate(30));
 /// ```
 ///
 /// **Custom frame format list (without a `FormatDecoder`):**
