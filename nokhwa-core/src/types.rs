@@ -342,6 +342,38 @@ impl FromStr for FrameFormat {
     }
 }
 
+impl FrameFormat {
+    /// Converts a `FourCC` string (e.g. `"YUYV"`, `"MJPG"`) into a [`FrameFormat`].
+    ///
+    /// This centralises the canonical FourCC-to-frame-format mapping so that
+    /// platform backends do not each have to duplicate the same table.
+    #[must_use]
+    pub fn from_fourcc(fourcc: &str) -> Option<Self> {
+        match fourcc {
+            "YUYV" => Some(Self::YUYV),
+            "MJPG" => Some(Self::MJPEG),
+            "GRAY" => Some(Self::GRAY),
+            "RGB3" => Some(Self::RAWRGB),
+            "BGR3" => Some(Self::RAWBGR),
+            "NV12" => Some(Self::NV12),
+            _ => None,
+        }
+    }
+
+    /// Returns the canonical `FourCC` string for this frame format.
+    #[must_use]
+    pub const fn to_fourcc(&self) -> &'static str {
+        match self {
+            Self::MJPEG => "MJPG",
+            Self::YUYV => "YUYV",
+            Self::GRAY => "GRAY",
+            Self::RAWRGB => "RGB3",
+            Self::RAWBGR => "BGR3",
+            Self::NV12 => "NV12",
+        }
+    }
+}
+
 /// Returns all the frame formats
 #[must_use]
 pub const fn frame_formats() -> &'static [FrameFormat] {
@@ -696,6 +728,96 @@ pub const fn all_known_camera_controls() -> [KnownCameraControl; 15] {
         KnownCameraControl::Iris,
         KnownCameraControl::Focus,
     ]
+}
+
+impl KnownCameraControl {
+    /// Returns a canonical zero-based index for each standard control.
+    ///
+    /// Platform backends can use this together with [`from_index`](Self::from_index)
+    /// and a platform-specific ID table to avoid duplicating the full match arms.
+    /// Returns `None` for the `Other` variant.
+    #[must_use]
+    pub const fn as_index(&self) -> Option<u8> {
+        match self {
+            Self::Brightness => Some(0),
+            Self::Contrast => Some(1),
+            Self::Hue => Some(2),
+            Self::Saturation => Some(3),
+            Self::Sharpness => Some(4),
+            Self::Gamma => Some(5),
+            Self::WhiteBalance => Some(6),
+            Self::BacklightComp => Some(7),
+            Self::Gain => Some(8),
+            Self::Pan => Some(9),
+            Self::Tilt => Some(10),
+            Self::Zoom => Some(11),
+            Self::Exposure => Some(12),
+            Self::Iris => Some(13),
+            Self::Focus => Some(14),
+            Self::Other(_) => None,
+        }
+    }
+
+    /// Converts a canonical zero-based index back into a [`KnownCameraControl`].
+    ///
+    /// The index values correspond to those returned by [`as_index`](Self::as_index).
+    #[must_use]
+    pub const fn from_index(index: u8) -> Option<Self> {
+        match index {
+            0 => Some(Self::Brightness),
+            1 => Some(Self::Contrast),
+            2 => Some(Self::Hue),
+            3 => Some(Self::Saturation),
+            4 => Some(Self::Sharpness),
+            5 => Some(Self::Gamma),
+            6 => Some(Self::WhiteBalance),
+            7 => Some(Self::BacklightComp),
+            8 => Some(Self::Gain),
+            9 => Some(Self::Pan),
+            10 => Some(Self::Tilt),
+            11 => Some(Self::Zoom),
+            12 => Some(Self::Exposure),
+            13 => Some(Self::Iris),
+            14 => Some(Self::Focus),
+            _ => None,
+        }
+    }
+
+    /// Number of standard (non-`Other`) controls.
+    pub const STANDARD_COUNT: usize = 15;
+
+    /// Look up a [`KnownCameraControl`] from a platform-specific ID using a
+    /// table that maps canonical indices to platform IDs.
+    ///
+    /// `platform_ids` must have exactly [`STANDARD_COUNT`](Self::STANDARD_COUNT)
+    /// entries, one per canonical index.
+    #[must_use]
+    pub fn from_platform_id(platform_id: u32, platform_ids: &[u32; Self::STANDARD_COUNT]) -> Self {
+        for (idx, &pid) in platform_ids.iter().enumerate() {
+            if pid == platform_id {
+                // SAFETY: idx is always 0..14 because STANDARD_COUNT == 15.
+                // idx is always 0..14 because STANDARD_COUNT == 15, so this cast is safe.
+                #[allow(clippy::cast_possible_truncation)]
+                if let Some(ctrl) = Self::from_index(idx as u8) {
+                    return ctrl;
+                }
+            }
+        }
+        KnownCameraControl::Other(u128::from(platform_id))
+    }
+
+    /// Convert a [`KnownCameraControl`] to a platform-specific ID using a
+    /// table that maps canonical indices to platform IDs.
+    ///
+    /// Returns `None` for `Other` variants whose ID is not in the table.
+    #[must_use]
+    pub fn to_platform_id(&self, platform_ids: &[u32; Self::STANDARD_COUNT]) -> Option<u32> {
+        match self {
+            #[allow(clippy::cast_possible_truncation)]
+            Self::Other(id) => Some(*id as u32),
+            ctrl => ctrl.as_index().map(|i| platform_ids[i as usize]),
+        }
+    }
 }
 
 impl Display for KnownCameraControl {

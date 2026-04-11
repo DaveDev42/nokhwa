@@ -47,52 +47,36 @@ mod internal {
         Device, Format, FourCC,
     };
 
+    /// V4L2 control IDs in canonical [`KnownCameraControl`] index order.
+    const V4L2_CONTROL_IDS: [u32; KnownCameraControl::STANDARD_COUNT] = [
+        V4L2_CID_BRIGHTNESS,
+        V4L2_CID_CONTRAST,
+        V4L2_CID_HUE,
+        V4L2_CID_SATURATION,
+        V4L2_CID_SHARPNESS,
+        V4L2_CID_GAMMA,
+        V4L2_CID_WHITE_BALANCE_TEMPERATURE,
+        V4L2_CID_BACKLIGHT_COMPENSATION,
+        V4L2_CID_GAIN,
+        V4L2_CID_PAN_RELATIVE,
+        V4L2_CID_TILT_RELATIVE,
+        V4L2_CID_ZOOM_RELATIVE,
+        V4L2_CID_EXPOSURE,
+        V4L2_CID_IRIS_RELATIVE,
+        V4L2_CID_FOCUS_RELATIVE,
+    ];
+
     /// Attempts to convert a [`KnownCameraControl`] into a V4L2 Control ID.
     /// If the associated control is not found, this will return `None` (`ColorEnable`, `Roll`)
-    #[allow(clippy::cast_possible_truncation)]
     pub fn known_camera_control_to_id(ctrl: KnownCameraControl) -> u32 {
-        match ctrl {
-            KnownCameraControl::Brightness => V4L2_CID_BRIGHTNESS,
-            KnownCameraControl::Contrast => V4L2_CID_CONTRAST,
-            KnownCameraControl::Hue => V4L2_CID_HUE,
-            KnownCameraControl::Saturation => V4L2_CID_SATURATION,
-            KnownCameraControl::Sharpness => V4L2_CID_SHARPNESS,
-            KnownCameraControl::Gamma => V4L2_CID_GAMMA,
-            KnownCameraControl::WhiteBalance => V4L2_CID_WHITE_BALANCE_TEMPERATURE,
-            KnownCameraControl::BacklightComp => V4L2_CID_BACKLIGHT_COMPENSATION,
-            KnownCameraControl::Gain => V4L2_CID_GAIN,
-            KnownCameraControl::Pan => V4L2_CID_PAN_RELATIVE,
-            KnownCameraControl::Tilt => V4L2_CID_TILT_RELATIVE,
-            KnownCameraControl::Zoom => V4L2_CID_ZOOM_RELATIVE,
-            KnownCameraControl::Exposure => V4L2_CID_EXPOSURE,
-            KnownCameraControl::Iris => V4L2_CID_IRIS_RELATIVE,
-            KnownCameraControl::Focus => V4L2_CID_FOCUS_RELATIVE,
-            KnownCameraControl::Other(id) => id as u32,
-        }
+        ctrl.to_platform_id(&V4L2_CONTROL_IDS)
+            .expect("to_platform_id returns Some for all variants")
     }
 
     /// Attempts to convert a [`u32`] V4L2 Control ID into a [`KnownCameraControl`]
     /// If the associated control is not found, this will return `None` (`ColorEnable`, `Roll`)
-    #[allow(clippy::cast_lossless)]
     pub fn id_to_known_camera_control(id: u32) -> KnownCameraControl {
-        match id {
-            V4L2_CID_BRIGHTNESS => KnownCameraControl::Brightness,
-            V4L2_CID_CONTRAST => KnownCameraControl::Contrast,
-            V4L2_CID_HUE => KnownCameraControl::Hue,
-            V4L2_CID_SATURATION => KnownCameraControl::Saturation,
-            V4L2_CID_SHARPNESS => KnownCameraControl::Sharpness,
-            V4L2_CID_GAMMA => KnownCameraControl::Gamma,
-            V4L2_CID_WHITE_BALANCE_TEMPERATURE => KnownCameraControl::WhiteBalance,
-            V4L2_CID_BACKLIGHT_COMPENSATION => KnownCameraControl::BacklightComp,
-            V4L2_CID_GAIN => KnownCameraControl::Gain,
-            V4L2_CID_PAN_RELATIVE => KnownCameraControl::Pan,
-            V4L2_CID_TILT_RELATIVE => KnownCameraControl::Tilt,
-            V4L2_CID_ZOOM_RELATIVE => KnownCameraControl::Zoom,
-            V4L2_CID_EXPOSURE => KnownCameraControl::Exposure,
-            V4L2_CID_IRIS_RELATIVE => KnownCameraControl::Iris,
-            V4L2_CID_FOCUS_RELATIVE => KnownCameraControl::Focus,
-            id => KnownCameraControl::Other(id as u128),
-        }
+        KnownCameraControl::from_platform_id(id, &V4L2_CONTROL_IDS)
     }
 
     /// query v4l2 cameras
@@ -931,26 +915,17 @@ mod internal {
     }
 
     fn fourcc_to_frameformat(fourcc: FourCC) -> Option<FrameFormat> {
-        match fourcc.str().ok()? {
-            "YUYV" => Some(FrameFormat::YUYV),
-            "MJPG" => Some(FrameFormat::MJPEG),
-            "GRAY" => Some(FrameFormat::GRAY),
-            "RGB3" => Some(FrameFormat::RAWRGB),
-            "BGR3" => Some(FrameFormat::RAWBGR),
-            "NV12" => Some(FrameFormat::NV12),
-            _ => None,
-        }
+        FrameFormat::from_fourcc(fourcc.str().ok()?)
     }
 
-    fn frameformat_to_fourcc(fourcc: FrameFormat) -> FourCC {
-        match fourcc {
-            FrameFormat::MJPEG => FourCC::new(b"MJPG"),
-            FrameFormat::YUYV => FourCC::new(b"YUYV"),
-            FrameFormat::GRAY => FourCC::new(b"GRAY"),
-            FrameFormat::RAWRGB => FourCC::new(b"RGB3"),
-            FrameFormat::RAWBGR => FourCC::new(b"BGR3"),
-            FrameFormat::NV12 => FourCC::new(b"NV12"),
-        }
+    fn frameformat_to_fourcc(format: FrameFormat) -> FourCC {
+        FourCC::new(
+            format
+                .to_fourcc()
+                .as_bytes()
+                .try_into()
+                .expect("fourcc is always 4 bytes"),
+        )
     }
 
     /// Convert a V4L2 CLOCK_MONOTONIC timestamp to a wallclock Duration since UNIX_EPOCH.
