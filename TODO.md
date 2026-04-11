@@ -4,7 +4,7 @@
 - [x] Fix release-please config to prevent premature 1.0.0 bumps on breaking changes (`bump-major-pre-major: false`)
 
 ## Medium Priority
-- [ ] Add MJPEG unit tests — needs a valid JPEG byte fixture to test `Frame<Mjpeg>.into_rgb().materialize()` correctness. Also add malformed MJPEG robustness tests (truncated, garbage data).
+- [x] Add MJPEG unit tests — Frame<Mjpeg> into_rgb/into_rgba/into_luma + write_to + malformed/empty error cases added
 - [ ] Port OpenCV Mat methods to new Frame<F> API (removed Buffer::decode_opencv_mat in 0.12.0)
 
 ## Low Priority
