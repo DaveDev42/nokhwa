@@ -17,13 +17,12 @@
  * limitations under the License.
  */
 #![cfg_attr(feature = "docs-features", feature(doc_cfg))]
-
-//! # nokhwa
-//! A Simple-to-use, cross-platform Rust Webcam Capture Library
+//! # nokhwa (녹화)
 //!
-//! The raw backends can be found in [`backends`](crate::backends)
+//! A cross-platform Rust library for webcam capture.
 //!
-//! The [`Camera`] struct is what you will likely use.
+//! Nokhwa provides a unified [`Camera`] API that abstracts over platform-specific
+//! backends so you can write camera code once and run it on Linux, macOS, and Windows.
 //!
 //! The recommended default feature to enable is `input-native` (also available as `input-auto`).
 //! The library will not work without at least one `input-*` feature enabled.
@@ -32,7 +31,64 @@
 //! via the [`log`](https://docs.rs/log) crate. A `log` backend such as `env_logger` or
 //! `tracing-log` is required to see the output.
 //!
-//! Please read the README.md for more.
+//! ## Quick start
+//!
+//! ```no_run
+//! use nokhwa::Camera;
+//! use nokhwa::pixel_format::RgbFormat;
+//! use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
+//!
+//! // Open the first camera at its highest resolution.
+//! let mut camera = Camera::new(
+//!     CameraIndex::Index(0),
+//!     RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution),
+//! )?;
+//!
+//! // Start the stream and grab a frame.
+//! camera.open_stream()?;
+//! let frame = camera.frame()?;
+//! println!("captured {}x{}", frame.resolution().width(), frame.resolution().height());
+//!
+//! // Decode to an `image` RgbImage.
+//! let image = frame.decode_image::<RgbFormat>()?;
+//! # Ok::<(), nokhwa::NokhwaError>(())
+//! ```
+//!
+//! ## Feature flags
+//!
+//! You **must** enable at least one `input-*` feature for the library to be functional.
+//!
+//! ### Backend selection
+//!
+//! | Feature              | Description                                          |
+//! |----------------------|------------------------------------------------------|
+//! | `input-native`       | Meta-feature: selects the right backend per OS       |
+//! | `input-v4l`          | `Video4Linux` backend (Linux)                        |
+//! | `input-avfoundation` | `AVFoundation` backend (macOS / iOS)                 |
+//! | `input-msmf`         | Media Foundation backend (Windows)                   |
+//! | `input-opencv`       | `OpenCV` backend (cross-platform)                    |
+//!
+//! ### Output / extras
+//!
+//! | Feature            | Description                                            |
+//! |--------------------|--------------------------------------------------------|
+//! | `decoding`         | MJPEG decoding via `mozjpeg` (enabled by default)      |
+//! | `output-threaded`  | [`CallbackCamera`] — background capture with callbacks |
+//! | `output-wgpu`      | Direct frame-to-wgpu texture copy                      |
+//!
+//! ## Key types
+//!
+//! - [`Camera`] — main capture struct (start here)
+//! - [`CallbackCamera`](crate::threaded::CallbackCamera) — callback-based background capture (`output-threaded`)
+//! - [`Buffer`] — raw frame data with metadata; decode via [`Buffer::decode_image`]
+//! - [`CaptureBackendTrait`](crate::camera_traits::CaptureBackendTrait) — trait implemented by every backend
+//! - [`RequestedFormat`](crate::utils::RequestedFormat) — describes desired camera format
+//! - [`CameraFormat`](crate::utils::CameraFormat) — concrete resolution + frame rate + pixel format
+//!
+//! ## Backend access
+//!
+//! The raw backend structs are available in [`backends`] if you need
+//! platform-specific functionality beyond what [`Camera`] exposes.
 
 // Ensure at least one input backend is enabled (skip during docs-only builds).
 #[cfg(not(feature = "docs-only"))]

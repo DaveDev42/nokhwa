@@ -136,13 +136,32 @@ pub fn raw_texture_layout(
     }
 }
 
-/// This trait is for any backend that allows you to grab and take frames from a camera.
-/// Many of the backends are **blocking**, if the camera is occupied the library will block while it waits for it to become available.
+/// The core trait that every camera backend implements.
 ///
-/// **Note**:
-/// - Backends, if not provided with a camera format, will be spawned with 640x480@15 FPS, MJPEG [`CameraFormat`].
-/// - Behaviour can differ from backend to backend. While the Camera struct abstracts most of this away, if you plan to use the raw backend structs please read the `Quirks` section of each backend.
-/// - If you call [`stop_stream()`](CaptureBackendTrait::stop_stream()), you will usually need to call [`open_stream()`](CaptureBackendTrait::open_stream()) to get more frames from the camera.
+/// `CaptureBackendTrait` defines the full lifecycle of a camera: opening, configuring,
+/// streaming frames, and closing. The high-level [`Camera`] struct wraps a
+/// `Box<dyn CaptureBackendTrait>` and delegates to it, so most users interact with this
+/// trait indirectly.
+///
+/// Many backends are **blocking** — if the camera device is occupied the call will
+/// block until it becomes available.
+///
+/// # Typical lifecycle
+///
+/// 1. **Open the stream** — call [`open_stream()`](CaptureBackendTrait::open_stream)
+/// 2. **Capture frames** — call [`frame()`](CaptureBackendTrait::frame) for decoded
+///    frames, or [`frame_raw()`](CaptureBackendTrait::frame_raw) for unprocessed bytes
+/// 3. **Query/set controls** — use [`camera_controls()`](CaptureBackendTrait::camera_controls)
+///    and [`set_camera_control()`](CaptureBackendTrait::set_camera_control)
+/// 4. **Stop** — call [`stop_stream()`](CaptureBackendTrait::stop_stream) (also runs on drop)
+///
+/// # Notes
+///
+/// - Backends default to 640×480 @ 15 FPS, MJPEG if no format is specified.
+/// - Behaviour can differ between backends. If you use the raw backend structs
+///   directly, read the **Quirks** section in each backend's documentation.
+/// - After calling [`stop_stream()`](CaptureBackendTrait::stop_stream), you must call
+///   [`open_stream()`](CaptureBackendTrait::open_stream) again to resume capture.
 pub trait CaptureBackendTrait {
     /// Returns the current backend used.
     fn backend(&self) -> ApiBackend;
@@ -234,9 +253,22 @@ pub trait CaptureBackendTrait {
     /// this will error.
     fn camera_control(&self, control: KnownCameraControl) -> Result<CameraControl, NokhwaError>;
 
-    /// Gets the current supported list of [`KnownCameraControl`]
+    /// Returns all supported [`CameraControl`]s for this camera.
+    ///
+    /// Each [`CameraControl`] describes a property (brightness, contrast, etc.) with its
+    /// current value, valid range, and step size.
+    ///
+    /// ```ignore
+    /// # fn example(camera: &nokhwa::Camera) -> Result<(), nokhwa_core::error::NokhwaError> {
+    /// for control in camera.camera_controls()? {
+    ///     println!("{}: {:?}", control.control(), control.value());
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
-    /// If the list cannot be collected, this will error. This can be treated as a "nothing supported".
+    /// If the list cannot be collected, this will error. This can be treated as "nothing supported".
     fn camera_controls(&self) -> Result<Vec<CameraControl>, NokhwaError>;
 
     /// Sets the control to `control` in the camera.
@@ -251,7 +283,19 @@ pub trait CaptureBackendTrait {
         value: ControlValueSetter,
     ) -> Result<(), NokhwaError>;
 
-    /// Will open the camera stream with set parameters. This will be called internally if you try and call [`frame()`](CaptureBackendTrait::frame()) before you call [`open_stream()`](CaptureBackendTrait::open_stream()).
+    /// Opens the camera stream with the currently set parameters.
+    ///
+    /// You must call this before calling [`frame()`](CaptureBackendTrait::frame) or
+    /// [`frame_raw()`](CaptureBackendTrait::frame_raw).
+    ///
+    /// ```ignore
+    /// # fn example(camera: &mut nokhwa::Camera) -> Result<(), nokhwa_core::error::NokhwaError> {
+    /// camera.open_stream()?;
+    /// assert!(camera.is_stream_open());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     /// If the specific backend fails to open the camera (e.g. already taken, busy, doesn't exist anymore) this will error.
     fn open_stream(&mut self) -> Result<(), NokhwaError>;
@@ -259,11 +303,27 @@ pub trait CaptureBackendTrait {
     /// Checks if stream if open. If it is, it will return true.
     fn is_stream_open(&self) -> bool;
 
-    /// Will get a frame from the camera as a [`Buffer`]. Depending on the backend, if you have not called [`open_stream()`](CaptureBackendTrait::open_stream()) before you called this,
-    /// it will either return an error.
+    /// Captures a frame from the camera as a [`Buffer`].
+    ///
+    /// The returned [`Buffer`] contains raw frame data along with format metadata.
+    /// Use [`Buffer::decode_image`] to decode it into an `image::ImageBuffer`.
+    ///
+    /// ```ignore
+    /// # fn example(camera: &mut nokhwa::Camera) -> Result<(), nokhwa_core::error::NokhwaError> {
+    /// use nokhwa::pixel_format::RgbFormat;
+    ///
+    /// camera.open_stream()?;
+    /// let frame = camera.frame()?;
+    /// let decoded = frame.decode_image::<RgbFormat>()?;
+    /// println!("frame: {}x{}", decoded.width(), decoded.height());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
-    /// If the backend fails to get the frame (e.g. already taken, busy, doesn't exist anymore), the decoding fails (e.g. MJPEG -> u8), or [`open_stream()`](CaptureBackendTrait::open_stream()) has not been called yet,
-    /// this will error.
+    /// If the backend fails to get the frame (e.g. already taken, busy, doesn't exist anymore),
+    /// the decoding fails (e.g. MJPEG → RGB), or [`open_stream()`](CaptureBackendTrait::open_stream())
+    /// has not been called yet, this will error.
     fn frame(&mut self) -> Result<Buffer, NokhwaError>;
 
     /// Will get a frame from the camera as a [`Buffer`], but with a timeout. If the frame is not
@@ -283,9 +343,23 @@ pub trait CaptureBackendTrait {
         self.frame()
     }
 
-    /// Will get a frame from the camera **without** any processing applied, meaning you will usually get a frame you need to decode yourself.
+    /// Captures a frame **without** any decoding or processing.
+    ///
+    /// The returned bytes are in the camera's native pixel format (e.g. MJPEG, YUYV, NV12).
+    /// Use this when you want to handle decoding yourself or forward the raw data elsewhere.
+    ///
+    /// ```ignore
+    /// # fn example(camera: &mut nokhwa::Camera) -> Result<(), nokhwa_core::error::NokhwaError> {
+    /// camera.open_stream()?;
+    /// let raw_bytes = camera.frame_raw()?;
+    /// println!("raw frame: {} bytes", raw_bytes.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
-    /// If the backend fails to get the frame (e.g. already taken, busy, doesn't exist anymore), or [`open_stream()`](CaptureBackendTrait::open_stream()) has not been called yet, this will error.
+    /// If the backend fails to get the frame (e.g. already taken, busy, doesn't exist anymore),
+    /// or [`open_stream()`](CaptureBackendTrait::open_stream()) has not been called yet, this will error.
     fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError>;
 
     /// The minimum buffer size needed to write the current frame. If `alpha` is true, it will instead return the minimum size of the buffer with an alpha channel as well.

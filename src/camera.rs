@@ -31,7 +31,69 @@ use std::{borrow::Cow, collections::HashMap, time::Duration};
 #[cfg(feature = "output-wgpu")]
 use wgpu::{Device as WgpuDevice, Queue as WgpuQueue, Texture as WgpuTexture};
 
-/// The main `Camera` struct. This is the struct that abstracts over all the backends, providing a simplified interface for use.
+/// The main camera capture struct, abstracting over platform-specific backends.
+///
+/// `Camera` provides a unified interface for webcam capture across operating systems.
+/// Internally it holds a [`CaptureBackendTrait`] implementation selected at construction
+/// time based on the enabled feature flags and the current platform:
+///
+/// | Platform | Feature flag           | Backend                |
+/// |----------|------------------------|------------------------|
+/// | Linux    | `input-v4l`            | `Video4Linux`          |
+/// | macOS    | `input-avfoundation`   | `AVFoundation`         |
+/// | Windows  | `input-msmf`           | Media Foundation       |
+/// | Any      | `input-opencv`         | `OpenCV`               |
+///
+/// # Creating a Camera
+///
+/// Use [`Camera::new`] with a [`CameraIndex`] and a [`RequestedFormat`] that describes
+/// what resolution, frame rate, and pixel format you would like. The library will pick
+/// the closest match the hardware supports.
+///
+/// ```no_run
+/// use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
+/// use nokhwa::pixel_format::RgbFormat;
+/// use nokhwa::Camera;
+///
+/// // Open the first camera at its highest available resolution
+/// let mut camera = Camera::new(
+///     CameraIndex::Index(0),
+///     RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution),
+/// ).expect("failed to open camera");
+/// ```
+///
+/// # Capturing frames
+///
+/// Call [`Camera::open_stream`] to begin capture, then [`Camera::frame`] to grab
+/// decoded frames as [`Buffer`]s. Each [`Buffer`] can be further decoded into an
+/// `image::ImageBuffer` via [`Buffer::decode_image`].
+///
+/// ```no_run
+/// # use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
+/// # use nokhwa::pixel_format::RgbFormat;
+/// # use nokhwa::Camera;
+/// # let mut camera = Camera::new(
+/// #     CameraIndex::Index(0),
+/// #     RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution),
+/// # ).unwrap();
+/// camera.open_stream().expect("failed to open stream");
+///
+/// let frame = camera.frame().expect("failed to capture frame");
+/// println!("captured {}x{} frame", frame.resolution().width(), frame.resolution().height());
+///
+/// // Decode to an `image` RgbImage:
+/// let decoded = frame.decode_image::<RgbFormat>().expect("failed to decode");
+/// ```
+///
+/// # Callback-based capture
+///
+/// For background capture with a callback, see [`CallbackCamera`](crate::threaded::CallbackCamera)
+/// (requires the `output-threaded` feature).
+///
+/// # Cleaning up
+///
+/// The stream is automatically stopped when `Camera` is dropped. You can also call
+/// [`Camera::stop_stream`] explicitly.
 pub struct Camera {
     idx: CameraIndex,
     api: ApiBackend,
