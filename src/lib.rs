@@ -28,6 +28,10 @@
 //! The recommended default feature to enable is `input-native` (also available as `input-auto`).
 //! The library will not work without at least one `input-*` feature enabled.
 //!
+//! Enable the `logging` feature to get diagnostic messages (e.g. backend auto-detection failures)
+//! via the [`log`](https://docs.rs/log) crate. A `log` backend such as `env_logger` or
+//! `tracing-log` is required to see the output.
+//!
 //! Please read the README.md for more.
 
 // Ensure at least one input backend is enabled (skip during docs-only builds).

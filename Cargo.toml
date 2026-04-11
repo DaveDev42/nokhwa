@@ -49,6 +49,12 @@ input-v4l          = [ "nokhwa-bindings-linux-v4l" ]
 # WARNING: This creates a performance regression — half of the frames will be dropped.
 # You shouldn't enable this unless you have to.
 input-v4l-no-arena-buffer = [ "nokhwa-bindings-linux-v4l/no-arena-buffer" ]
+# Structured logging via the `log` crate. When enabled, replaces internal
+# dbg!()/eprintln!() diagnostics with proper log::warn!/log::error! calls.
+# Without this feature, these diagnostics are silent (errors are still
+# propagated to callers). Users must supply a `log` backend (e.g.
+# env_logger, tracing-log) to see output.
+logging = [ "log" ]
 # Automatically selects the right backend for the current OS.
 # Alias: input-auto
 input-native              = [ "input-avfoundation", "input-v4l", "input-msmf" ]
@@ -77,6 +83,7 @@ docs-only = [
     "output-wgpu",
     "output-threaded",
     "serialize",
+    "logging",
 ]
 # Build docs without linking platform libraries (for cross-platform doc checks)
 docs-nolink = [ "nokhwa-core/docs-features" ]
@@ -131,6 +138,10 @@ optional = true
 
 [dependencies.arc-swap]
 version  = "1"
+optional = true
+
+[dependencies.log]
+version  = "0.4"
 optional = true
 
 [package.metadata.docs.rs]
