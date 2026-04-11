@@ -228,6 +228,7 @@ const JPEG_RED_2X2: &[u8] = &[
 ];
 
 /// Helper: assert all pixel channels are within `tolerance` of expected.
+/// The `channels` parameter is used only for diagnostic formatting (pixel index / channel id).
 #[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
 fn assert_pixels_near(actual: &[u8], expected: &[u8], channels: usize, tolerance: u8) {
     assert_eq!(
@@ -270,16 +271,10 @@ fn mjpeg_into_rgba_produces_correct_output() {
     let img = frame.into_rgba().materialize().unwrap();
     assert_eq!(img.width(), 2);
     assert_eq!(img.height(), 2);
-    // Check each pixel: near-red with full alpha
-    for y in 0..2 {
-        for x in 0..2 {
-            let [r, g, b, a] = img.get_pixel(x, y).0;
-            assert!(r >= 250, "pixel ({x},{y}): R={r}, expected ≥250");
-            assert!(g <= 5, "pixel ({x},{y}): G={g}, expected ≤5");
-            assert!(b <= 5, "pixel ({x},{y}): B={b}, expected ≤5");
-            assert_eq!(a, 255, "pixel ({x},{y}): alpha should be 255");
-        }
-    }
+    // All 4 pixels should be close to red with full alpha.
+    // Alpha is always exactly 255 (not lossy), so tolerance 5 covers the RGB channels.
+    let expected = [255, 0, 0, 255].repeat(4);
+    assert_pixels_near(img.as_raw(), &expected, 4, 5);
 }
 
 #[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
@@ -300,6 +295,18 @@ fn mjpeg_into_luma_produces_correct_output() {
             );
         }
     }
+}
+
+#[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
+#[test]
+fn mjpeg_rgb_write_to() {
+    let buf = Buffer::new(Resolution::new(2, 2), JPEG_RED_2X2, FrameFormat::MJPEG);
+    let frame: Frame<Mjpeg> = Frame::new(buf);
+    let mut dest = vec![0u8; 2 * 2 * 3];
+    frame.into_rgb().write_to(&mut dest).unwrap();
+    // Same tolerance check as materialize — near-red pixels
+    let expected = [255, 0, 0].repeat(4);
+    assert_pixels_near(&dest, &expected, 3, 5);
 }
 
 #[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
