@@ -35,7 +35,6 @@ pub mod wmf {
         ControlValueSetter, FrameFormat, KnownCameraControl, KnownCameraControlFlag, Resolution,
     };
     use std::ffi::c_void;
-    use std::sync::LazyLock;
     use std::{
         borrow::Cow,
         cell::Cell,
@@ -43,7 +42,7 @@ pub mod wmf {
         slice::from_raw_parts,
         sync::{
             atomic::{AtomicBool, AtomicUsize, Ordering},
-            Arc,
+            Arc, LazyLock,
         },
         time::Duration,
     };
