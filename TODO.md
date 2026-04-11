@@ -1,7 +1,7 @@
 # TODO
 
 ## High Priority
-(None)
+- [x] Fix release-please config to prevent premature 1.0.0 bumps on breaking changes (`bump-major-pre-major: false`)
 
 ## Medium Priority
 - [ ] Add integration tests for each platform backend (currently only core unit tests + macOS format tests)
