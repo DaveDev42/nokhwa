@@ -41,99 +41,99 @@ pub fn query_avfoundation() -> Result<Vec<CameraInfo>, NokhwaError> {
 // receiver.  These thin wrappers eliminate the need for `unsafe` at every call
 // site while documenting why the call is sound.
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_localized_name(device: &AVCaptureDevice) -> Retained<objc2_foundation::NSString> {
     unsafe { device.localizedName() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_manufacturer(device: &AVCaptureDevice) -> Retained<objc2_foundation::NSString> {
     unsafe { device.manufacturer() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_position(device: &AVCaptureDevice) -> AVCaptureDevicePosition {
     unsafe { device.position() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_lens_aperture(device: &AVCaptureDevice) -> c_float {
     unsafe { device.lensAperture() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_device_type(
     device: &AVCaptureDevice,
 ) -> Retained<objc2_av_foundation::AVCaptureDeviceType> {
     unsafe { device.deviceType() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_model_id(device: &AVCaptureDevice) -> Retained<objc2_foundation::NSString> {
     unsafe { device.modelID() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_unique_id(device: &AVCaptureDevice) -> Retained<objc2_foundation::NSString> {
     unsafe { device.uniqueID() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_formats(device: &AVCaptureDevice) -> Retained<NSArray<AVCaptureDeviceFormat>> {
     unsafe { device.formats() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_active_format(device: &AVCaptureDevice) -> Retained<AVCaptureDeviceFormat> {
     unsafe { device.activeFormat() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_is_in_use_by_another_application(device: &AVCaptureDevice) -> bool {
     unsafe { device.isInUseByAnotherApplication() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_is_suspended(device: &AVCaptureDevice) -> bool {
     unsafe { device.isSuspended() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_focus_mode(device: &AVCaptureDevice) -> AVCaptureFocusMode {
     unsafe { device.focusMode() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_is_focus_mode_supported(device: &AVCaptureDevice, mode: AVCaptureFocusMode) -> bool {
     unsafe { device.isFocusModeSupported(mode) }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_is_focus_poi_supported(device: &AVCaptureDevice) -> bool {
     unsafe { device.isFocusPointOfInterestSupported() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_focus_poi(device: &AVCaptureDevice) -> CGPoint {
     unsafe { device.focusPointOfInterest() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_is_locking_focus_with_custom_lens_position_supported(device: &AVCaptureDevice) -> bool {
     unsafe { device.isLockingFocusWithCustomLensPositionSupported() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_lens_position(device: &AVCaptureDevice) -> c_float {
     unsafe { device.lensPosition() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_exposure_mode(device: &AVCaptureDevice) -> AVCaptureExposureMode {
     unsafe { device.exposureMode() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_is_exposure_mode_supported(
     device: &AVCaptureDevice,
     mode: AVCaptureExposureMode,
@@ -141,57 +141,57 @@ fn device_is_exposure_mode_supported(
     unsafe { device.isExposureModeSupported(mode) }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_is_exposure_poi_supported(device: &AVCaptureDevice) -> bool {
     unsafe { device.isExposurePointOfInterestSupported() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_exposure_poi(device: &AVCaptureDevice) -> CGPoint {
     unsafe { device.exposurePointOfInterest() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_is_face_driven_auto_exposure_enabled(device: &AVCaptureDevice) -> bool {
     unsafe { device.isFaceDrivenAutoExposureEnabled() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_automatically_adjusts_face_driven_auto_exposure(device: &AVCaptureDevice) -> bool {
     unsafe { device.automaticallyAdjustsFaceDrivenAutoExposureEnabled() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_exposure_target_bias(device: &AVCaptureDevice) -> c_float {
     unsafe { device.exposureTargetBias() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_min_exposure_target_bias(device: &AVCaptureDevice) -> c_float {
     unsafe { device.minExposureTargetBias() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_max_exposure_target_bias(device: &AVCaptureDevice) -> c_float {
     unsafe { device.maxExposureTargetBias() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_exposure_duration(device: &AVCaptureDevice) -> CMTime {
     unsafe { device.exposureDuration() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_iso(device: &AVCaptureDevice) -> c_float {
     unsafe { device.ISO() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_white_balance_mode(device: &AVCaptureDevice) -> AVCaptureWhiteBalanceMode {
     unsafe { device.whiteBalanceMode() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_is_white_balance_mode_supported(
     device: &AVCaptureDevice,
     mode: AVCaptureWhiteBalanceMode,
@@ -199,78 +199,78 @@ fn device_is_white_balance_mode_supported(
     unsafe { device.isWhiteBalanceModeSupported(mode) }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_white_balance_gains(device: &AVCaptureDevice) -> AVCaptureWhiteBalanceGains {
     unsafe { device.deviceWhiteBalanceGains() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_gray_world_white_balance_gains(device: &AVCaptureDevice) -> AVCaptureWhiteBalanceGains {
     unsafe { device.grayWorldDeviceWhiteBalanceGains() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_max_white_balance_gain(device: &AVCaptureDevice) -> c_float {
     unsafe { device.maxWhiteBalanceGain() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_is_locking_white_balance_with_custom_gains_supported(device: &AVCaptureDevice) -> bool {
     unsafe { device.isLockingWhiteBalanceWithCustomDeviceGainsSupported() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_is_torch_available(device: &AVCaptureDevice) -> bool {
     unsafe { device.isTorchAvailable() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_is_torch_mode_supported(device: &AVCaptureDevice, mode: AVCaptureTorchMode) -> bool {
     unsafe { device.isTorchModeSupported(mode) }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_torch_mode(device: &AVCaptureDevice) -> AVCaptureTorchMode {
     unsafe { device.torchMode() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_is_low_light_boost_supported(device: &AVCaptureDevice) -> bool {
     unsafe { device.isLowLightBoostSupported() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_is_low_light_boost_enabled(device: &AVCaptureDevice) -> bool {
     unsafe { device.isLowLightBoostEnabled() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_video_zoom_factor(device: &AVCaptureDevice) -> CGFloat {
     unsafe { device.videoZoomFactor() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_min_available_video_zoom_factor(device: &AVCaptureDevice) -> CGFloat {
     unsafe { device.minAvailableVideoZoomFactor() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_max_available_video_zoom_factor(device: &AVCaptureDevice) -> CGFloat {
     unsafe { device.maxAvailableVideoZoomFactor() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_is_geometric_distortion_correction_supported(device: &AVCaptureDevice) -> bool {
     unsafe { device.isGeometricDistortionCorrectionSupported() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
 fn device_is_geometric_distortion_correction_enabled(device: &AVCaptureDevice) -> bool {
     unsafe { device.isGeometricDistortionCorrectionEnabled() }
 }
 
-/// SAFETY: `deviceWithUniqueID:` is a class method that returns nil for unknown IDs;
-/// caller handles the `None` case.
+// SAFETY: `deviceWithUniqueID:` is a class method that returns nil for unknown IDs;
+// caller handles the `None` case.
 fn device_with_unique_id(id: &objc2_foundation::NSString) -> Option<Retained<AVCaptureDevice>> {
     unsafe { AVCaptureDevice::deviceWithUniqueID(id) }
 }
@@ -278,160 +278,194 @@ fn device_with_unique_id(id: &objc2_foundation::NSString) -> Option<Retained<AVC
 // -- Safe wrappers for AVCaptureDevice mutating operations --
 // These require the device to be locked for configuration first.
 
-/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
 fn device_set_active_format(device: &AVCaptureDevice, format: &AVCaptureDeviceFormat) {
     unsafe { device.setActiveFormat(format) }
 }
 
-/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
 fn device_set_active_video_min_frame_duration(device: &AVCaptureDevice, duration: CMTime) {
     unsafe { device.setActiveVideoMinFrameDuration(duration) }
 }
 
-/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
 fn device_set_active_video_max_frame_duration(device: &AVCaptureDevice, duration: CMTime) {
     unsafe { device.setActiveVideoMaxFrameDuration(duration) }
 }
 
-/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
 fn device_set_focus_mode(device: &AVCaptureDevice, mode: AVCaptureFocusMode) {
     unsafe { device.setFocusMode(mode) }
 }
 
-/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
 fn device_set_focus_poi(device: &AVCaptureDevice, point: CGPoint) {
     unsafe { device.setFocusPointOfInterest(point) }
 }
 
-/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
 fn device_set_focus_mode_locked_with_lens_position(device: &AVCaptureDevice, position: c_float) {
     unsafe { device.setFocusModeLockedWithLensPosition_completionHandler(position, None) }
 }
 
-/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
 fn device_set_exposure_mode(device: &AVCaptureDevice, mode: AVCaptureExposureMode) {
     unsafe { device.setExposureMode(mode) }
 }
 
-/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
 fn device_set_exposure_poi(device: &AVCaptureDevice, point: CGPoint) {
     unsafe { device.setExposurePointOfInterest(point) }
 }
 
-/// SAFETY: Mutating method on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Mutating method on a valid, locked `AVCaptureDevice` reference.
 fn device_set_exposure_custom(device: &AVCaptureDevice, duration: CMTime, iso: c_float) {
     unsafe { device.setExposureModeCustomWithDuration_ISO_completionHandler(duration, iso, None) }
 }
 
-/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
 fn device_set_exposure_target_bias(device: &AVCaptureDevice, bias: c_float) {
     unsafe { device.setExposureTargetBias_completionHandler(bias, None) }
 }
 
-/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
 fn device_set_auto_adjusts_face_driven_auto_exposure(device: &AVCaptureDevice, enabled: bool) {
     unsafe { device.setAutomaticallyAdjustsFaceDrivenAutoExposureEnabled(enabled) }
 }
 
-/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
 fn device_set_white_balance_mode(device: &AVCaptureDevice, mode: AVCaptureWhiteBalanceMode) {
     unsafe { device.setWhiteBalanceMode(mode) }
 }
 
-/// SAFETY: Mutating method on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Mutating method on a valid, locked `AVCaptureDevice` reference.
 fn device_set_white_balance_gains(device: &AVCaptureDevice, gains: AVCaptureWhiteBalanceGains) {
     unsafe {
         device.setWhiteBalanceModeLockedWithDeviceWhiteBalanceGains_completionHandler(gains, None)
     }
 }
 
-/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
 fn device_set_auto_low_light_boost(device: &AVCaptureDevice, enabled: bool) {
     unsafe { device.setAutomaticallyEnablesLowLightBoostWhenAvailable(enabled) }
 }
 
-/// SAFETY: Mutating method on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Mutating method on a valid, locked `AVCaptureDevice` reference.
 fn device_ramp_to_video_zoom_factor(device: &AVCaptureDevice, factor: CGFloat, rate: c_float) {
     unsafe { device.rampToVideoZoomFactor_withRate(factor, rate) }
 }
 
-/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
 fn device_set_torch_mode(device: &AVCaptureDevice, mode: AVCaptureTorchMode) {
     unsafe { device.setTorchMode(mode) }
 }
 
-/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
 fn device_set_geometric_distortion_correction_enabled(device: &AVCaptureDevice, enabled: bool) {
     unsafe { device.setGeometricDistortionCorrectionEnabled(enabled) }
 }
 
-/// SAFETY: `lockForConfiguration` is safe to call on a valid `AVCaptureDevice`;
-/// it returns an error rather than causing UB if the device is unavailable.
+// SAFETY: `lockForConfiguration` is safe to call on a valid `AVCaptureDevice`;
+// it returns an error rather than causing UB if the device is unavailable.
 fn device_lock_for_configuration(
     device: &AVCaptureDevice,
 ) -> Result<(), Retained<objc2_foundation::NSError>> {
     unsafe { device.lockForConfiguration() }
 }
 
-/// SAFETY: `unlockForConfiguration` is safe to call after a successful lock.
+// SAFETY: `unlockForConfiguration` is safe to call after a successful lock.
 fn device_unlock_for_configuration(device: &AVCaptureDevice) {
     unsafe { device.unlockForConfiguration() }
 }
 
 // -- Safe wrappers for AVCaptureDeviceFormat read-only property accessors --
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
 fn format_media_type(format: &AVCaptureDeviceFormat) -> Retained<objc2_foundation::NSString> {
     unsafe { format.mediaType() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
 fn format_frame_rate_ranges(format: &AVCaptureDeviceFormat) -> Retained<NSArray<AVFrameRateRange>> {
     unsafe { format.videoSupportedFrameRateRanges() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
 fn format_description(
     format: &AVCaptureDeviceFormat,
 ) -> Retained<objc2_core_media::CMFormatDescription> {
     unsafe { format.formatDescription() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
 fn format_min_exposure_duration(format: &AVCaptureDeviceFormat) -> CMTime {
     unsafe { format.minExposureDuration() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
 fn format_max_exposure_duration(format: &AVCaptureDeviceFormat) -> CMTime {
     unsafe { format.maxExposureDuration() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
 fn format_min_iso(format: &AVCaptureDeviceFormat) -> c_float {
     unsafe { format.minISO() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
+// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
 fn format_max_iso(format: &AVCaptureDeviceFormat) -> c_float {
     unsafe { format.maxISO() }
 }
 
 // -- Safe wrappers for AVFrameRateRange read-only property accessors --
 
-/// SAFETY: Read-only property accessor on a valid `AVFrameRateRange` reference.
+// SAFETY: Read-only property accessor on a valid `AVFrameRateRange` reference.
 fn range_min_frame_rate(range: &AVFrameRateRange) -> f64 {
     unsafe { range.minFrameRate() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVFrameRateRange` reference.
+// SAFETY: Read-only property accessor on a valid `AVFrameRateRange` reference.
 fn range_max_frame_rate(range: &AVFrameRateRange) -> f64 {
     unsafe { range.maxFrameRate() }
 }
 
-/// SAFETY: Read-only property accessor on a valid `AVFrameRateRange` reference.
+// SAFETY: Read-only property accessor on a valid `AVFrameRateRange` reference.
 fn range_min_frame_duration(range: &AVFrameRateRange) -> CMTime {
     unsafe { range.minFrameDuration() }
+}
+
+// -- Safe wrappers for CMFormatDescription C FFI calls --
+
+// SAFETY: `description_ref` is a valid pointer derived from a `Retained<CMFormatDescription>`
+// obtained via `format.formatDescription()`. The pointer remains valid for the lifetime of
+// the `Retained` value.
+fn cm_video_format_get_dimensions(description_ref: CMFormatDescriptionRef) -> CMVideoDimensions {
+    unsafe { CMVideoFormatDescriptionGetDimensions(description_ref) }
+}
+
+// SAFETY: `description_ref` is a valid pointer derived from a `Retained<CMFormatDescription>`
+// obtained via `format.formatDescription()`. The pointer remains valid for the lifetime of
+// the `Retained` value.
+fn cm_format_get_media_sub_type(description_ref: CMFormatDescriptionRef) -> u32 {
+    unsafe { CMFormatDescriptionGetMediaSubType(description_ref) }
+}
+
+// -- Safe wrappers for global sentinel constants --
+// These are extern statics in objc2-av-foundation that require `unsafe` to access.
+
+// SAFETY: Read-only global sentinel constant; always valid on supported Apple platforms.
+fn exposure_target_bias_current() -> c_float {
+    unsafe { AVCaptureExposureTargetBiasCurrent }
+}
+
+// SAFETY: Read-only global sentinel constant; always valid on supported Apple platforms.
+fn exposure_duration_current() -> CMTime {
+    unsafe { AVCaptureExposureDurationCurrent }
+}
+
+// SAFETY: Read-only global sentinel constant; always valid on supported Apple platforms.
+fn iso_current() -> c_float {
+    unsafe { AVCaptureISOCurrent }
 }
 
 pub fn get_raw_device_info(index: CameraIndex, device: &AVCaptureDevice) -> CameraInfo {
@@ -515,8 +549,8 @@ impl AVCaptureDeviceFormatWrapper {
 
         let description_obj = format_description(format);
         let description_ref = &*description_obj as *const _ as CMFormatDescriptionRef;
-        let resolution = unsafe { CMVideoFormatDescriptionGetDimensions(description_ref) };
-        let fcc_raw = unsafe { CMFormatDescriptionGetMediaSubType(description_ref) };
+        let resolution = cm_video_format_get_dimensions(description_ref);
+        let fcc_raw = cm_format_get_media_sub_type(description_ref);
 
         #[allow(non_upper_case_globals)]
         let fourcc = match raw_fcc_to_frameformat(fcc_raw) {
@@ -670,7 +704,7 @@ impl AVCaptureDeviceWrapper {
             let format = formats.objectAtIndex(i);
             let fmt_desc = format_description(&format);
             let fmt_desc_ref = &*fmt_desc as *const _ as CMFormatDescriptionRef;
-            let dimensions = unsafe { CMVideoFormatDescriptionGetDimensions(fmt_desc_ref) };
+            let dimensions = cm_video_format_get_dimensions(fmt_desc_ref);
 
             if dimensions.height == descriptor.resolution().height() as i32
                 && dimensions.width == descriptor.resolution().width() as i32
@@ -887,8 +921,7 @@ impl AVCaptureDeviceWrapper {
                 max: exposure_bias_max as f64,
                 value: exposure_bias as f64,
                 step: f32::MIN_POSITIVE as f64,
-                // SAFETY: Read-only global sentinel constant.
-                default: unsafe { AVCaptureExposureTargetBiasCurrent } as f64,
+                default: exposure_target_bias_current() as f64,
             },
             vec![],
             true,
@@ -906,8 +939,7 @@ impl AVCaptureDeviceWrapper {
                 max: exposure_duration_max.value,
                 value: exposure_duration.value,
                 step: 1,
-                // SAFETY: Read-only global sentinel constant.
-                default: unsafe { AVCaptureExposureDurationCurrent.value },
+                default: exposure_duration_current().value,
             },
             if exposure_custom {
                 vec![
@@ -932,8 +964,7 @@ impl AVCaptureDeviceWrapper {
                 max: exposure_iso_max as f64,
                 value: exposure_iso as f64,
                 step: f32::MIN_POSITIVE as f64,
-                // SAFETY: Read-only global sentinel constant.
-                default: unsafe { AVCaptureISOCurrent } as f64,
+                default: iso_current() as f64,
             },
             if exposure_custom {
                 vec![
@@ -1171,8 +1202,7 @@ impl AVCaptureDeviceWrapper {
 
                 check_control_flags(isoctrl, &id, &value)?;
 
-                // SAFETY: Read-only global constant for sentinel value.
-                let current_duration = unsafe { AVCaptureExposureDurationCurrent };
+                let current_duration = exposure_duration_current();
                 let new_iso = *value.as_float().ok_or(NokhwaError::SetPropertyError {
                     property: id.to_string(),
                     value: value.to_string(),
@@ -1201,8 +1231,7 @@ impl AVCaptureDeviceWrapper {
                 check_control_flags(duration_ctrl, &id, &value)?;
 
                 let current_duration = device_exposure_duration(&self.inner);
-                // SAFETY: Read-only global constant for sentinel value.
-                let current_iso = unsafe { AVCaptureISOCurrent };
+                let current_iso = iso_current();
                 let new_duration = CMTime {
                     value: *value.as_integer().ok_or(NokhwaError::SetPropertyError {
                         property: id.to_string(),
