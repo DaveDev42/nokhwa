@@ -141,7 +141,13 @@ pub(crate) fn yuyv_to_rgb_simd(src: &[u8], dst: &mut [u8]) {
     #[cfg(target_arch = "aarch64")]
     yuyv_to_rgb_neon(src, dst);
 
-    #[cfg(not(target_arch = "aarch64"))]
+    #[cfg(target_arch = "x86_64")]
+    // SAFETY: runtime feature detection gates the SSE4.1 path
+    unsafe {
+        yuyv_to_rgb_x86(src, dst);
+    }
+
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     yuyv_to_rgb_scalar(src, dst);
 }
 
@@ -155,7 +161,13 @@ pub(crate) fn yuyv_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
     #[cfg(target_arch = "aarch64")]
     yuyv_to_rgba_neon(src, dst);
 
-    #[cfg(not(target_arch = "aarch64"))]
+    #[cfg(target_arch = "x86_64")]
+    // SAFETY: runtime feature detection gates the SSE4.1 path
+    unsafe {
+        yuyv_to_rgba_x86(src, dst);
+    }
+
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     yuyv_to_rgba_scalar(src, dst);
 }
 
@@ -488,6 +500,281 @@ unsafe fn yuv_to_rgb_neon_8px(
         vqmovun_s16(vmaxq_s16(grn_16, zero)),
         vqmovun_s16(vmaxq_s16(blu_16, zero)),
     )
+}
+
+// ──────────────────────────────────────────────
+// x86_64 SSE4.1 YUYV → RGB / RGBA
+// ──────────────────────────────────────────────
+
+#[cfg(target_arch = "x86_64")]
+#[inline]
+unsafe fn yuyv_to_rgb_x86(src: &[u8], dst: &mut [u8]) {
+    if is_x86_feature_detected!("sse4.1") {
+        yuyv_to_rgb_sse41(src, dst);
+    } else {
+        yuyv_to_rgb_scalar(src, dst);
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[inline]
+unsafe fn yuyv_to_rgba_x86(src: &[u8], dst: &mut [u8]) {
+    if is_x86_feature_detected!("sse4.1") {
+        yuyv_to_rgba_sse41(src, dst);
+    } else {
+        yuyv_to_rgba_scalar(src, dst);
+    }
+}
+
+/// Process YUYV→RGB using SSE4.1. Handles 8 pixels (4 YUYV pairs = 16 bytes) per iteration.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "sse4.1")]
+#[allow(clippy::similar_names, clippy::cast_sign_loss)]
+unsafe fn yuyv_to_rgb_sse41(src: &[u8], dst: &mut [u8]) {
+    // 4 YUYV pairs = 16 src bytes → 8 RGB pixels = 24 dst bytes
+    let simd_end = src.len() - (src.len() % 16);
+    let mut si = 0;
+    let mut di = 0;
+
+    while si < simd_end {
+        yuyv_8px_to_rgb_sse41(src.as_ptr().add(si), dst.as_mut_ptr().add(di));
+        si += 16;
+        di += 24;
+    }
+
+    // Scalar tail
+    yuyv_to_rgb_scalar(&src[si..], &mut dst[di..]);
+}
+
+/// Process YUYV→RGBA using SSE4.1.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "sse4.1")]
+#[allow(clippy::similar_names, clippy::cast_sign_loss)]
+unsafe fn yuyv_to_rgba_sse41(src: &[u8], dst: &mut [u8]) {
+    let simd_end = src.len() - (src.len() % 16);
+    let mut si = 0;
+    let mut di = 0;
+
+    while si < simd_end {
+        yuyv_8px_to_rgba_sse41(src.as_ptr().add(si), dst.as_mut_ptr().add(di));
+        si += 16;
+        di += 32;
+    }
+
+    yuyv_to_rgba_scalar(&src[si..], &mut dst[di..]);
+}
+
+/// Convert 4 YUYV pairs (16 bytes, 8 pixels) to 24 RGB bytes using SSE4.1.
+///
+/// YUYV layout: [Y0,U0,Y1,V0, Y2,U1,Y3,V1, Y4,U2,Y5,V2, Y6,U3,Y7,V3]
+/// We extract Y, U, V channels, duplicate U/V for paired pixels, then apply BT.601.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "sse4.1")]
+#[allow(clippy::similar_names)]
+unsafe fn yuyv_8px_to_rgb_sse41(src: *const u8, dst: *mut u8) {
+    use std::arch::x86_64::{
+        _mm_add_epi32, _mm_cvtepi16_epi32, _mm_loadl_epi64, _mm_loadu_si128, _mm_max_epi16,
+        _mm_mullo_epi32, _mm_packs_epi32, _mm_packus_epi16, _mm_set1_epi16, _mm_set1_epi32,
+        _mm_setr_epi8, _mm_setzero_si128, _mm_shuffle_epi8, _mm_srai_epi32, _mm_srli_si128,
+        _mm_storeu_si128, _mm_sub_epi16, _mm_sub_epi32, _mm_unpacklo_epi8,
+    };
+
+    let zero = _mm_setzero_si128();
+
+    // Load 16 bytes of YUYV data
+    let yuyv = _mm_loadu_si128(src.cast());
+
+    // Extract channels using pshufb:
+    // Y: bytes 0,2,4,6,8,10,12,14
+    let y_shuf = _mm_setr_epi8(0, 2, 4, 6, 8, 10, 12, 14, -1, -1, -1, -1, -1, -1, -1, -1);
+    // U: bytes 1,1,5,5,9,9,13,13 (duplicated for paired pixels)
+    let u_shuf = _mm_setr_epi8(1, 1, 5, 5, 9, 9, 13, 13, -1, -1, -1, -1, -1, -1, -1, -1);
+    // V: bytes 3,3,7,7,11,11,15,15 (duplicated)
+    let v_shuf = _mm_setr_epi8(3, 3, 7, 7, 11, 11, 15, 15, -1, -1, -1, -1, -1, -1, -1, -1);
+
+    let y8 = _mm_shuffle_epi8(yuyv, y_shuf);
+    let u8_dup = _mm_shuffle_epi8(yuyv, u_shuf);
+    let v8_dup = _mm_shuffle_epi8(yuyv, v_shuf);
+
+    let offset16 = _mm_set1_epi16(16);
+    let offset128 = _mm_set1_epi16(128);
+    let bias32 = _mm_set1_epi32(128);
+    let k298 = _mm_set1_epi32(298);
+    let k409 = _mm_set1_epi32(409);
+    let k100 = _mm_set1_epi32(100);
+    let k208 = _mm_set1_epi32(208);
+    let k516 = _mm_set1_epi32(516);
+
+    // Widen to i16 and apply offsets
+    let y16 = _mm_sub_epi16(_mm_unpacklo_epi8(y8, zero), offset16);
+    let u16 = _mm_sub_epi16(_mm_unpacklo_epi8(u8_dup, zero), offset128);
+    let v16 = _mm_sub_epi16(_mm_unpacklo_epi8(v8_dup, zero), offset128);
+
+    // Process low 4 pixels (i16 → i32)
+    let y_lo = _mm_cvtepi16_epi32(y16);
+    let u_lo = _mm_cvtepi16_epi32(u16);
+    let v_lo = _mm_cvtepi16_epi32(v16);
+
+    let c298y_lo = _mm_mullo_epi32(y_lo, k298);
+    let r_lo = _mm_srai_epi32::<8>(_mm_add_epi32(
+        _mm_add_epi32(c298y_lo, _mm_mullo_epi32(v_lo, k409)),
+        bias32,
+    ));
+    let g_lo = _mm_srai_epi32::<8>(_mm_add_epi32(
+        _mm_sub_epi32(
+            _mm_sub_epi32(c298y_lo, _mm_mullo_epi32(u_lo, k100)),
+            _mm_mullo_epi32(v_lo, k208),
+        ),
+        bias32,
+    ));
+    let b_lo = _mm_srai_epi32::<8>(_mm_add_epi32(
+        _mm_add_epi32(c298y_lo, _mm_mullo_epi32(u_lo, k516)),
+        bias32,
+    ));
+
+    // Process high 4 pixels
+    let y_hi = _mm_cvtepi16_epi32(_mm_srli_si128::<8>(y16));
+    let u_hi = _mm_cvtepi16_epi32(_mm_srli_si128::<8>(u16));
+    let v_hi = _mm_cvtepi16_epi32(_mm_srli_si128::<8>(v16));
+
+    let c298y_hi = _mm_mullo_epi32(y_hi, k298);
+    let r_hi = _mm_srai_epi32::<8>(_mm_add_epi32(
+        _mm_add_epi32(c298y_hi, _mm_mullo_epi32(v_hi, k409)),
+        bias32,
+    ));
+    let g_hi = _mm_srai_epi32::<8>(_mm_add_epi32(
+        _mm_sub_epi32(
+            _mm_sub_epi32(c298y_hi, _mm_mullo_epi32(u_hi, k100)),
+            _mm_mullo_epi32(v_hi, k208),
+        ),
+        bias32,
+    ));
+    let b_hi = _mm_srai_epi32::<8>(_mm_add_epi32(
+        _mm_add_epi32(c298y_hi, _mm_mullo_epi32(u_hi, k516)),
+        bias32,
+    ));
+
+    // Pack and clamp
+    let r16 = _mm_max_epi16(_mm_packs_epi32(r_lo, r_hi), zero);
+    let g16 = _mm_max_epi16(_mm_packs_epi32(g_lo, g_hi), zero);
+    let b16 = _mm_max_epi16(_mm_packs_epi32(b_lo, b_hi), zero);
+    let r8 = _mm_packus_epi16(r16, zero);
+    let g8 = _mm_packus_epi16(g16, zero);
+    let b8 = _mm_packus_epi16(b16, zero);
+
+    // Interleave R,G,B into output (extract to arrays, write pixel-by-pixel)
+    let mut r_arr = [0u8; 16];
+    let mut g_arr = [0u8; 16];
+    let mut b_arr = [0u8; 16];
+    _mm_storeu_si128(r_arr.as_mut_ptr().cast(), r8);
+    _mm_storeu_si128(g_arr.as_mut_ptr().cast(), g8);
+    _mm_storeu_si128(b_arr.as_mut_ptr().cast(), b8);
+
+    for i in 0..8 {
+        *dst.add(i * 3) = r_arr[i];
+        *dst.add(i * 3 + 1) = g_arr[i];
+        *dst.add(i * 3 + 2) = b_arr[i];
+    }
+}
+
+/// Convert 4 YUYV pairs (16 bytes, 8 pixels) to 32 RGBA bytes using SSE4.1.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "sse4.1")]
+#[allow(clippy::similar_names)]
+unsafe fn yuyv_8px_to_rgba_sse41(src: *const u8, dst: *mut u8) {
+    use std::arch::x86_64::{
+        _mm_add_epi32, _mm_cvtepi16_epi32, _mm_loadu_si128, _mm_max_epi16, _mm_mullo_epi32,
+        _mm_packs_epi32, _mm_packus_epi16, _mm_set1_epi16, _mm_set1_epi32, _mm_setr_epi8,
+        _mm_setzero_si128, _mm_shuffle_epi8, _mm_srai_epi32, _mm_srli_si128, _mm_storeu_si128,
+        _mm_sub_epi16, _mm_sub_epi32, _mm_unpacklo_epi8,
+    };
+
+    let zero = _mm_setzero_si128();
+    let yuyv = _mm_loadu_si128(src.cast());
+
+    let y_shuf = _mm_setr_epi8(0, 2, 4, 6, 8, 10, 12, 14, -1, -1, -1, -1, -1, -1, -1, -1);
+    let u_shuf = _mm_setr_epi8(1, 1, 5, 5, 9, 9, 13, 13, -1, -1, -1, -1, -1, -1, -1, -1);
+    let v_shuf = _mm_setr_epi8(3, 3, 7, 7, 11, 11, 15, 15, -1, -1, -1, -1, -1, -1, -1, -1);
+
+    let y8 = _mm_shuffle_epi8(yuyv, y_shuf);
+    let u8_dup = _mm_shuffle_epi8(yuyv, u_shuf);
+    let v8_dup = _mm_shuffle_epi8(yuyv, v_shuf);
+
+    let offset16 = _mm_set1_epi16(16);
+    let offset128 = _mm_set1_epi16(128);
+    let bias32 = _mm_set1_epi32(128);
+    let k298 = _mm_set1_epi32(298);
+    let k409 = _mm_set1_epi32(409);
+    let k100 = _mm_set1_epi32(100);
+    let k208 = _mm_set1_epi32(208);
+    let k516 = _mm_set1_epi32(516);
+
+    let y16 = _mm_sub_epi16(_mm_unpacklo_epi8(y8, zero), offset16);
+    let u16 = _mm_sub_epi16(_mm_unpacklo_epi8(u8_dup, zero), offset128);
+    let v16 = _mm_sub_epi16(_mm_unpacklo_epi8(v8_dup, zero), offset128);
+
+    let y_lo = _mm_cvtepi16_epi32(y16);
+    let u_lo = _mm_cvtepi16_epi32(u16);
+    let v_lo = _mm_cvtepi16_epi32(v16);
+
+    let c298y_lo = _mm_mullo_epi32(y_lo, k298);
+    let r_lo = _mm_srai_epi32::<8>(_mm_add_epi32(
+        _mm_add_epi32(c298y_lo, _mm_mullo_epi32(v_lo, k409)),
+        bias32,
+    ));
+    let g_lo = _mm_srai_epi32::<8>(_mm_add_epi32(
+        _mm_sub_epi32(
+            _mm_sub_epi32(c298y_lo, _mm_mullo_epi32(u_lo, k100)),
+            _mm_mullo_epi32(v_lo, k208),
+        ),
+        bias32,
+    ));
+    let b_lo = _mm_srai_epi32::<8>(_mm_add_epi32(
+        _mm_add_epi32(c298y_lo, _mm_mullo_epi32(u_lo, k516)),
+        bias32,
+    ));
+
+    let y_hi = _mm_cvtepi16_epi32(_mm_srli_si128::<8>(y16));
+    let u_hi = _mm_cvtepi16_epi32(_mm_srli_si128::<8>(u16));
+    let v_hi = _mm_cvtepi16_epi32(_mm_srli_si128::<8>(v16));
+
+    let c298y_hi = _mm_mullo_epi32(y_hi, k298);
+    let r_hi = _mm_srai_epi32::<8>(_mm_add_epi32(
+        _mm_add_epi32(c298y_hi, _mm_mullo_epi32(v_hi, k409)),
+        bias32,
+    ));
+    let g_hi = _mm_srai_epi32::<8>(_mm_add_epi32(
+        _mm_sub_epi32(
+            _mm_sub_epi32(c298y_hi, _mm_mullo_epi32(u_hi, k100)),
+            _mm_mullo_epi32(v_hi, k208),
+        ),
+        bias32,
+    ));
+    let b_hi = _mm_srai_epi32::<8>(_mm_add_epi32(
+        _mm_add_epi32(c298y_hi, _mm_mullo_epi32(u_hi, k516)),
+        bias32,
+    ));
+
+    let r16 = _mm_max_epi16(_mm_packs_epi32(r_lo, r_hi), zero);
+    let g16 = _mm_max_epi16(_mm_packs_epi32(g_lo, g_hi), zero);
+    let b16 = _mm_max_epi16(_mm_packs_epi32(b_lo, b_hi), zero);
+    let r8 = _mm_packus_epi16(r16, zero);
+    let g8 = _mm_packus_epi16(g16, zero);
+    let b8 = _mm_packus_epi16(b16, zero);
+
+    let mut r_arr = [0u8; 16];
+    let mut g_arr = [0u8; 16];
+    let mut b_arr = [0u8; 16];
+    _mm_storeu_si128(r_arr.as_mut_ptr().cast(), r8);
+    _mm_storeu_si128(g_arr.as_mut_ptr().cast(), g8);
+    _mm_storeu_si128(b_arr.as_mut_ptr().cast(), b8);
+
+    for i in 0..8 {
+        *dst.add(i * 4) = r_arr[i];
+        *dst.add(i * 4 + 1) = g_arr[i];
+        *dst.add(i * 4 + 2) = b_arr[i];
+        *dst.add(i * 4 + 3) = 255;
+    }
 }
 
 // ──────────────────────────────────────────────
