@@ -1841,10 +1841,7 @@ pub fn buf_yuyv_extract_luma(data: &[u8], dest: &mut [u8]) -> Result<(), NokhwaE
         });
     }
 
-    for (chunk, out) in data.chunks_exact(4).zip(dest.chunks_exact_mut(2)) {
-        out[0] = chunk[0]; // Y0
-        out[1] = chunk[2]; // Y1
-    }
+    crate::simd::yuyv_extract_luma_simd(data, dest);
 
     Ok(())
 }
