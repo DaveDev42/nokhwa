@@ -183,7 +183,7 @@ pub trait IntoLuma {
 
 /// Lazy RGB conversion. Call [`materialize()`](Self::materialize) to perform
 /// the actual pixel conversion.
-#[must_use = "conversion is lazy; call .materialize() or .write_to() to perform it"]
+#[must_use = "conversion is lazy; call a consuming method (.materialize(), .write_to(), etc.) to perform it"]
 pub struct RgbConversion {
     buffer: Buffer,
 }
@@ -242,7 +242,7 @@ impl RgbConversion {
 
 /// Lazy RGBA conversion. Call [`materialize()`](Self::materialize) to perform
 /// the actual pixel conversion.
-#[must_use = "conversion is lazy; call .materialize() or .write_to() to perform it"]
+#[must_use = "conversion is lazy; call a consuming method (.materialize(), .write_to(), etc.) to perform it"]
 pub struct RgbaConversion {
     buffer: Buffer,
 }
@@ -282,7 +282,7 @@ impl RgbaConversion {
 
 /// Lazy luma (grayscale) conversion. Call [`materialize()`](Self::materialize)
 /// to perform the actual pixel conversion.
-#[must_use = "conversion is lazy; call .materialize() or .write_to() to perform it"]
+#[must_use = "conversion is lazy; call a consuming method (.materialize(), .write_to(), etc.) to perform it"]
 pub struct LumaConversion {
     buffer: Buffer,
 }
