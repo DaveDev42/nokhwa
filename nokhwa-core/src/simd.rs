@@ -170,12 +170,8 @@ fn yuyv_to_rgb_scalar(src: &[u8], dst: &mut [u8]) {
         let px0 = yuyv444_to_rgb(luma0, cb, cr);
         let px1 = yuyv444_to_rgb(luma1, cb, cr);
 
-        out[0] = px0[0];
-        out[1] = px0[1];
-        out[2] = px0[2];
-        out[3] = px1[0];
-        out[4] = px1[1];
-        out[5] = px1[2];
+        out[..3].copy_from_slice(&px0);
+        out[3..6].copy_from_slice(&px1);
     }
 }
 

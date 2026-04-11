@@ -679,6 +679,61 @@ fn decode_nv12_to_rgba_known_values() {
 }
 
 #[test]
+fn buf_nv12_to_rgb_4x2_known_values() {
+    use crate::types::buf_nv12_to_rgb;
+    // 4x2 NV12 frame: Y plane = 8 bytes, UV plane = 4 bytes (one UV row, 2 pairs)
+    // Y values vary; U=128, V=128 (neutral chroma) -> RGB ≈ (Y, Y, Y)
+    let nv12: Vec<u8> = vec![
+        // Y plane (4x2)
+        16, 82, 170, 235, // row 0
+        50, 100, 150, 200, // row 1
+        // UV plane (2 pairs for 4x2 block)
+        128, 128, 128, 128,
+    ];
+    let mut out = vec![0u8; 4 * 2 * 3]; // 8 pixels * RGB
+    buf_nv12_to_rgb(Resolution::new(4, 2), &nv12, &mut out, false).unwrap();
+
+    // With neutral chroma (U=V=128), each pixel's RGB channels should be close to each other
+    // and roughly correspond to the Y value (after YUV->RGB conversion)
+    for px in out.chunks_exact(3) {
+        let spread = px.iter().max().unwrap() - px.iter().min().unwrap();
+        assert!(
+            spread <= 2,
+            "Neutral chroma should give near-gray, got {px:?}"
+        );
+    }
+    assert_eq!(out.len(), 24);
+
+    // Spot-check boundary Y values: Y=16 maps to ~0 (clamped), Y=235 maps to ~255
+    let px0_avg = (u16::from(out[0]) + u16::from(out[1]) + u16::from(out[2])) / 3;
+    assert!(px0_avg <= 5, "Y=16 should map near 0, got avg {px0_avg}");
+    let px3_avg = (u16::from(out[9]) + u16::from(out[10]) + u16::from(out[11])) / 3;
+    assert!(
+        px3_avg >= 250,
+        "Y=235 should map near 255, got avg {px3_avg}"
+    );
+}
+
+#[test]
+fn buf_nv12_to_rgba_4x2_known_values() {
+    use crate::types::buf_nv12_to_rgb;
+    let nv12: Vec<u8> = vec![
+        128, 128, 128, 128, // Y plane (4x2)
+        128, 128, 128, 128, // row 1
+        128, 128, 128, 128, // UV plane
+    ];
+    let mut out = vec![0u8; 4 * 2 * 4]; // 8 pixels * RGBA
+    buf_nv12_to_rgb(Resolution::new(4, 2), &nv12, &mut out, true).unwrap();
+
+    for px in out.chunks_exact(4) {
+        for &ch in &px[..3] {
+            assert!((120..=136).contains(&ch), "Expected ~128 but got {ch}");
+        }
+        assert_eq!(px[3], 255, "Alpha should be 255");
+    }
+}
+
+#[test]
 fn decode_yuyv_to_luma_a_correctness() {
     // YUYV [Y0=100, U=128, Y1=200, V=128] -> 2 LumaA pixels
     // With neutral chroma, luma ≈ Y, alpha = 255
