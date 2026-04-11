@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0](https://github.com/DaveDev42/nokhwa/compare/v0.11.1...v1.0.0) (2026-04-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* type-safe decode API (0.12.0) ([#85](https://github.com/DaveDev42/nokhwa/issues/85))
+
+### Features
+
+* type-safe decode API (0.12.0) ([#85](https://github.com/DaveDev42/nokhwa/issues/85)) ([6874fb6](https://github.com/DaveDev42/nokhwa/commit/6874fb6b20cdd282a487977f345653df88a87408))
+
 ## 0.12.0 (unreleased)
 
 ### Breaking Changes
