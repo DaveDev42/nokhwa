@@ -10,7 +10,7 @@
   - [ ] Robustness against malformed input (e.g. malformed MJPEG)
 
 ## Low Priority
-(None)
+- [x] ~~Add structured logging behind optional `logging` feature flag (replace `dbg!()`/`eprintln!()` with `log` crate)~~
 
 ## Performance
 (None)

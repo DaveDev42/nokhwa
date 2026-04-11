@@ -30,6 +30,7 @@
 
 ## Features
 - Added convenience constructors `Camera::new_with_highest_resolution()` and `Camera::new_with_highest_framerate()`
+- Added optional structured logging behind `logging` feature flag — replaces `dbg!()`/`eprintln!()` with `log` crate (`log::warn!`, `log::error!`)
 - Added sensor capture timestamp support across all backends (cherry-picked from upstream l1npengtul/nokhwa#234)
   - `Buffer::with_timestamp()` constructor and `Buffer::capture_timestamp()` accessor
   - macOS: `CMSampleBufferGetPresentationTimeStamp` → wall clock conversion

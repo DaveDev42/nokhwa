@@ -442,8 +442,9 @@ fn camera_frame_thread_loop(
                 // Invoke callback (only lock held is the callback mutex)
                 let mut cb = match frame_callback.lock() {
                     Ok(cb) => cb,
-                    Err(e) => {
-                        eprintln!("nokhwa: frame_callback mutex poisoned: {e}");
+                    Err(_e) => {
+                        #[cfg(feature = "logging")]
+                        log::error!("frame_callback mutex poisoned: {_e}");
                         continue;
                     }
                 };
