@@ -4,9 +4,9 @@
 
 #![cfg(feature = "device-test")]
 
-use nokhwa::pixel_format::RgbFormat;
 use nokhwa::utils::*;
 use nokhwa::{native_api_backend, query, Buffer, Camera};
+use nokhwa_core::format_types::Mjpeg;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -40,8 +40,8 @@ fn open_camera_and_capture_frame() {
         eprintln!("SKIP: no camera device found");
         return;
     };
-    let format = RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
-    let mut camera = Camera::new(idx, format).expect("failed to open camera");
+    let mut camera = Camera::open::<Mjpeg>(idx, RequestedFormatType::AbsoluteHighestFrameRate)
+        .expect("failed to open camera");
 
     camera.open_stream().expect("failed to open stream");
     assert!(camera.is_stream_open());
@@ -60,8 +60,8 @@ fn query_compatible_formats() {
         eprintln!("SKIP: no camera device found");
         return;
     };
-    let format = RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
-    let mut camera = Camera::new(idx, format).expect("failed to open camera");
+    let mut camera = Camera::open::<Mjpeg>(idx, RequestedFormatType::AbsoluteHighestFrameRate)
+        .expect("failed to open camera");
 
     let formats = camera
         .compatible_camera_formats()
@@ -85,7 +85,7 @@ fn callback_camera_receives_frames() {
     let received = Arc::new(AtomicBool::new(false));
     let received_clone = received.clone();
 
-    let format = RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
+    let format = RequestedFormat::new::<Mjpeg>(RequestedFormatType::AbsoluteHighestFrameRate);
     let mut camera = nokhwa::CallbackCamera::new(idx, format, move |_buffer| {
         received_clone.store(true, Ordering::SeqCst);
     })

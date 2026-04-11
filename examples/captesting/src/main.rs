@@ -1,18 +1,18 @@
-use nokhwa::pixel_format::RgbFormat;
-use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
+use nokhwa::utils::{CameraIndex, RequestedFormatType};
 use nokhwa::Camera;
+use nokhwa_core::format_types::Mjpeg;
+use nokhwa_core::frame::IntoRgb;
 
 fn main() {
-    let index: CameraIndex = CameraIndex::Index(50);
-    let requested: RequestedFormat<'_> =
-        RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution);
-    let mut camera = Camera::new(index, requested).unwrap();
+    let index = CameraIndex::Index(50);
+    let mut camera =
+        Camera::open::<Mjpeg>(index, RequestedFormatType::AbsoluteHighestResolution).unwrap();
     println!("{}", camera.camera_format());
     camera.open_stream().unwrap();
-    let frame = camera.frame().unwrap();
+    let frame = camera.frame_typed().unwrap();
     camera.stop_stream().unwrap();
-    let decoded = frame.decode_image::<RgbFormat>().unwrap();
+    let decoded = frame.into_rgb().materialize().unwrap();
     decoded
         .save_with_format("turtle.jpeg", image::ImageFormat::Jpeg)
-        .unwrap()
+        .unwrap();
 }

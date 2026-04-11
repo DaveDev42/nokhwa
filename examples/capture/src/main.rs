@@ -25,17 +25,16 @@ use ggez::{
     graphics::{Canvas, Image},
     Context, ContextBuilder, GameError,
 };
-use nokhwa::pixel_format::RgbFormat;
 use nokhwa::{
-    native_api_backend,
-    pixel_format::RgbAFormat,
-    query,
+    native_api_backend, query,
     utils::{
-        frame_formats, yuyv422_predicted_size, CameraFormat, CameraIndex, FrameFormat,
-        RequestedFormat, RequestedFormatType, Resolution,
+        frame_formats, CameraFormat, CameraIndex, FrameFormat, RequestedFormat,
+        RequestedFormatType, Resolution,
     },
     Buffer, CallbackCamera, Camera,
 };
+use nokhwa_core::format_types::Mjpeg;
+use nokhwa_core::frame::{Frame, IntoRgb, IntoRgba};
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -55,11 +54,12 @@ impl EventHandler<GameError> for CaptureState {
             .receiver
             .recv()
             .map_err(|why| GameError::RenderError(why.to_string()))?;
-        self.buffer
-            .resize(yuyv422_predicted_size(buffer.buffer().len(), true), 0);
-        buffer
-            .decode_image_to_buffer::<RgbAFormat>(&mut self.buffer)
+        let frame: Frame<Mjpeg> = Frame::new(buffer);
+        let image = frame
+            .into_rgba()
+            .materialize()
             .map_err(|why| GameError::RenderError(why.to_string()))?;
+        self.buffer = image.into_raw();
         let image = Image::from_pixels(
             ctx,
             &self.buffer,
@@ -158,10 +158,10 @@ impl FromStr for RequestedCliFormat {
 impl RequestedCliFormat {
     pub fn make_requested(self) -> Option<RequestedFormat<'static>> {
         match self.format_type.as_str() {
-            "AbsoluteHighestResolution" => Some(RequestedFormat::new::<RgbFormat>(
+            "AbsoluteHighestResolution" => Some(RequestedFormat::new::<Mjpeg>(
                 RequestedFormatType::AbsoluteHighestResolution,
             )),
-            "AbsoluteHighestFrameRate" => Some(RequestedFormat::new::<RgbFormat>(
+            "AbsoluteHighestFrameRate" => Some(RequestedFormat::new::<Mjpeg>(
                 RequestedFormatType::AbsoluteHighestFrameRate,
             )),
             "HighestResolution" => {
@@ -171,14 +171,14 @@ impl RequestedCliFormat {
                 let y = values[1].parse::<u32>().unwrap();
                 let resolution = Resolution::new(x, y);
 
-                Some(RequestedFormat::new::<RgbFormat>(
+                Some(RequestedFormat::new::<Mjpeg>(
                     RequestedFormatType::HighestResolution(resolution),
                 ))
             }
             "HighestFrameRate" => {
                 let fps = self.format_option.unwrap().parse::<u32>().unwrap();
 
-                Some(RequestedFormat::new::<RgbFormat>(
+                Some(RequestedFormat::new::<Mjpeg>(
                     RequestedFormatType::HighestFrameRate(fps),
                 ))
             }
@@ -192,7 +192,7 @@ impl RequestedCliFormat {
 
                 let resolution = Resolution::new(x, y);
                 let camera_format = CameraFormat::new(resolution, fourcc, fps);
-                Some(RequestedFormat::new::<RgbFormat>(
+                Some(RequestedFormat::new::<Mjpeg>(
                     RequestedFormatType::Exact(camera_format),
                 ))
             }
@@ -206,11 +206,11 @@ impl RequestedCliFormat {
 
                 let resolution = Resolution::new(x, y);
                 let camera_format = CameraFormat::new(resolution, fourcc, fps);
-                Some(RequestedFormat::new::<RgbFormat>(
+                Some(RequestedFormat::new::<Mjpeg>(
                     RequestedFormatType::Closest(camera_format),
                 ))
             }
-            "None" => Some(RequestedFormat::new::<RgbFormat>(RequestedFormatType::None)),
+            "None" => Some(RequestedFormat::new::<Mjpeg>(RequestedFormatType::None)),
             _ => None,
         }
     }
@@ -304,7 +304,7 @@ fn nokhwa_main() {
             };
             let mut camera = Camera::new(
                 index,
-                RequestedFormat::new::<RgbFormat>(RequestedFormatType::None),
+                RequestedFormat::new::<Mjpeg>(RequestedFormatType::None),
             )
             .unwrap();
             match kind {
@@ -386,7 +386,8 @@ fn nokhwa_main() {
             let frame = camera.frame().unwrap();
             camera.stop_stream().unwrap();
             println!("Captured Single Frame of {}", frame.buffer().len());
-            let decoded = frame.decode_image::<RgbFormat>().unwrap();
+            let typed: Frame<Mjpeg> = Frame::new(frame);
+            let decoded = typed.into_rgb().materialize().unwrap();
             println!("DecodedFrame of {}", decoded.len());
 
             if let Some(path) = save {

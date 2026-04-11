@@ -19,6 +19,10 @@
 * **Direct Y-channel extraction**: `buf_yuyv_extract_luma()` and `buf_nv12_extract_luma()` extract luminance without intermediate RGB conversion.
 * **`Camera::frame_typed()`**: Returns `Frame<F>` for type-checked frame capture.
 
+### Bug Fixes
+
+* **wgpu**: Fixed `frame_texture()` writing to `mip_level: 1` instead of `mip_level: 0` (base level).
+
 ## [0.11.1](https://github.com/DaveDev42/nokhwa/compare/v0.11.0...v0.11.1) (2026-04-11)
 
 
