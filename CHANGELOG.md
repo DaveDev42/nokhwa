@@ -20,6 +20,8 @@
 - Removed unnecessary `Vec::default()` allocations in CallbackCamera
 
 ## Refactoring
+- Renamed `camera_controls_string()` → `camera_controls_by_name()` and `camera_controls_known_camera_controls()` → `camera_controls_by_id()` on `Camera` and `CallbackCamera` (old names kept as `#[deprecated]` aliases)
+- Fixed 'fufill' → 'fulfill' typo in `set_camera_request()` error message
 - **Restructured error types**: replaced `String`-based variants (`GeneralError`, `OpenStreamError`, `ReadFrameError`, `StreamShutdownError`) with structured fields (`backend: Option<ApiBackend>`, `format: Option<FrameFormat>`). Binding crates now populate context. Added helper constructors for backwards compatibility.
 - Fixed `UnitializedError` typo → `UninitializedError`
 - **macOS: migrated from `objc`/`cocoa-foundation` to `objc2`/`block2`** — eliminated all 186 deprecation warnings, reduced dependencies from 6 to 3
@@ -27,6 +29,8 @@
 - Fixed UB: `from_raw_parts_mut` → `from_raw_parts` in CVPixelBuffer callback
 
 ## Features
+- Added convenience constructors `Camera::new_with_highest_resolution()` and `Camera::new_with_highest_framerate()`
+- Added optional structured logging behind `logging` feature flag — replaces `dbg!()`/`eprintln!()` with `log` crate (`log::warn!`, `log::error!`)
 - Added sensor capture timestamp support across all backends (cherry-picked from upstream l1npengtul/nokhwa#234)
   - `Buffer::with_timestamp()` constructor and `Buffer::capture_timestamp()` accessor
   - macOS: `CMSampleBufferGetPresentationTimeStamp` → wall clock conversion
@@ -63,7 +67,9 @@
 ## Cleanup
 - Replaced `flume` crate with `std::sync::mpsc` to reduce external dependencies (all channel usages migrated in library and examples)
 - Replaced `core-media-sys` / `core-video-sys` crate dependencies with direct FFI declarations in `ffi.rs`, eliminating legacy `objc 0.2` and `metal 0.18` transitive dependencies
-- Removed unused dependencies: `usb_enumeration`, `regex`, `cocoa-foundation`, `core-foundation`, `once_cell`
+- Removed unused dependencies from nokhwa-core: `usb_enumeration`, `regex`, `cocoa-foundation`, `core-foundation`, `once_cell`
+- Replaced `once_cell::sync::Lazy` with `std::sync::LazyLock` in Windows bindings, removing `once_cell` dependency from `nokhwa-bindings-windows-msmf`
+- Removed unused `once_cell` dependency from `nokhwactl` example
 - Removed dead code: empty `VirtualBackendTrait`, commented-out module declarations, obsolete code blocks
 - Removed obsolete `make-npm.sh` (JS bindings removed in 0.10.0)
 

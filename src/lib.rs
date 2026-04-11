@@ -24,6 +24,13 @@
 //! Nokhwa provides a unified [`Camera`] API that abstracts over platform-specific
 //! backends so you can write camera code once and run it on Linux, macOS, and Windows.
 //!
+//! The recommended default feature to enable is `input-native` (also available as `input-auto`).
+//! The library will not work without at least one `input-*` feature enabled.
+//!
+//! Enable the `logging` feature to get diagnostic messages (e.g. backend auto-detection failures)
+//! via the [`log`](https://docs.rs/log) crate. A `log` backend such as `env_logger` or
+//! `tracing-log` is required to see the output.
+//!
 //! ## Quick start
 //!
 //! ```no_run
@@ -82,6 +89,19 @@
 //!
 //! The raw backend structs are available in [`backends`] if you need
 //! platform-specific functionality beyond what [`Camera`] exposes.
+
+// Ensure at least one input backend is enabled (skip during docs-only builds).
+#[cfg(not(feature = "docs-only"))]
+#[cfg(not(any(
+    feature = "input-avfoundation",
+    feature = "input-v4l",
+    feature = "input-msmf",
+    feature = "input-opencv"
+)))]
+compile_error!(
+    "nokhwa requires at least one input-* feature to be enabled \
+     (e.g. input-native / input-auto, input-avfoundation, input-v4l, input-msmf, input-opencv)"
+);
 
 /// Raw access to each of Nokhwa's backends.
 pub mod backends;

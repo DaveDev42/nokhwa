@@ -20,7 +20,7 @@ use nokhwa_core::types::RequestedFormatType;
 use nokhwa_core::{
     buffer::Buffer,
     error::NokhwaError,
-    pixel_format::FormatDecoder,
+    pixel_format::{FormatDecoder, RgbFormat},
     traits::CaptureBackendTrait,
     types::{
         ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo, ControlValueSetter,
@@ -137,6 +137,30 @@ impl Camera {
         Self { idx, api, device }
     }
 
+    /// Create a new camera from an `index`, automatically selecting the highest available resolution.
+    ///
+    /// Uses [`RgbFormat`] as the default pixel format decoder.
+    /// # Errors
+    /// This will error if you either have a bad platform configuration (e.g. `input-v4l` but not on linux) or the backend cannot create the camera (e.g. permission denied).
+    pub fn new_with_highest_resolution(index: CameraIndex) -> Result<Self, NokhwaError> {
+        Self::new(
+            index,
+            RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution),
+        )
+    }
+
+    /// Create a new camera from an `index`, automatically selecting the highest available frame rate.
+    ///
+    /// Uses [`RgbFormat`] as the default pixel format decoder.
+    /// # Errors
+    /// This will error if you either have a bad platform configuration (e.g. `input-v4l` but not on linux) or the backend cannot create the camera (e.g. permission denied).
+    pub fn new_with_highest_framerate(index: CameraIndex) -> Result<Self, NokhwaError> {
+        Self::new(
+            index,
+            RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate),
+        )
+    }
+
     /// Gets the current Camera's index.
     #[must_use]
     pub fn index(&self) -> &CameraIndex {
@@ -221,7 +245,7 @@ impl Camera {
             .fulfill(self.device.compatible_camera_formats()?.as_slice())
             .ok_or(NokhwaError::GetPropertyError {
                 property: "Compatible Camera Format by request".to_string(),
-                error: "Failed to fufill".to_string(),
+                error: "Failed to fulfill".to_string(),
             })?;
         self.device.set_camera_format(new_format)?;
         Ok(new_format)
@@ -311,7 +335,7 @@ impl Camera {
             .collect())
     }
 
-    /// Gets the current supported list of [`CameraControl`]s keyed by its name as a `String`.
+    /// Gets the current supported list of [`CameraControl`]s.
     /// # Errors
     /// If the list cannot be collected, this will error. This can be treated as a "nothing supported".
     pub fn camera_controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
@@ -324,46 +348,50 @@ impl Camera {
         Ok(controls)
     }
 
-    /// Gets the current supported list of [`CameraControl`]s keyed by its name as a `String`.
+    /// Gets the current supported list of [`CameraControl`]s keyed by control name.
     /// # Errors
     /// If the list cannot be collected, this will error. This can be treated as a "nothing supported".
-    pub fn camera_controls_string(&self) -> Result<HashMap<String, CameraControl>, NokhwaError> {
+    pub fn camera_controls_by_name(&self) -> Result<HashMap<String, CameraControl>, NokhwaError> {
         let known_controls = self.supported_camera_controls()?;
-        let maybe_camera_controls = known_controls
+        let control_map = known_controls
             .iter()
-            .map(|x| (x.to_string(), self.camera_control(*x)))
-            .filter(|(_, x)| x.is_ok())
-            .map(|(c, x)| (c, Result::unwrap(x)))
-            .collect::<Vec<(String, CameraControl)>>();
-        let mut control_map = HashMap::with_capacity(maybe_camera_controls.len());
-
-        for (kc, cc) in maybe_camera_controls {
-            control_map.insert(kc, cc);
-        }
+            .filter_map(|x| self.camera_control(*x).ok().map(|cc| (x.to_string(), cc)))
+            .collect::<HashMap<String, CameraControl>>();
 
         Ok(control_map)
     }
 
-    /// Gets the current supported list of [`CameraControl`]s keyed by its name as a `String`.
+    /// Gets the current supported list of [`CameraControl`]s keyed by [`KnownCameraControl`].
     /// # Errors
     /// If the list cannot be collected, this will error. This can be treated as a "nothing supported".
-    pub fn camera_controls_known_camera_controls(
+    pub fn camera_controls_by_id(
         &self,
     ) -> Result<HashMap<KnownCameraControl, CameraControl>, NokhwaError> {
         let known_controls = self.supported_camera_controls()?;
-        let maybe_camera_controls = known_controls
+        let control_map = known_controls
             .iter()
-            .map(|x| (*x, self.camera_control(*x)))
-            .filter(|(_, x)| x.is_ok())
-            .map(|(c, x)| (c, Result::unwrap(x)))
-            .collect::<Vec<(KnownCameraControl, CameraControl)>>();
-        let mut control_map = HashMap::with_capacity(maybe_camera_controls.len());
-
-        for (kc, cc) in maybe_camera_controls {
-            control_map.insert(kc, cc);
-        }
+            .filter_map(|x| self.camera_control(*x).ok().map(|cc| (*x, cc)))
+            .collect::<HashMap<KnownCameraControl, CameraControl>>();
 
         Ok(control_map)
+    }
+
+    /// Use [`camera_controls_by_name()`](Camera::camera_controls_by_name) instead.
+    /// # Errors
+    /// See [`camera_controls_by_name()`](Camera::camera_controls_by_name).
+    #[deprecated(since = "0.11.0", note = "renamed to camera_controls_by_name()")]
+    pub fn camera_controls_string(&self) -> Result<HashMap<String, CameraControl>, NokhwaError> {
+        self.camera_controls_by_name()
+    }
+
+    /// Use [`camera_controls_by_id()`](Camera::camera_controls_by_id) instead.
+    /// # Errors
+    /// See [`camera_controls_by_id()`](Camera::camera_controls_by_id).
+    #[deprecated(since = "0.11.0", note = "renamed to camera_controls_by_id()")]
+    pub fn camera_controls_known_camera_controls(
+        &self,
+    ) -> Result<HashMap<KnownCameraControl, CameraControl>, NokhwaError> {
+        self.camera_controls_by_id()
     }
 
     /// Gets the value of [`KnownCameraControl`].

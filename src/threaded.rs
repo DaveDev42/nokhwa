@@ -224,7 +224,7 @@ impl CallbackCamera {
         self.camera.lock().supported_camera_controls()
     }
 
-    /// Gets the current supported list of [`CameraControl`]s keyed by its name as a `String`.
+    /// Gets the current supported list of [`CameraControl`]s.
     /// # Errors
     /// If the list cannot be collected, this will error. This can be treated as a "nothing supported".
     pub fn camera_controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
@@ -237,10 +237,10 @@ impl CallbackCamera {
         Ok(maybe_camera_controls)
     }
 
-    /// Gets the current supported list of [`CameraControl`]s keyed by its name as a `String`.
+    /// Gets the current supported list of [`CameraControl`]s keyed by control name.
     /// # Errors
     /// If the list cannot be collected, this will error. This can be treated as a "nothing supported".
-    pub fn camera_controls_string(&self) -> Result<HashMap<String, CameraControl>, NokhwaError> {
+    pub fn camera_controls_by_name(&self) -> Result<HashMap<String, CameraControl>, NokhwaError> {
         let known_controls = self.supported_camera_controls()?;
         let control_map = known_controls
             .iter()
@@ -250,10 +250,10 @@ impl CallbackCamera {
         Ok(control_map)
     }
 
-    /// Gets the current supported list of [`CameraControl`]s keyed by its name as a `String`.
+    /// Gets the current supported list of [`CameraControl`]s keyed by [`KnownCameraControl`].
     /// # Errors
     /// If the list cannot be collected, this will error. This can be treated as a "nothing supported".
-    pub fn camera_controls_known_camera_controls(
+    pub fn camera_controls_by_id(
         &self,
     ) -> Result<HashMap<KnownCameraControl, CameraControl>, NokhwaError> {
         let known_controls = self.supported_camera_controls()?;
@@ -263,6 +263,24 @@ impl CallbackCamera {
             .collect::<HashMap<KnownCameraControl, CameraControl>>();
 
         Ok(control_map)
+    }
+
+    /// Use [`camera_controls_by_name()`](CallbackCamera::camera_controls_by_name) instead.
+    /// # Errors
+    /// See [`camera_controls_by_name()`](CallbackCamera::camera_controls_by_name).
+    #[deprecated(since = "0.11.0", note = "renamed to camera_controls_by_name()")]
+    pub fn camera_controls_string(&self) -> Result<HashMap<String, CameraControl>, NokhwaError> {
+        self.camera_controls_by_name()
+    }
+
+    /// Use [`camera_controls_by_id()`](CallbackCamera::camera_controls_by_id) instead.
+    /// # Errors
+    /// See [`camera_controls_by_id()`](CallbackCamera::camera_controls_by_id).
+    #[deprecated(since = "0.11.0", note = "renamed to camera_controls_by_id()")]
+    pub fn camera_controls_known_camera_controls(
+        &self,
+    ) -> Result<HashMap<KnownCameraControl, CameraControl>, NokhwaError> {
+        self.camera_controls_by_id()
     }
 
     /// Gets the value of [`KnownCameraControl`].
@@ -424,8 +442,9 @@ fn camera_frame_thread_loop(
                 // Invoke callback (only lock held is the callback mutex)
                 let mut cb = match frame_callback.lock() {
                     Ok(cb) => cb,
-                    Err(e) => {
-                        eprintln!("nokhwa: frame_callback mutex poisoned: {e}");
+                    Err(_e) => {
+                        #[cfg(feature = "logging")]
+                        log::error!("frame_callback mutex poisoned: {_e}");
                         continue;
                     }
                 };

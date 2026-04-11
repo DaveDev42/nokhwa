@@ -13,7 +13,7 @@
 (None)
 
 ## Performance
-- [ ] Explore `unsafe get_unchecked` for YUYV scalar inner loops — NV12 done in #70, YUYV scalar fallback path still uses safe indexing.
+(None)
 
 ## Backlog
 - [ ] Re-implement GStreamer backend (cross-platform, previously 839 lines)

@@ -53,7 +53,8 @@ pub fn query(api: ApiBackend) -> Result<Vec<CameraInfo>, NokhwaError> {
                     } else if cfg!(feature = "input-opencv") {
                         query(ApiBackend::OpenCv)
                     } else {
-                        dbg!("Error: No suitable Backends available. Perhaps you meant to enable one of the backends such as `input-v4l`? (Please read the docs.)");
+                        #[cfg(feature = "logging")]
+                        log::warn!("No suitable backends available on Linux. Perhaps you meant to enable one of the backends such as `input-v4l`? (Please read the docs.)");
                         Err(NokhwaError::UnsupportedOperationError(ApiBackend::Auto))
                     }
                 }
@@ -63,7 +64,8 @@ pub fn query(api: ApiBackend) -> Result<Vec<CameraInfo>, NokhwaError> {
                     } else if cfg!(feature = "input-opencv") {
                         query(ApiBackend::OpenCv)
                     } else {
-                        dbg!("Error: No suitable Backends available. Perhaps you meant to enable one of the backends such as `input-msmf`? (Please read the docs.)");
+                        #[cfg(feature = "logging")]
+                        log::warn!("No suitable backends available on Windows. Perhaps you meant to enable one of the backends such as `input-msmf`? (Please read the docs.)");
                         Err(NokhwaError::UnsupportedOperationError(ApiBackend::Auto))
                     }
                 }
@@ -73,7 +75,8 @@ pub fn query(api: ApiBackend) -> Result<Vec<CameraInfo>, NokhwaError> {
                     } else if cfg!(feature = "input-opencv") {
                         query(ApiBackend::OpenCv)
                     } else {
-                        dbg!("Error: No suitable Backends available. Perhaps you meant to enable one of the backends such as `input-avfoundation`? (Please read the docs.)");
+                        #[cfg(feature = "logging")]
+                        log::warn!("No suitable backends available on macOS. Perhaps you meant to enable one of the backends such as `input-avfoundation`? (Please read the docs.)");
                         Err(NokhwaError::UnsupportedOperationError(ApiBackend::Auto))
                     }
                 }
@@ -81,12 +84,16 @@ pub fn query(api: ApiBackend) -> Result<Vec<CameraInfo>, NokhwaError> {
                     if cfg!(feature = "input-avfoundation") {
                         query(ApiBackend::AVFoundation)
                     } else {
-                        dbg!("Error: No suitable Backends available. Perhaps you meant to enable one of the backends such as `input-avfoundation`? (Please read the docs.)");
+                        #[cfg(feature = "logging")]
+                        log::warn!("No suitable backends available on iOS. Perhaps you meant to enable one of the backends such as `input-avfoundation`? (Please read the docs.)");
                         Err(NokhwaError::UnsupportedOperationError(ApiBackend::Auto))
                     }
                 }
                 _ => {
-                    dbg!("Error: No suitable Backends available. You are on an unsupported platform.");
+                    #[cfg(feature = "logging")]
+                    log::warn!(
+                        "No suitable backends available. You are on an unsupported platform."
+                    );
                     Err(NokhwaError::NotImplementedError("Bad Platform".to_string()))
                 }
             }
