@@ -13,13 +13,14 @@ use nokhwa_core::{
 use objc2::rc::Retained;
 use objc2::Message;
 use objc2_av_foundation::{
-    AVCaptureDevice, AVCaptureDeviceFormat, AVCaptureExposureDurationCurrent,
-    AVCaptureExposureMode, AVCaptureExposureTargetBiasCurrent, AVCaptureFocusMode,
-    AVCaptureISOCurrent, AVCaptureTorchMode, AVCaptureWhiteBalanceGains, AVCaptureWhiteBalanceMode,
-    AVFrameRateRange,
+    AVCaptureDevice, AVCaptureDeviceFormat, AVCaptureDevicePosition,
+    AVCaptureExposureDurationCurrent, AVCaptureExposureMode, AVCaptureExposureTargetBiasCurrent,
+    AVCaptureFocusMode, AVCaptureISOCurrent, AVCaptureTorchMode, AVCaptureWhiteBalanceGains,
+    AVCaptureWhiteBalanceMode, AVFrameRateRange,
 };
 use objc2_core_foundation::{CGFloat, CGPoint};
 use objc2_core_media::CMTime;
+use objc2_foundation::NSArray;
 use std::{cmp::Ordering, collections::BTreeMap, ffi::c_float};
 
 pub fn query_avfoundation() -> Result<Vec<CameraInfo>, NokhwaError> {
@@ -33,18 +34,418 @@ pub fn query_avfoundation() -> Result<Vec<CameraInfo>, NokhwaError> {
     Ok(discovery_session_devices(&session))
 }
 
+// -- Safe wrappers for AVCaptureDevice read-only property accessors --
+//
+// objc2-av-foundation 0.3.x marks ALL methods as `unsafe` even when they are
+// simple read-only property getters with no preconditions beyond having a valid
+// receiver.  These thin wrappers eliminate the need for `unsafe` at every call
+// site while documenting why the call is sound.
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_localized_name(device: &AVCaptureDevice) -> Retained<objc2_foundation::NSString> {
+    unsafe { device.localizedName() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_manufacturer(device: &AVCaptureDevice) -> Retained<objc2_foundation::NSString> {
+    unsafe { device.manufacturer() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_position(device: &AVCaptureDevice) -> AVCaptureDevicePosition {
+    unsafe { device.position() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_lens_aperture(device: &AVCaptureDevice) -> c_float {
+    unsafe { device.lensAperture() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_device_type(
+    device: &AVCaptureDevice,
+) -> Retained<objc2_av_foundation::AVCaptureDeviceType> {
+    unsafe { device.deviceType() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_model_id(device: &AVCaptureDevice) -> Retained<objc2_foundation::NSString> {
+    unsafe { device.modelID() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_unique_id(device: &AVCaptureDevice) -> Retained<objc2_foundation::NSString> {
+    unsafe { device.uniqueID() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_formats(device: &AVCaptureDevice) -> Retained<NSArray<AVCaptureDeviceFormat>> {
+    unsafe { device.formats() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_active_format(device: &AVCaptureDevice) -> Retained<AVCaptureDeviceFormat> {
+    unsafe { device.activeFormat() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_is_in_use_by_another_application(device: &AVCaptureDevice) -> bool {
+    unsafe { device.isInUseByAnotherApplication() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_is_suspended(device: &AVCaptureDevice) -> bool {
+    unsafe { device.isSuspended() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_focus_mode(device: &AVCaptureDevice) -> AVCaptureFocusMode {
+    unsafe { device.focusMode() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_is_focus_mode_supported(device: &AVCaptureDevice, mode: AVCaptureFocusMode) -> bool {
+    unsafe { device.isFocusModeSupported(mode) }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_is_focus_poi_supported(device: &AVCaptureDevice) -> bool {
+    unsafe { device.isFocusPointOfInterestSupported() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_focus_poi(device: &AVCaptureDevice) -> CGPoint {
+    unsafe { device.focusPointOfInterest() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_is_locking_focus_with_custom_lens_position_supported(device: &AVCaptureDevice) -> bool {
+    unsafe { device.isLockingFocusWithCustomLensPositionSupported() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_lens_position(device: &AVCaptureDevice) -> c_float {
+    unsafe { device.lensPosition() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_exposure_mode(device: &AVCaptureDevice) -> AVCaptureExposureMode {
+    unsafe { device.exposureMode() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_is_exposure_mode_supported(
+    device: &AVCaptureDevice,
+    mode: AVCaptureExposureMode,
+) -> bool {
+    unsafe { device.isExposureModeSupported(mode) }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_is_exposure_poi_supported(device: &AVCaptureDevice) -> bool {
+    unsafe { device.isExposurePointOfInterestSupported() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_exposure_poi(device: &AVCaptureDevice) -> CGPoint {
+    unsafe { device.exposurePointOfInterest() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_is_face_driven_auto_exposure_enabled(device: &AVCaptureDevice) -> bool {
+    unsafe { device.isFaceDrivenAutoExposureEnabled() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_automatically_adjusts_face_driven_auto_exposure(device: &AVCaptureDevice) -> bool {
+    unsafe { device.automaticallyAdjustsFaceDrivenAutoExposureEnabled() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_exposure_target_bias(device: &AVCaptureDevice) -> c_float {
+    unsafe { device.exposureTargetBias() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_min_exposure_target_bias(device: &AVCaptureDevice) -> c_float {
+    unsafe { device.minExposureTargetBias() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_max_exposure_target_bias(device: &AVCaptureDevice) -> c_float {
+    unsafe { device.maxExposureTargetBias() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_exposure_duration(device: &AVCaptureDevice) -> CMTime {
+    unsafe { device.exposureDuration() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_iso(device: &AVCaptureDevice) -> c_float {
+    unsafe { device.ISO() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_white_balance_mode(device: &AVCaptureDevice) -> AVCaptureWhiteBalanceMode {
+    unsafe { device.whiteBalanceMode() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_is_white_balance_mode_supported(
+    device: &AVCaptureDevice,
+    mode: AVCaptureWhiteBalanceMode,
+) -> bool {
+    unsafe { device.isWhiteBalanceModeSupported(mode) }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_white_balance_gains(device: &AVCaptureDevice) -> AVCaptureWhiteBalanceGains {
+    unsafe { device.deviceWhiteBalanceGains() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_gray_world_white_balance_gains(device: &AVCaptureDevice) -> AVCaptureWhiteBalanceGains {
+    unsafe { device.grayWorldDeviceWhiteBalanceGains() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_max_white_balance_gain(device: &AVCaptureDevice) -> c_float {
+    unsafe { device.maxWhiteBalanceGain() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_is_locking_white_balance_with_custom_gains_supported(device: &AVCaptureDevice) -> bool {
+    unsafe { device.isLockingWhiteBalanceWithCustomDeviceGainsSupported() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_is_torch_available(device: &AVCaptureDevice) -> bool {
+    unsafe { device.isTorchAvailable() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_is_torch_mode_supported(device: &AVCaptureDevice, mode: AVCaptureTorchMode) -> bool {
+    unsafe { device.isTorchModeSupported(mode) }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_torch_mode(device: &AVCaptureDevice) -> AVCaptureTorchMode {
+    unsafe { device.torchMode() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_is_low_light_boost_supported(device: &AVCaptureDevice) -> bool {
+    unsafe { device.isLowLightBoostSupported() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_is_low_light_boost_enabled(device: &AVCaptureDevice) -> bool {
+    unsafe { device.isLowLightBoostEnabled() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_video_zoom_factor(device: &AVCaptureDevice) -> CGFloat {
+    unsafe { device.videoZoomFactor() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_min_available_video_zoom_factor(device: &AVCaptureDevice) -> CGFloat {
+    unsafe { device.minAvailableVideoZoomFactor() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_max_available_video_zoom_factor(device: &AVCaptureDevice) -> CGFloat {
+    unsafe { device.maxAvailableVideoZoomFactor() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_is_geometric_distortion_correction_supported(device: &AVCaptureDevice) -> bool {
+    unsafe { device.isGeometricDistortionCorrectionSupported() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_is_geometric_distortion_correction_enabled(device: &AVCaptureDevice) -> bool {
+    unsafe { device.isGeometricDistortionCorrectionEnabled() }
+}
+
+/// SAFETY: `deviceWithUniqueID:` is a class method that returns nil for unknown IDs;
+/// caller handles the `None` case.
+fn device_with_unique_id(id: &objc2_foundation::NSString) -> Option<Retained<AVCaptureDevice>> {
+    unsafe { AVCaptureDevice::deviceWithUniqueID(id) }
+}
+
+// -- Safe wrappers for AVCaptureDevice mutating operations --
+// These require the device to be locked for configuration first.
+
+/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+fn device_set_active_format(device: &AVCaptureDevice, format: &AVCaptureDeviceFormat) {
+    unsafe { device.setActiveFormat(format) }
+}
+
+/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+fn device_set_active_video_min_frame_duration(device: &AVCaptureDevice, duration: CMTime) {
+    unsafe { device.setActiveVideoMinFrameDuration(duration) }
+}
+
+/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+fn device_set_active_video_max_frame_duration(device: &AVCaptureDevice, duration: CMTime) {
+    unsafe { device.setActiveVideoMaxFrameDuration(duration) }
+}
+
+/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+fn device_set_focus_mode(device: &AVCaptureDevice, mode: AVCaptureFocusMode) {
+    unsafe { device.setFocusMode(mode) }
+}
+
+/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+fn device_set_focus_poi(device: &AVCaptureDevice, point: CGPoint) {
+    unsafe { device.setFocusPointOfInterest(point) }
+}
+
+/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+fn device_set_focus_mode_locked_with_lens_position(device: &AVCaptureDevice, position: c_float) {
+    unsafe { device.setFocusModeLockedWithLensPosition_completionHandler(position, None) }
+}
+
+/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+fn device_set_exposure_mode(device: &AVCaptureDevice, mode: AVCaptureExposureMode) {
+    unsafe { device.setExposureMode(mode) }
+}
+
+/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+fn device_set_exposure_poi(device: &AVCaptureDevice, point: CGPoint) {
+    unsafe { device.setExposurePointOfInterest(point) }
+}
+
+/// SAFETY: Mutating method on a valid, locked `AVCaptureDevice` reference.
+fn device_set_exposure_custom(device: &AVCaptureDevice, duration: CMTime, iso: c_float) {
+    unsafe { device.setExposureModeCustomWithDuration_ISO_completionHandler(duration, iso, None) }
+}
+
+/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+fn device_set_exposure_target_bias(device: &AVCaptureDevice, bias: c_float) {
+    unsafe { device.setExposureTargetBias_completionHandler(bias, None) }
+}
+
+/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+fn device_set_auto_adjusts_face_driven_auto_exposure(device: &AVCaptureDevice, enabled: bool) {
+    unsafe { device.setAutomaticallyAdjustsFaceDrivenAutoExposureEnabled(enabled) }
+}
+
+/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+fn device_set_white_balance_mode(device: &AVCaptureDevice, mode: AVCaptureWhiteBalanceMode) {
+    unsafe { device.setWhiteBalanceMode(mode) }
+}
+
+/// SAFETY: Mutating method on a valid, locked `AVCaptureDevice` reference.
+fn device_set_white_balance_gains(device: &AVCaptureDevice, gains: AVCaptureWhiteBalanceGains) {
+    unsafe {
+        device.setWhiteBalanceModeLockedWithDeviceWhiteBalanceGains_completionHandler(gains, None)
+    }
+}
+
+/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+fn device_set_auto_low_light_boost(device: &AVCaptureDevice, enabled: bool) {
+    unsafe { device.setAutomaticallyEnablesLowLightBoostWhenAvailable(enabled) }
+}
+
+/// SAFETY: Mutating method on a valid, locked `AVCaptureDevice` reference.
+fn device_ramp_to_video_zoom_factor(device: &AVCaptureDevice, factor: CGFloat, rate: c_float) {
+    unsafe { device.rampToVideoZoomFactor_withRate(factor, rate) }
+}
+
+/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+fn device_set_torch_mode(device: &AVCaptureDevice, mode: AVCaptureTorchMode) {
+    unsafe { device.setTorchMode(mode) }
+}
+
+/// SAFETY: Property setter on a valid, locked `AVCaptureDevice` reference.
+fn device_set_geometric_distortion_correction_enabled(device: &AVCaptureDevice, enabled: bool) {
+    unsafe { device.setGeometricDistortionCorrectionEnabled(enabled) }
+}
+
+/// SAFETY: `lockForConfiguration` is safe to call on a valid `AVCaptureDevice`;
+/// it returns an error rather than causing UB if the device is unavailable.
+fn device_lock_for_configuration(
+    device: &AVCaptureDevice,
+) -> Result<(), Retained<objc2_foundation::NSError>> {
+    unsafe { device.lockForConfiguration() }
+}
+
+/// SAFETY: `unlockForConfiguration` is safe to call after a successful lock.
+fn device_unlock_for_configuration(device: &AVCaptureDevice) {
+    unsafe { device.unlockForConfiguration() }
+}
+
+// -- Safe wrappers for AVCaptureDeviceFormat read-only property accessors --
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
+fn format_media_type(format: &AVCaptureDeviceFormat) -> Retained<objc2_foundation::NSString> {
+    unsafe { format.mediaType() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
+fn format_frame_rate_ranges(format: &AVCaptureDeviceFormat) -> Retained<NSArray<AVFrameRateRange>> {
+    unsafe { format.videoSupportedFrameRateRanges() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
+fn format_description(
+    format: &AVCaptureDeviceFormat,
+) -> Retained<objc2_core_media::CMFormatDescription> {
+    unsafe { format.formatDescription() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
+fn format_min_exposure_duration(format: &AVCaptureDeviceFormat) -> CMTime {
+    unsafe { format.minExposureDuration() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
+fn format_max_exposure_duration(format: &AVCaptureDeviceFormat) -> CMTime {
+    unsafe { format.maxExposureDuration() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
+fn format_min_iso(format: &AVCaptureDeviceFormat) -> c_float {
+    unsafe { format.minISO() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVCaptureDeviceFormat` reference.
+fn format_max_iso(format: &AVCaptureDeviceFormat) -> c_float {
+    unsafe { format.maxISO() }
+}
+
+// -- Safe wrappers for AVFrameRateRange read-only property accessors --
+
+/// SAFETY: Read-only property accessor on a valid `AVFrameRateRange` reference.
+fn range_min_frame_rate(range: &AVFrameRateRange) -> f64 {
+    unsafe { range.minFrameRate() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVFrameRateRange` reference.
+fn range_max_frame_rate(range: &AVFrameRateRange) -> f64 {
+    unsafe { range.maxFrameRate() }
+}
+
+/// SAFETY: Read-only property accessor on a valid `AVFrameRateRange` reference.
+fn range_min_frame_duration(range: &AVFrameRateRange) -> CMTime {
+    unsafe { range.minFrameDuration() }
+}
+
 pub fn get_raw_device_info(index: CameraIndex, device: &AVCaptureDevice) -> CameraInfo {
-    let name = unsafe { device.localizedName() };
-    let manufacturer = unsafe { device.manufacturer() };
-    let position = unsafe { device.position() };
-    let lens_aperture: c_float = unsafe { device.lensAperture() };
-    let device_type = unsafe { device.deviceType() };
-    let model_id = unsafe { device.modelID() };
+    let name = device_localized_name(device);
+    let manufacturer = device_manufacturer(device);
+    let position = device_position(device);
+    let lens_aperture = device_lens_aperture(device);
+    let device_type = device_device_type(device);
+    let model_id = device_model_id(device);
     let description = format!(
         "{}: {} - {}, {:?} f{}",
         manufacturer, model_id, device_type, position, lens_aperture
     );
-    let misc = unsafe { device.uniqueID() };
+    let misc = device_unique_id(device);
 
     CameraInfo::new(
         name.to_string().as_ref(),
@@ -65,11 +466,11 @@ impl AVFrameRateRangeWrapper {
     }
 
     pub fn max(&self) -> f64 {
-        unsafe { self.inner.maxFrameRate() }
+        range_max_frame_rate(&self.inner)
     }
 
     pub fn min(&self) -> f64 {
-        unsafe { self.inner.minFrameRate() }
+        range_min_frame_rate(&self.inner)
     }
 
     pub fn inner(&self) -> &AVFrameRateRange {
@@ -89,7 +490,7 @@ pub struct AVCaptureDeviceFormatWrapper {
 
 impl AVCaptureDeviceFormatWrapper {
     pub fn try_from_format(format: &AVCaptureDeviceFormat) -> Result<Self, NokhwaError> {
-        let media_type = unsafe { format.mediaType() };
+        let media_type = format_media_type(format);
         let media_type_local = AVMediaTypeLocal::try_from(media_type.as_ref())?;
         if media_type_local != AVMediaTypeLocal::Video {
             return Err(NokhwaError::StructureError {
@@ -98,12 +499,12 @@ impl AVCaptureDeviceFormatWrapper {
             });
         }
 
-        let frame_rate_ranges = unsafe { format.videoSupportedFrameRateRanges() };
+        let frame_rate_ranges = format_frame_rate_ranges(format);
         let mut fps_list: Vec<f64> = Vec::new();
         for i in 0..frame_rate_ranges.count() {
             let range = frame_rate_ranges.objectAtIndex(i);
-            let min_fps = unsafe { range.minFrameRate() };
-            let max_fps = unsafe { range.maxFrameRate() };
+            let min_fps = range_min_frame_rate(&range);
+            let max_fps = range_max_frame_rate(&range);
             if min_fps != 0_f64 && min_fps != 1_f64 {
                 fps_list.push(min_fps);
             }
@@ -112,7 +513,7 @@ impl AVCaptureDeviceFormatWrapper {
         fps_list.sort_by(|n, m| n.partial_cmp(m).unwrap_or(Ordering::Equal));
         fps_list.dedup();
 
-        let description_obj = unsafe { format.formatDescription() };
+        let description_obj = format_description(format);
         let description_ref = &*description_obj as *const _ as CMFormatDescriptionRef;
         let resolution = unsafe { CMVideoFormatDescriptionGetDimensions(description_ref) };
         let fcc_raw = unsafe { CMFormatDescriptionGetMediaSubType(description_ref) };
@@ -169,7 +570,7 @@ impl AVCaptureDeviceWrapper {
 
     pub fn from_id(id: &str, index_hint: Option<CameraIndex>) -> Result<Self, NokhwaError> {
         let nsstr_id = objc2_foundation::NSString::from_str(id);
-        let capture = unsafe { AVCaptureDevice::deviceWithUniqueID(&nsstr_id) };
+        let capture = device_with_unique_id(&nsstr_id);
         let capture = capture.ok_or_else(|| NokhwaError::OpenDeviceError {
             device: id.to_string(),
             error: "Device is null".to_string(),
@@ -192,7 +593,7 @@ impl AVCaptureDeviceWrapper {
     }
 
     pub fn supported_formats_raw(&self) -> Result<Vec<AVCaptureDeviceFormatWrapper>, NokhwaError> {
-        let formats = unsafe { self.inner.formats() };
+        let formats = device_formats(&self.inner);
         let mut result = Vec::new();
         for i in 0..formats.count() {
             let format = formats.objectAtIndex(i);
@@ -222,11 +623,11 @@ impl AVCaptureDeviceWrapper {
     }
 
     pub fn already_in_use(&self) -> bool {
-        unsafe { self.inner.isInUseByAnotherApplication() }
+        device_is_in_use_by_another_application(&self.inner)
     }
 
     pub fn is_suspended(&self) -> bool {
-        unsafe { self.inner.isSuspended() }
+        device_is_suspended(&self.inner)
     }
 
     pub fn lock(&mut self) -> Result<(), NokhwaError> {
@@ -239,16 +640,14 @@ impl AVCaptureDeviceWrapper {
                 error: "Already in use".to_string(),
             });
         }
-        unsafe {
-            self.inner.lockForConfiguration().map_err(|e| {
-                let desc = e.localizedDescription();
-                NokhwaError::SetPropertyError {
-                    property: "lockForConfiguration".to_string(),
-                    value: "Locked".to_string(),
-                    error: desc.to_string(),
-                }
-            })?;
-        }
+        device_lock_for_configuration(&self.inner).map_err(|e| {
+            let desc = e.localizedDescription();
+            NokhwaError::SetPropertyError {
+                property: "lockForConfiguration".to_string(),
+                value: "Locked".to_string(),
+                error: desc.to_string(),
+            }
+        })?;
         self.locked = true;
         Ok(())
     }
@@ -256,33 +655,33 @@ impl AVCaptureDeviceWrapper {
     pub fn unlock(&mut self) {
         if self.locked {
             self.locked = false;
-            unsafe { self.inner.unlockForConfiguration() }
+            device_unlock_for_configuration(&self.inner);
         }
     }
 
     pub fn set_all(&mut self, descriptor: CameraFormat) -> Result<(), NokhwaError> {
         self.lock()?;
-        let formats = unsafe { self.inner.formats() };
+        let formats = device_formats(&self.inner);
 
         let mut selected_format: Option<Retained<AVCaptureDeviceFormat>> = None;
         let mut selected_min_frame_duration: Option<CMTime> = None;
 
         for i in 0..formats.count() {
             let format = formats.objectAtIndex(i);
-            let fmt_desc = unsafe { format.formatDescription() };
+            let fmt_desc = format_description(&format);
             let fmt_desc_ref = &*fmt_desc as *const _ as CMFormatDescriptionRef;
             let dimensions = unsafe { CMVideoFormatDescriptionGetDimensions(fmt_desc_ref) };
 
             if dimensions.height == descriptor.resolution().height() as i32
                 && dimensions.width == descriptor.resolution().width() as i32
             {
-                let ranges = unsafe { format.videoSupportedFrameRateRanges() };
+                let ranges = format_frame_rate_ranges(&format);
                 for j in 0..ranges.count() {
                     let range = ranges.objectAtIndex(j);
-                    let max_fps = unsafe { range.maxFrameRate() };
+                    let max_fps = range_max_frame_rate(&range);
                     if (f64::from(descriptor.frame_rate()) - max_fps).abs() < 0.999 {
                         selected_format = Some(format.clone());
-                        selected_min_frame_duration = Some(unsafe { range.minFrameDuration() });
+                        selected_min_frame_duration = Some(range_min_frame_duration(&range));
                         break;
                     }
                 }
@@ -303,30 +702,23 @@ impl AVCaptureDeviceWrapper {
             }
         };
 
-        unsafe {
-            self.inner.setActiveFormat(&format);
-            self.inner.setActiveVideoMinFrameDuration(min_duration);
-            self.inner.setActiveVideoMaxFrameDuration(min_duration);
-        }
+        device_set_active_format(&self.inner, &format);
+        device_set_active_video_min_frame_duration(&self.inner, min_duration);
+        device_set_active_video_max_frame_duration(&self.inner, min_duration);
         self.unlock();
         Ok(())
     }
 
     pub fn get_controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
-        let active_format = unsafe { self.inner.activeFormat() };
+        let active_format = device_active_format(&self.inner);
         let mut controls = vec![];
 
         // Focus modes
-        let focus_current = unsafe { self.inner.focusMode() };
-        let focus_locked = unsafe { self.inner.isFocusModeSupported(AVCaptureFocusMode::Locked) };
-        let focus_auto = unsafe {
-            self.inner
-                .isFocusModeSupported(AVCaptureFocusMode::AutoFocus)
-        };
-        let focus_continuous = unsafe {
-            self.inner
-                .isFocusModeSupported(AVCaptureFocusMode::ContinuousAutoFocus)
-        };
+        let focus_current = device_focus_mode(&self.inner);
+        let focus_locked = device_is_focus_mode_supported(&self.inner, AVCaptureFocusMode::Locked);
+        let focus_auto = device_is_focus_mode_supported(&self.inner, AVCaptureFocusMode::AutoFocus);
+        let focus_continuous =
+            device_is_focus_mode_supported(&self.inner, AVCaptureFocusMode::ContinuousAutoFocus);
 
         {
             let mut supported_focus_values = vec![];
@@ -353,8 +745,8 @@ impl AVCaptureDeviceWrapper {
             ));
         }
 
-        let focus_poi_supported = unsafe { self.inner.isFocusPointOfInterestSupported() };
-        let focus_poi = unsafe { self.inner.focusPointOfInterest() };
+        let focus_poi_supported = device_is_focus_poi_supported(&self.inner);
+        let focus_poi = device_focus_poi(&self.inner);
 
         controls.push(CameraControl::new(
             KnownCameraControl::Other(0),
@@ -374,8 +766,8 @@ impl AVCaptureDeviceWrapper {
             focus_auto || focus_continuous,
         ));
 
-        let focus_manual = unsafe { self.inner.isLockingFocusWithCustomLensPositionSupported() };
-        let focus_lenspos: c_float = unsafe { self.inner.lensPosition() };
+        let focus_manual = device_is_locking_focus_with_custom_lens_position_supported(&self.inner);
+        let focus_lenspos: c_float = device_lens_position(&self.inner);
 
         controls.push(CameraControl::new(
             KnownCameraControl::Other(1),
@@ -399,23 +791,17 @@ impl AVCaptureDeviceWrapper {
         ));
 
         // Exposure modes
-        let exposure_current = unsafe { self.inner.exposureMode() };
-        let exposure_locked = unsafe {
-            self.inner
-                .isExposureModeSupported(AVCaptureExposureMode::Locked)
-        };
-        let exposure_auto = unsafe {
-            self.inner
-                .isExposureModeSupported(AVCaptureExposureMode::AutoExpose)
-        };
-        let exposure_continuous = unsafe {
-            self.inner
-                .isExposureModeSupported(AVCaptureExposureMode::ContinuousAutoExposure)
-        };
-        let exposure_custom = unsafe {
-            self.inner
-                .isExposureModeSupported(AVCaptureExposureMode::Custom)
-        };
+        let exposure_current = device_exposure_mode(&self.inner);
+        let exposure_locked =
+            device_is_exposure_mode_supported(&self.inner, AVCaptureExposureMode::Locked);
+        let exposure_auto =
+            device_is_exposure_mode_supported(&self.inner, AVCaptureExposureMode::AutoExpose);
+        let exposure_continuous = device_is_exposure_mode_supported(
+            &self.inner,
+            AVCaptureExposureMode::ContinuousAutoExposure,
+        );
+        let exposure_custom =
+            device_is_exposure_mode_supported(&self.inner, AVCaptureExposureMode::Custom);
 
         {
             let mut supported_exposure_values = vec![];
@@ -445,8 +831,8 @@ impl AVCaptureDeviceWrapper {
             ));
         }
 
-        let exposure_poi_supported = unsafe { self.inner.isExposurePointOfInterestSupported() };
-        let exposure_poi = unsafe { self.inner.exposurePointOfInterest() };
+        let exposure_poi_supported = device_is_exposure_poi_supported(&self.inner);
+        let exposure_poi = device_exposure_poi(&self.inner);
 
         controls.push(CameraControl::new(
             KnownCameraControl::Other(2),
@@ -467,11 +853,9 @@ impl AVCaptureDeviceWrapper {
         ));
 
         let exposure_face_driven_supported =
-            unsafe { self.inner.isFaceDrivenAutoExposureEnabled() };
-        let exposure_face_driven = unsafe {
-            self.inner
-                .automaticallyAdjustsFaceDrivenAutoExposureEnabled()
-        };
+            device_is_face_driven_auto_exposure_enabled(&self.inner);
+        let exposure_face_driven =
+            device_automatically_adjusts_face_driven_auto_exposure(&self.inner);
 
         controls.push(CameraControl::new(
             KnownCameraControl::Other(3),
@@ -491,9 +875,9 @@ impl AVCaptureDeviceWrapper {
             exposure_poi_supported,
         ));
 
-        let exposure_bias: c_float = unsafe { self.inner.exposureTargetBias() };
-        let exposure_bias_min: c_float = unsafe { self.inner.minExposureTargetBias() };
-        let exposure_bias_max: c_float = unsafe { self.inner.maxExposureTargetBias() };
+        let exposure_bias: c_float = device_exposure_target_bias(&self.inner);
+        let exposure_bias_min: c_float = device_min_exposure_target_bias(&self.inner);
+        let exposure_bias_max: c_float = device_max_exposure_target_bias(&self.inner);
 
         controls.push(CameraControl::new(
             KnownCameraControl::Other(4),
@@ -503,15 +887,16 @@ impl AVCaptureDeviceWrapper {
                 max: exposure_bias_max as f64,
                 value: exposure_bias as f64,
                 step: f32::MIN_POSITIVE as f64,
+                // SAFETY: Read-only global sentinel constant.
                 default: unsafe { AVCaptureExposureTargetBiasCurrent } as f64,
             },
             vec![],
             true,
         ));
 
-        let exposure_duration = unsafe { self.inner.exposureDuration() };
-        let exposure_duration_min = unsafe { active_format.minExposureDuration() };
-        let exposure_duration_max = unsafe { active_format.maxExposureDuration() };
+        let exposure_duration = device_exposure_duration(&self.inner);
+        let exposure_duration_min = format_min_exposure_duration(&active_format);
+        let exposure_duration_max = format_max_exposure_duration(&active_format);
 
         controls.push(CameraControl::new(
             KnownCameraControl::Gamma,
@@ -521,6 +906,7 @@ impl AVCaptureDeviceWrapper {
                 max: exposure_duration_max.value,
                 value: exposure_duration.value,
                 step: 1,
+                // SAFETY: Read-only global sentinel constant.
                 default: unsafe { AVCaptureExposureDurationCurrent.value },
             },
             if exposure_custom {
@@ -534,9 +920,9 @@ impl AVCaptureDeviceWrapper {
             exposure_custom,
         ));
 
-        let exposure_iso: c_float = unsafe { self.inner.ISO() };
-        let exposure_iso_min: c_float = unsafe { active_format.minISO() };
-        let exposure_iso_max: c_float = unsafe { active_format.maxISO() };
+        let exposure_iso: c_float = device_iso(&self.inner);
+        let exposure_iso_min: c_float = format_min_iso(&active_format);
+        let exposure_iso_max: c_float = format_max_iso(&active_format);
 
         controls.push(CameraControl::new(
             KnownCameraControl::Brightness,
@@ -546,6 +932,7 @@ impl AVCaptureDeviceWrapper {
                 max: exposure_iso_max as f64,
                 value: exposure_iso as f64,
                 step: f32::MIN_POSITIVE as f64,
+                // SAFETY: Read-only global sentinel constant.
                 default: unsafe { AVCaptureISOCurrent } as f64,
             },
             if exposure_custom {
@@ -559,7 +946,7 @@ impl AVCaptureDeviceWrapper {
             exposure_custom,
         ));
 
-        let lens_aperture: c_float = unsafe { self.inner.lensAperture() };
+        let lens_aperture: c_float = device_lens_aperture(&self.inner);
 
         controls.push(CameraControl::new(
             KnownCameraControl::Iris,
@@ -574,19 +961,17 @@ impl AVCaptureDeviceWrapper {
         ));
 
         // White balance
-        let white_balance_current = unsafe { self.inner.whiteBalanceMode() };
-        let white_balance_manual = unsafe {
-            self.inner
-                .isWhiteBalanceModeSupported(AVCaptureWhiteBalanceMode::Locked)
-        };
-        let white_balance_auto = unsafe {
-            self.inner
-                .isWhiteBalanceModeSupported(AVCaptureWhiteBalanceMode::AutoWhiteBalance)
-        };
-        let white_balance_continuous = unsafe {
-            self.inner
-                .isWhiteBalanceModeSupported(AVCaptureWhiteBalanceMode::ContinuousAutoWhiteBalance)
-        };
+        let white_balance_current = device_white_balance_mode(&self.inner);
+        let white_balance_manual =
+            device_is_white_balance_mode_supported(&self.inner, AVCaptureWhiteBalanceMode::Locked);
+        let white_balance_auto = device_is_white_balance_mode_supported(
+            &self.inner,
+            AVCaptureWhiteBalanceMode::AutoWhiteBalance,
+        );
+        let white_balance_continuous = device_is_white_balance_mode_supported(
+            &self.inner,
+            AVCaptureWhiteBalanceMode::ContinuousAutoWhiteBalance,
+        );
 
         {
             let mut possible = vec![];
@@ -613,18 +998,16 @@ impl AVCaptureDeviceWrapper {
             ));
         }
 
-        let white_balance_gains = unsafe { self.inner.deviceWhiteBalanceGains() };
-        let white_balance_default = unsafe { self.inner.grayWorldDeviceWhiteBalanceGains() };
-        let white_balance_max_scalar: c_float = unsafe { self.inner.maxWhiteBalanceGain() };
+        let white_balance_gains = device_white_balance_gains(&self.inner);
+        let white_balance_default = device_gray_world_white_balance_gains(&self.inner);
+        let white_balance_max_scalar: c_float = device_max_white_balance_gain(&self.inner);
         let white_balance_max = AVCaptureWhiteBalanceGains {
             redGain: white_balance_max_scalar,
             greenGain: white_balance_max_scalar,
             blueGain: white_balance_max_scalar,
         };
-        let white_balance_gain_supported = unsafe {
-            self.inner
-                .isLockingWhiteBalanceWithCustomDeviceGainsSupported()
-        };
+        let white_balance_gain_supported =
+            device_is_locking_white_balance_with_custom_gains_supported(&self.inner);
 
         controls.push(CameraControl::new(
             KnownCameraControl::Gain,
@@ -658,10 +1041,10 @@ impl AVCaptureDeviceWrapper {
         ));
 
         // Torch
-        let has_torch = unsafe { self.inner.isTorchAvailable() };
-        let torch_off = unsafe { self.inner.isTorchModeSupported(AVCaptureTorchMode::Off) };
-        let torch_on = unsafe { self.inner.isTorchModeSupported(AVCaptureTorchMode::On) };
-        let torch_auto = unsafe { self.inner.isTorchModeSupported(AVCaptureTorchMode::Auto) };
+        let has_torch = device_is_torch_available(&self.inner);
+        let torch_off = device_is_torch_mode_supported(&self.inner, AVCaptureTorchMode::Off);
+        let torch_on = device_is_torch_mode_supported(&self.inner, AVCaptureTorchMode::On);
+        let torch_auto = device_is_torch_mode_supported(&self.inner, AVCaptureTorchMode::Auto);
 
         {
             let mut possible = vec![];
@@ -675,7 +1058,7 @@ impl AVCaptureDeviceWrapper {
                 possible.push(2);
             }
 
-            let torch_mode_current = unsafe { self.inner.torchMode() };
+            let torch_mode_current = device_torch_mode(&self.inner);
 
             controls.push(CameraControl::new(
                 KnownCameraControl::Other(5),
@@ -698,8 +1081,8 @@ impl AVCaptureDeviceWrapper {
         }
 
         // Low light boost
-        let has_llb = unsafe { self.inner.isLowLightBoostSupported() };
-        let llb_enabled = unsafe { self.inner.isLowLightBoostEnabled() };
+        let has_llb = device_is_low_light_boost_supported(&self.inner);
+        let llb_enabled = device_is_low_light_boost_enabled(&self.inner);
 
         {
             controls.push(CameraControl::new(
@@ -722,9 +1105,9 @@ impl AVCaptureDeviceWrapper {
         }
 
         // Zoom
-        let zoom_current: CGFloat = unsafe { self.inner.videoZoomFactor() };
-        let zoom_min: CGFloat = unsafe { self.inner.minAvailableVideoZoomFactor() };
-        let zoom_max: CGFloat = unsafe { self.inner.maxAvailableVideoZoomFactor() };
+        let zoom_current: CGFloat = device_video_zoom_factor(&self.inner);
+        let zoom_min: CGFloat = device_min_available_video_zoom_factor(&self.inner);
+        let zoom_max: CGFloat = device_max_available_video_zoom_factor(&self.inner);
 
         controls.push(CameraControl::new(
             KnownCameraControl::Zoom,
@@ -742,9 +1125,9 @@ impl AVCaptureDeviceWrapper {
 
         // Geometric distortion correction
         let distortion_correction_supported =
-            unsafe { self.inner.isGeometricDistortionCorrectionSupported() };
+            device_is_geometric_distortion_correction_supported(&self.inner);
         let distortion_correction_current_value =
-            unsafe { self.inner.isGeometricDistortionCorrectionEnabled() };
+            device_is_geometric_distortion_correction_enabled(&self.inner);
 
         controls.push(CameraControl::new(
             KnownCameraControl::Other(6),
@@ -788,6 +1171,7 @@ impl AVCaptureDeviceWrapper {
 
                 check_control_flags(isoctrl, &id, &value)?;
 
+                // SAFETY: Read-only global constant for sentinel value.
                 let current_duration = unsafe { AVCaptureExposureDurationCurrent };
                 let new_iso = *value.as_float().ok_or(NokhwaError::SetPropertyError {
                     property: id.to_string(),
@@ -803,14 +1187,7 @@ impl AVCaptureDeviceWrapper {
                     });
                 }
 
-                unsafe {
-                    self.inner
-                        .setExposureModeCustomWithDuration_ISO_completionHandler(
-                            current_duration,
-                            new_iso,
-                            None,
-                        );
-                }
+                device_set_exposure_custom(&self.inner, current_duration, new_iso);
 
                 Ok(())
             }
@@ -823,7 +1200,8 @@ impl AVCaptureDeviceWrapper {
 
                 check_control_flags(duration_ctrl, &id, &value)?;
 
-                let current_duration = unsafe { self.inner.exposureDuration() };
+                let current_duration = device_exposure_duration(&self.inner);
+                // SAFETY: Read-only global constant for sentinel value.
                 let current_iso = unsafe { AVCaptureISOCurrent };
                 let new_duration = CMTime {
                     value: *value.as_integer().ok_or(NokhwaError::SetPropertyError {
@@ -844,14 +1222,7 @@ impl AVCaptureDeviceWrapper {
                     });
                 }
 
-                unsafe {
-                    self.inner
-                        .setExposureModeCustomWithDuration_ISO_completionHandler(
-                            new_duration,
-                            current_iso,
-                            None,
-                        );
-                }
+                device_set_exposure_custom(&self.inner, new_duration, current_iso);
 
                 Ok(())
             }
@@ -878,10 +1249,10 @@ impl AVCaptureDeviceWrapper {
                     });
                 }
 
-                unsafe {
-                    self.inner
-                        .setWhiteBalanceMode(AVCaptureWhiteBalanceMode(setter as isize));
-                }
+                device_set_white_balance_mode(
+                    &self.inner,
+                    AVCaptureWhiteBalanceMode(setter as isize),
+                );
 
                 Ok(())
             }
@@ -908,10 +1279,7 @@ impl AVCaptureDeviceWrapper {
                     });
                 }
 
-                unsafe {
-                    self.inner
-                        .setAutomaticallyEnablesLowLightBoostWhenAvailable(setter);
-                }
+                device_set_auto_low_light_boost(&self.inner, setter);
 
                 Ok(())
             }
@@ -943,12 +1311,7 @@ impl AVCaptureDeviceWrapper {
                     greenGain: *g as c_float,
                     blueGain: *b as c_float,
                 };
-                unsafe {
-                    self.inner
-                        .setWhiteBalanceModeLockedWithDeviceWhiteBalanceGains_completionHandler(
-                            gains, None,
-                        );
-                }
+                device_set_white_balance_gains(&self.inner, gains);
 
                 Ok(())
             }
@@ -975,9 +1338,7 @@ impl AVCaptureDeviceWrapper {
                     });
                 }
 
-                unsafe {
-                    self.inner.rampToVideoZoomFactor_withRate(setter, 1.0_f32);
-                }
+                device_ramp_to_video_zoom_factor(&self.inner, setter, 1.0_f32);
 
                 Ok(())
             }
@@ -1004,10 +1365,7 @@ impl AVCaptureDeviceWrapper {
                     });
                 }
 
-                unsafe {
-                    self.inner
-                        .setExposureMode(AVCaptureExposureMode(setter as isize));
-                }
+                device_set_exposure_mode(&self.inner, AVCaptureExposureMode(setter as isize));
 
                 Ok(())
             }
@@ -1039,9 +1397,7 @@ impl AVCaptureDeviceWrapper {
                     });
                 }
 
-                unsafe {
-                    self.inner.setFocusMode(AVCaptureFocusMode(setter as isize));
-                }
+                device_set_focus_mode(&self.inner, AVCaptureFocusMode(setter as isize));
 
                 Ok(())
             }
@@ -1070,7 +1426,7 @@ impl AVCaptureDeviceWrapper {
                         });
                     }
 
-                    unsafe { self.inner.setFocusPointOfInterest(setter) };
+                    device_set_focus_poi(&self.inner, setter);
 
                     Ok(())
                 }
@@ -1092,10 +1448,7 @@ impl AVCaptureDeviceWrapper {
                         });
                     }
 
-                    unsafe {
-                        self.inner
-                            .setFocusModeLockedWithLensPosition_completionHandler(setter, None);
-                    }
+                    device_set_focus_mode_locked_with_lens_position(&self.inner, setter);
 
                     Ok(())
                 }
@@ -1123,7 +1476,7 @@ impl AVCaptureDeviceWrapper {
                         });
                     }
 
-                    unsafe { self.inner.setExposurePointOfInterest(setter) };
+                    device_set_exposure_poi(&self.inner, setter);
 
                     Ok(())
                 }
@@ -1146,10 +1499,7 @@ impl AVCaptureDeviceWrapper {
                         });
                     }
 
-                    unsafe {
-                        self.inner
-                            .setAutomaticallyAdjustsFaceDrivenAutoExposureEnabled(setter);
-                    }
+                    device_set_auto_adjusts_face_driven_auto_exposure(&self.inner, setter);
 
                     Ok(())
                 }
@@ -1171,10 +1521,7 @@ impl AVCaptureDeviceWrapper {
                         });
                     }
 
-                    unsafe {
-                        self.inner
-                            .setExposureTargetBias_completionHandler(setter, None);
-                    }
+                    device_set_exposure_target_bias(&self.inner, setter);
 
                     Ok(())
                 }
@@ -1196,9 +1543,7 @@ impl AVCaptureDeviceWrapper {
                         });
                     }
 
-                    unsafe {
-                        self.inner.setTorchMode(AVCaptureTorchMode(setter as isize));
-                    }
+                    device_set_torch_mode(&self.inner, AVCaptureTorchMode(setter as isize));
 
                     Ok(())
                 }
@@ -1221,9 +1566,7 @@ impl AVCaptureDeviceWrapper {
                         });
                     }
 
-                    unsafe {
-                        self.inner.setGeometricDistortionCorrectionEnabled(setter);
-                    }
+                    device_set_geometric_distortion_correction_enabled(&self.inner, setter);
 
                     Ok(())
                 }
@@ -1242,7 +1585,7 @@ impl AVCaptureDeviceWrapper {
     }
 
     pub fn active_format(&self) -> Result<CameraFormat, NokhwaError> {
-        let af = unsafe { self.inner.activeFormat() };
+        let af = device_active_format(&self.inner);
         let avf_format = AVCaptureDeviceFormatWrapper::try_from_format(&af)?;
         let resolution = avf_format.resolution;
         let fourcc = avf_format.fourcc;
