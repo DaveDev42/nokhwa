@@ -4,7 +4,6 @@
 (None)
 
 ## Medium Priority
-- [x] Extract common backend logic into nokhwa-core (FourCC helpers, control index helpers, normalized query function names)
 - [ ] Add integration tests for each platform backend (currently only core unit tests + macOS format tests)
   - [ ] Format conversion correctness (MJPEG, NV12, YUYV decoding validation)
   - [ ] Camera control round-trip (set → get verification)

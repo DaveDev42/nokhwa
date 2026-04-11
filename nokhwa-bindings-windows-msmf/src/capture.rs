@@ -17,12 +17,11 @@ use crate::wmf::MediaFoundationDevice;
 use nokhwa_core::{
     buffer::{Buffer, TimestampKind},
     error::NokhwaError,
-    pixel_format::RgbFormat,
     traits::CaptureBackendTrait,
     types::{
-        all_known_camera_controls, ApiBackend, CameraControl, CameraFormat, CameraIndex,
-        CameraInfo, ControlValueSetter, FrameFormat, KnownCameraControl, RequestedFormat,
-        RequestedFormatType, Resolution,
+        all_known_camera_controls, color_frame_formats, ApiBackend, CameraControl, CameraFormat,
+        CameraIndex, CameraInfo, ControlValueSetter, FrameFormat, KnownCameraControl,
+        RequestedFormat, RequestedFormatType, Resolution,
     },
 };
 use std::{borrow::Cow, collections::HashMap};
@@ -96,9 +95,10 @@ impl MediaFoundationCaptureDevice {
         fps: u32,
         fourcc: FrameFormat,
     ) -> Result<Self, NokhwaError> {
-        let camera_format = RequestedFormat::new::<RgbFormat>(RequestedFormatType::Exact(
-            CameraFormat::new_from(width, height, fourcc, fps),
-        ));
+        let camera_format = RequestedFormat::with_formats(
+            RequestedFormatType::Exact(CameraFormat::new_from(width, height, fourcc, fps)),
+            color_frame_formats(),
+        );
         MediaFoundationCaptureDevice::new(index, camera_format)
     }
 

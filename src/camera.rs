@@ -14,17 +14,18 @@
  * limitations under the License.
  */
 
+#[cfg(feature = "decoding")]
+use nokhwa_core::pixel_format::FormatDecoder;
 #[cfg(feature = "output-wgpu")]
 use nokhwa_core::traits::RawTextureData;
 use nokhwa_core::types::RequestedFormatType;
 use nokhwa_core::{
     buffer::Buffer,
     error::NokhwaError,
-    pixel_format::{FormatDecoder, RgbFormat},
     traits::CaptureBackendTrait,
     types::{
-        ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo, ControlValueSetter,
-        FrameFormat, KnownCameraControl, RequestedFormat, Resolution,
+        color_frame_formats, ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo,
+        ControlValueSetter, FrameFormat, KnownCameraControl, RequestedFormat, Resolution,
     },
 };
 use std::{borrow::Cow, collections::HashMap, time::Duration};
@@ -139,25 +140,31 @@ impl Camera {
 
     /// Create a new camera from an `index`, automatically selecting the highest available resolution.
     ///
-    /// Uses [`RgbFormat`] as the default pixel format decoder.
+    /// Accepts all color frame formats (MJPEG, YUYV, NV12, RAWRGB, RAWBGR, GRAY).
     /// # Errors
     /// This will error if you either have a bad platform configuration (e.g. `input-v4l` but not on linux) or the backend cannot create the camera (e.g. permission denied).
     pub fn new_with_highest_resolution(index: CameraIndex) -> Result<Self, NokhwaError> {
         Self::new(
             index,
-            RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution),
+            RequestedFormat::with_formats(
+                RequestedFormatType::AbsoluteHighestResolution,
+                color_frame_formats(),
+            ),
         )
     }
 
     /// Create a new camera from an `index`, automatically selecting the highest available frame rate.
     ///
-    /// Uses [`RgbFormat`] as the default pixel format decoder.
+    /// Accepts all color frame formats (MJPEG, YUYV, NV12, RAWRGB, RAWBGR, GRAY).
     /// # Errors
     /// This will error if you either have a bad platform configuration (e.g. `input-v4l` but not on linux) or the backend cannot create the camera (e.g. permission denied).
     pub fn new_with_highest_framerate(index: CameraIndex) -> Result<Self, NokhwaError> {
         Self::new(
             index,
-            RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate),
+            RequestedFormat::with_formats(
+                RequestedFormatType::AbsoluteHighestFrameRate,
+                color_frame_formats(),
+            ),
         )
     }
 
@@ -515,6 +522,8 @@ impl Camera {
     /// Directly writes the current frame into said `buffer`.
     /// # Errors
     /// If the backend fails to get the frame (e.g. already taken, busy, doesn't exist anymore), or [`open_stream()`](CaptureBackendTrait::open_stream()) has not been called yet, this will error.
+    #[cfg(feature = "decoding")]
+    #[cfg_attr(feature = "docs-features", doc(cfg(feature = "decoding")))]
     pub fn write_frame_to_buffer<F: FormatDecoder>(
         &mut self,
         buffer: &mut [u8],
@@ -522,8 +531,11 @@ impl Camera {
         self.device.frame()?.decode_image_to_buffer::<F>(buffer)
     }
 
-    #[cfg(feature = "output-wgpu")]
-    #[cfg_attr(feature = "docs-features", doc(cfg(feature = "output-wgpu")))]
+    #[cfg(all(feature = "output-wgpu", feature = "decoding"))]
+    #[cfg_attr(
+        feature = "docs-features",
+        doc(cfg(all(feature = "output-wgpu", feature = "decoding")))
+    )]
     /// Directly copies a frame to a Wgpu texture. This will automatically convert the frame into a RGBA frame.
     /// # Errors
     /// If the frame cannot be captured or the resolution is 0 on any axis, this will error.

@@ -21,6 +21,8 @@
 //! Core type definitions for `nokhwa`
 pub mod buffer;
 pub mod error;
+#[cfg(feature = "decoding")]
+#[cfg_attr(feature = "docs-features", doc(cfg(feature = "decoding")))]
 pub mod pixel_format;
 pub(crate) mod simd;
 pub mod traits;

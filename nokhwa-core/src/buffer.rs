@@ -13,12 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-use crate::{
-    error::NokhwaError,
-    pixel_format::FormatDecoder,
-    types::{FrameFormat, Resolution},
-};
+use crate::types::{FrameFormat, Resolution};
+#[cfg(feature = "decoding")]
+use crate::{error::NokhwaError, pixel_format::FormatDecoder};
 use bytes::Bytes;
+#[cfg(feature = "decoding")]
 use image::ImageBuffer;
 #[cfg(feature = "opencv-mat")]
 use opencv::{boxed_ref::BoxedRef, core::Mat};
@@ -174,6 +173,8 @@ impl Buffer {
     /// Decodes a image with allocation using the provided [`FormatDecoder`].
     /// # Errors
     /// Will error when the decoding fails.
+    #[cfg(feature = "decoding")]
+    #[cfg_attr(feature = "docs-features", doc(cfg(feature = "decoding")))]
     #[inline]
     pub fn decode_image<F: FormatDecoder>(
         &self,
@@ -192,6 +193,8 @@ impl Buffer {
     /// Decodes a image with allocation using the provided [`FormatDecoder`] into a `buffer`.
     /// # Errors
     /// Will error when the decoding fails, or the provided buffer is too small.
+    #[cfg(feature = "decoding")]
+    #[cfg_attr(feature = "docs-features", doc(cfg(feature = "decoding")))]
     #[inline]
     pub fn decode_image_to_buffer<F: FormatDecoder>(
         &self,

@@ -24,11 +24,11 @@ use crate::session::{
 use nokhwa_core::{
     buffer::{Buffer, TimestampKind},
     error::NokhwaError,
-    pixel_format::RgbFormat,
     traits::CaptureBackendTrait,
     types::{
-        ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo, ControlValueSetter,
-        FrameFormat, KnownCameraControl, RequestedFormat, RequestedFormatType, Resolution,
+        color_frame_formats, ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo,
+        ControlValueSetter, FrameFormat, KnownCameraControl, RequestedFormat, RequestedFormatType,
+        Resolution,
     },
 };
 use objc2::rc::Retained;
@@ -115,7 +115,10 @@ impl AVFoundationCaptureDevice {
         let camera_format = CameraFormat::new_from(width, height, fourcc, fps);
         AVFoundationCaptureDevice::new(
             &CameraIndex::Index(index as u32),
-            RequestedFormat::new::<RgbFormat>(RequestedFormatType::Exact(camera_format)),
+            RequestedFormat::with_formats(
+                RequestedFormatType::Exact(camera_format),
+                color_frame_formats(),
+            ),
         )
     }
 }
