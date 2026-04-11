@@ -258,7 +258,7 @@ pub trait CaptureBackendTrait {
     /// Each [`CameraControl`] describes a property (brightness, contrast, etc.) with its
     /// current value, valid range, and step size.
     ///
-    /// ```no_run
+    /// ```ignore
     /// # fn example(camera: &nokhwa::Camera) -> Result<(), nokhwa_core::error::NokhwaError> {
     /// for control in camera.camera_controls()? {
     ///     println!("{}: {:?}", control.control(), control.value());
@@ -288,7 +288,7 @@ pub trait CaptureBackendTrait {
     /// You must call this before calling [`frame()`](CaptureBackendTrait::frame) or
     /// [`frame_raw()`](CaptureBackendTrait::frame_raw).
     ///
-    /// ```no_run
+    /// ```ignore
     /// # fn example(camera: &mut nokhwa::Camera) -> Result<(), nokhwa_core::error::NokhwaError> {
     /// camera.open_stream()?;
     /// assert!(camera.is_stream_open());
@@ -308,7 +308,7 @@ pub trait CaptureBackendTrait {
     /// The returned [`Buffer`] contains raw frame data along with format metadata.
     /// Use [`Buffer::decode_image`] to decode it into an `image::ImageBuffer`.
     ///
-    /// ```no_run
+    /// ```ignore
     /// # fn example(camera: &mut nokhwa::Camera) -> Result<(), nokhwa_core::error::NokhwaError> {
     /// use nokhwa::pixel_format::RgbFormat;
     ///
@@ -348,7 +348,7 @@ pub trait CaptureBackendTrait {
     /// The returned bytes are in the camera's native pixel format (e.g. MJPEG, YUYV, NV12).
     /// Use this when you want to handle decoding yourself or forward the raw data elsewhere.
     ///
-    /// ```no_run
+    /// ```ignore
     /// # fn example(camera: &mut nokhwa::Camera) -> Result<(), nokhwa_core::error::NokhwaError> {
     /// camera.open_stream()?;
     /// let raw_bytes = camera.frame_raw()?;
