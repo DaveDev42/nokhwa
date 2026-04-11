@@ -561,13 +561,11 @@ pub(crate) fn convert_to_luma(
                 (sum / 3) as u8
             })
             .collect()),
-        FrameFormat::RAWRGB | FrameFormat::RAWBGR => Ok(data
-            .chunks_exact(3)
-            .map(|px| {
-                let sum = u16::from(px[0]) + u16::from(px[1]) + u16::from(px[2]);
-                (sum / 3) as u8
-            })
-            .collect()),
+        FrameFormat::RAWRGB | FrameFormat::RAWBGR => {
+            let mut luma = vec![0u8; data.len() / 3];
+            crate::simd::rgb_to_luma_simd(data, &mut luma);
+            Ok(luma)
+        }
     }
 }
 
@@ -607,10 +605,7 @@ pub(crate) fn convert_to_luma_buffer(
                     ),
                 });
             }
-            #[allow(clippy::cast_possible_truncation)]
-            for (idx, px) in data.chunks_exact(3).enumerate() {
-                dest[idx] = ((u16::from(px[0]) + u16::from(px[1]) + u16::from(px[2])) / 3) as u8;
-            }
+            crate::simd::rgb_to_luma_simd(data, dest);
             Ok(())
         }
         FrameFormat::MJPEG => {
