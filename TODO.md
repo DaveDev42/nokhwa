@@ -10,7 +10,7 @@
   - [ ] Robustness against malformed input (e.g. malformed MJPEG)
 
 ## Low Priority
-- [x] ~~Improve feature flag discoverability (compile-time error, `input-auto` alias, Cargo.toml comments)~~ — done in chore-feature-flag-improvements
+(None)
 
 ## Performance
 - [ ] Explore `unsafe get_unchecked` for YUYV scalar inner loops — NV12 done in #70, YUYV scalar fallback path still uses safe indexing.

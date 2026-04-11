@@ -25,8 +25,8 @@
 //!
 //! The [`Camera`] struct is what you will likely use.
 //!
-//! The recommended default feature to enable is `input-native`. The library will not work without
-//! at least one `input-*` feature enabled.
+//! The recommended default feature to enable is `input-native` (also available as `input-auto`).
+//! The library will not work without at least one `input-*` feature enabled.
 //!
 //! Please read the README.md for more.
 
