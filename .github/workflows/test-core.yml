@@ -19,8 +19,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p nokhwa-core
 
-  # Verifies feature deps resolve without a backend.
-  # These are dependency-resolution checks, not functional tests.
+  # Verifies output feature deps resolve correctly.
+  # input-v4l satisfies the compile_error! guard that requires an input backend.
   check-features:
     name: Feature check (${{ matrix.features }})
     runs-on: ubuntu-latest
@@ -34,4 +34,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --features ${{ matrix.features }}
+      - run: cargo check --features input-v4l,${{ matrix.features }}
