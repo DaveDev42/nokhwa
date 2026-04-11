@@ -8,14 +8,12 @@
   - [ ] Format conversion correctness (MJPEG, NV12, YUYV decoding validation)
   - [ ] Camera control round-trip (set → get verification)
   - [ ] Robustness against malformed input (e.g. malformed MJPEG)
-- [x] Restructure `OpenDeviceError(String, String)` tuple variant with structured fields
 
 ## Low Priority
 (None)
 
 ## Performance
 - [ ] Explore `unsafe get_unchecked` for YUYV/NV12 inner loops — SIMD fallback and NV12 scalar paths use safe indexing. Benchmark first; only apply if measurable gain.
-- [x] ~~Inline `yuyv444_to_rgb` in NV12 decoder — same optimization pattern as YUYV (#58).~~
 
 ## Backlog
 - [ ] Re-implement GStreamer backend (cross-platform, previously 839 lines)
