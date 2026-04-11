@@ -10,9 +10,6 @@ keywords    = [ "media-foundation", "windows", "capture", "webcam" ]
 [features]
 docs-only = [  ]
 
-[dependencies]
-once_cell = "1"
-
 [dependencies.nokhwa-core]
 path    = "../nokhwa-core"
 
