@@ -20,7 +20,8 @@
 //! - **BGR-to-RGB**: NEON on aarch64, SSSE3 on `x86_64`, scalar fallback
 //! - **YUYV-to-RGB/RGBA**: NEON on aarch64, scalar fallback on other architectures
 
-use crate::types::{yuyv444_to_rgb, yuyv444_to_rgba};
+#[cfg(test)]
+use crate::types::yuyv444_to_rgb;
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::{int16x8_t, int32x4_t, uint8x8_t};
 
@@ -159,36 +160,108 @@ pub(crate) fn yuyv_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
 }
 
 /// Scalar YUYV-to-RGB fallback.
+///
+/// # Safety invariants (upheld by callers `yuyv_to_rgb_simd`):
+///   - `src.len()` is a multiple of 4 (asserted).
+///   - `dst.len() == (src.len() / 4) * 6` (asserted).
+///
+/// Let N = `src.len()` / 4 (number of YUYV pairs).
+///   - Source: each iteration reads `si..si+3` where si = i*4, max si+3 = (N-1)*4+3 = `src.len()-1` ✓
+///   - Dest: each iteration writes `di..di+5` where di = i*6, max di+5 = (N-1)*6+5 = `dst.len()-1` ✓
 #[inline]
+#[allow(clippy::cast_sign_loss)]
 fn yuyv_to_rgb_scalar(src: &[u8], dst: &mut [u8]) {
-    for (chunk, out) in src.chunks_exact(4).zip(dst.chunks_exact_mut(6)) {
-        let luma0 = i32::from(chunk[0]);
-        let cb = i32::from(chunk[1]);
-        let luma1 = i32::from(chunk[2]);
-        let cr = i32::from(chunk[3]);
+    let n = src.len() / 4;
+    let mut si = 0;
+    let mut di = 0;
 
-        let px0 = yuyv444_to_rgb(luma0, cb, cr);
-        let px1 = yuyv444_to_rgb(luma1, cb, cr);
+    for _ in 0..n {
+        // SAFETY: si+3 < src.len() because si = i*4 and i < N = src.len()/4 (see proof above).
+        let luma0 = unsafe { i32::from(*src.get_unchecked(si)) };
+        let cb = unsafe { i32::from(*src.get_unchecked(si + 1)) };
+        let luma1 = unsafe { i32::from(*src.get_unchecked(si + 2)) };
+        let cr = unsafe { i32::from(*src.get_unchecked(si + 3)) };
 
-        out[..3].copy_from_slice(&px0);
-        out[3..6].copy_from_slice(&px1);
+        // Inline BT.601 YUV→RGB: avoids intermediate [u8; 3] arrays.
+        let d = cb - 128;
+        let e = cr - 128;
+
+        let c298_0 = (luma0 - 16) * 298;
+        let r0 = ((c298_0 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
+        let g0 = ((c298_0 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
+        let b0 = ((c298_0 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
+
+        let c298_1 = (luma1 - 16) * 298;
+        let r1 = ((c298_1 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
+        let g1 = ((c298_1 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
+        let b1 = ((c298_1 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
+
+        // SAFETY: di+5 < dst.len() because di = i*6 and i < N, so di+5 = i*6+5 ≤ (N-1)*6+5 = N*6-1 = dst.len()-1 (see proof above).
+        unsafe {
+            *dst.get_unchecked_mut(di) = r0;
+            *dst.get_unchecked_mut(di + 1) = g0;
+            *dst.get_unchecked_mut(di + 2) = b0;
+            *dst.get_unchecked_mut(di + 3) = r1;
+            *dst.get_unchecked_mut(di + 4) = g1;
+            *dst.get_unchecked_mut(di + 5) = b1;
+        }
+
+        si += 4;
+        di += 6;
     }
 }
 
 /// Scalar YUYV-to-RGBA fallback.
+///
+/// # Safety invariants (upheld by callers `yuyv_to_rgba_simd`):
+///   - `src.len()` is a multiple of 4 (asserted).
+///   - `dst.len() == (src.len() / 4) * 8` (asserted).
+///
+/// Let N = `src.len()` / 4 (number of YUYV pairs).
+///   - Source: each iteration reads `si..si+3` where si = i*4, max si+3 = (N-1)*4+3 = `src.len()-1` ✓
+///   - Dest: each iteration writes `di..di+7` where di = i*8, max di+7 = (N-1)*8+7 = `dst.len()-1` ✓
 #[inline]
+#[allow(clippy::cast_sign_loss)]
 fn yuyv_to_rgba_scalar(src: &[u8], dst: &mut [u8]) {
-    for (chunk, out) in src.chunks_exact(4).zip(dst.chunks_exact_mut(8)) {
-        let luma0 = i32::from(chunk[0]);
-        let cb = i32::from(chunk[1]);
-        let luma1 = i32::from(chunk[2]);
-        let cr = i32::from(chunk[3]);
+    let n = src.len() / 4;
+    let mut si = 0;
+    let mut di = 0;
 
-        let px0 = yuyv444_to_rgba(luma0, cb, cr);
-        let px1 = yuyv444_to_rgba(luma1, cb, cr);
+    for _ in 0..n {
+        // SAFETY: si+3 < src.len() because si = i*4 and i < N = src.len()/4 (see proof above).
+        let luma0 = unsafe { i32::from(*src.get_unchecked(si)) };
+        let cb = unsafe { i32::from(*src.get_unchecked(si + 1)) };
+        let luma1 = unsafe { i32::from(*src.get_unchecked(si + 2)) };
+        let cr = unsafe { i32::from(*src.get_unchecked(si + 3)) };
 
-        out[..4].copy_from_slice(&px0);
-        out[4..8].copy_from_slice(&px1);
+        // Inline BT.601 YUV→RGB: avoids intermediate [u8; 4] arrays.
+        let d = cb - 128;
+        let e = cr - 128;
+
+        let c298_0 = (luma0 - 16) * 298;
+        let r0 = ((c298_0 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
+        let g0 = ((c298_0 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
+        let b0 = ((c298_0 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
+
+        let c298_1 = (luma1 - 16) * 298;
+        let r1 = ((c298_1 + 409 * e + 128) >> 8).clamp(0, 255) as u8;
+        let g1 = ((c298_1 - 100 * d - 208 * e + 128) >> 8).clamp(0, 255) as u8;
+        let b1 = ((c298_1 + 516 * d + 128) >> 8).clamp(0, 255) as u8;
+
+        // SAFETY: di+7 < dst.len() because di = i*8 and i < N, so di+7 = i*8+7 ≤ (N-1)*8+7 = N*8-1 = dst.len()-1 (see proof above).
+        unsafe {
+            *dst.get_unchecked_mut(di) = r0;
+            *dst.get_unchecked_mut(di + 1) = g0;
+            *dst.get_unchecked_mut(di + 2) = b0;
+            *dst.get_unchecked_mut(di + 3) = 255;
+            *dst.get_unchecked_mut(di + 4) = r1;
+            *dst.get_unchecked_mut(di + 5) = g1;
+            *dst.get_unchecked_mut(di + 6) = b1;
+            *dst.get_unchecked_mut(di + 7) = 255;
+        }
+
+        si += 4;
+        di += 8;
     }
 }
 
