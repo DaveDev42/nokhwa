@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.12.0 (unreleased)
+
+### Breaking Changes
+
+* **Type-safe decode API**: `Camera` and `CallbackCamera` are now generic over `CaptureFormat` (`Camera<F: CaptureFormat = Mjpeg>`). New `Camera::open::<F>()` constructor selects format at compile time.
+* **Removed `FormatDecoder` trait and `pixel_format.rs`**: The old `Buffer::decode_image::<RgbFormat>()` pattern is replaced by `Frame<F>` with `IntoRgb`, `IntoRgba`, and `IntoLuma` conversion traits.
+* **Removed `decoding` feature flag**: The `image` crate is now always required. MJPEG decoding is controlled by the `mjpeg` feature (enabled by default).
+* **`ApiBackend::Custom(String)` variant added**: `ApiBackend` is no longer `Copy` (now `Clone` only). `Camera::backend()` returns `&ApiBackend`.
+* **`Buffer` API reduced**: Removed `decode_image()`, `decode_image_to_buffer()`, `decode_opencv_mat()`, `decode_into_opencv_mat()` methods. Use `Frame<F>` conversions instead.
+* **`RequestedFormat::new::<F>()`** now takes a `CaptureFormat` type instead of `FormatDecoder`.
+
+### Features
+
+* **`CaptureFormat` trait + 6 marker ZSTs**: `Yuyv`, `Nv12`, `Mjpeg`, `Gray`, `RawRgb`, `RawBgr` in `nokhwa_core::format_types`.
+* **`Frame<F>` typed frame handle**: Lazy conversion via `into_rgb()`, `into_rgba()`, `into_luma()` returning `RgbConversion`, `RgbaConversion`, `LumaConversion` structs. `materialize()` performs the actual pixel conversion.
+* **Compile-time format safety**: `Frame<Gray>` does not implement `IntoRgb` or `IntoRgba` — attempting grayscale-to-RGB conversion is a compile error.
+* **Direct Y-channel extraction**: `buf_yuyv_extract_luma()` and `buf_nv12_extract_luma()` extract luminance without intermediate RGB conversion.
+* **`Camera::frame_typed()`**: Returns `Frame<F>` for type-checked frame capture.
+
 ## [0.11.1](https://github.com/DaveDev42/nokhwa/compare/v0.11.0...v0.11.1) (2026-04-11)
 
 
