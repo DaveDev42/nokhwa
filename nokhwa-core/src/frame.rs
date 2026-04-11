@@ -495,6 +495,13 @@ pub(crate) fn convert_to_rgba_buffer(
         FrameFormat::YUYV => buf_yuyv422_to_rgb(data, dest, true),
         FrameFormat::NV12 => buf_nv12_to_rgb(resolution, data, dest, true),
         FrameFormat::RAWRGB => {
+            if !data.len().is_multiple_of(3) {
+                return Err(NokhwaError::ProcessFrameError {
+                    src: fcc,
+                    destination: "RGBA".to_string(),
+                    error: "RAWRGB data length not a multiple of 3".to_string(),
+                });
+            }
             let expected = (data.len() / 3) * 4;
             if dest.len() != expected {
                 return Err(NokhwaError::ProcessFrameError {
@@ -510,6 +517,13 @@ pub(crate) fn convert_to_rgba_buffer(
             Ok(())
         }
         FrameFormat::RAWBGR => {
+            if !data.len().is_multiple_of(3) {
+                return Err(NokhwaError::ProcessFrameError {
+                    src: fcc,
+                    destination: "RGBA".to_string(),
+                    error: "RAWBGR data length not a multiple of 3".to_string(),
+                });
+            }
             let expected = (data.len() / 3) * 4;
             if dest.len() != expected {
                 return Err(NokhwaError::ProcessFrameError {
@@ -617,6 +631,13 @@ pub(crate) fn convert_to_luma_buffer(
         FrameFormat::NV12 => buf_nv12_extract_luma(resolution, data, dest),
         // RAWBGR works with the same function: (R+G+B)/3 == (B+G+R)/3 (addition is commutative)
         FrameFormat::RAWRGB | FrameFormat::RAWBGR => {
+            if !data.len().is_multiple_of(3) {
+                return Err(NokhwaError::ProcessFrameError {
+                    src: fcc,
+                    destination: "Luma".to_string(),
+                    error: "RGB/BGR data length not a multiple of 3".to_string(),
+                });
+            }
             let pixel_count = data.len() / 3;
             if dest.len() != pixel_count {
                 return Err(NokhwaError::ProcessFrameError {
