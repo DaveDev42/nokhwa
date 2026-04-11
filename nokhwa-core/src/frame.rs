@@ -183,7 +183,7 @@ pub trait IntoLuma {
 
 /// Lazy RGB conversion. Call [`materialize()`](Self::materialize) to perform
 /// the actual pixel conversion.
-#[must_use = "conversion is lazy; call .materialize() or .write_to() to perform it"]
+#[must_use = "conversion is lazy; call a consuming method (.materialize(), .write_to(), etc.) to perform it"]
 pub struct RgbConversion {
     buffer: Buffer,
 }
@@ -242,7 +242,7 @@ impl RgbConversion {
 
 /// Lazy RGBA conversion. Call [`materialize()`](Self::materialize) to perform
 /// the actual pixel conversion.
-#[must_use = "conversion is lazy; call .materialize() or .write_to() to perform it"]
+#[must_use = "conversion is lazy; call a consuming method (.materialize(), .write_to(), etc.) to perform it"]
 pub struct RgbaConversion {
     buffer: Buffer,
 }
@@ -282,7 +282,7 @@ impl RgbaConversion {
 
 /// Lazy luma (grayscale) conversion. Call [`materialize()`](Self::materialize)
 /// to perform the actual pixel conversion.
-#[must_use = "conversion is lazy; call .materialize() or .write_to() to perform it"]
+#[must_use = "conversion is lazy; call a consuming method (.materialize(), .write_to(), etc.) to perform it"]
 pub struct LumaConversion {
     buffer: Buffer,
 }
@@ -635,6 +635,201 @@ pub(crate) fn convert_to_luma_buffer(
             dest[..luma.len()].copy_from_slice(&luma);
             Ok(())
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// OpenCV Mat conversions
+// ---------------------------------------------------------------------------
+
+/// Helper: create an owned `opencv::core::Mat` from decoded pixel data.
+///
+/// The caller provides the decoded bytes, resolution, the OpenCV type
+/// constant (`CV_8UC1`, `CV_8UC3`, `CV_8UC4`), and the original source
+/// [`FrameFormat`] for error reporting. A deep copy is made so the
+/// returned `Mat` owns its data.
+#[cfg(feature = "opencv-mat")]
+#[allow(clippy::cast_possible_wrap)]
+fn mat_from_decoded(
+    data: &[u8],
+    resolution: Resolution,
+    cv_type: i32,
+    src_format: FrameFormat,
+) -> Result<opencv::core::Mat, NokhwaError> {
+    use opencv::core::{Mat, Mat_AUTO_STEP};
+
+    // SAFETY: `new_rows_cols_with_data` borrows `data` without copying.
+    // We immediately `.clone()` the Mat so it owns its own memory,
+    // decoupling the returned Mat from the temporary `data` slice.
+    unsafe {
+        let tmp = Mat::new_rows_cols_with_data(
+            resolution.height_y as i32,
+            resolution.width_x as i32,
+            cv_type,
+            data.as_ptr().cast_mut().cast(),
+            Mat_AUTO_STEP,
+        )
+        .map_err(|why| NokhwaError::ProcessFrameError {
+            src: src_format,
+            destination: "OpenCV Mat".to_string(),
+            error: why.to_string(),
+        })?;
+
+        tmp.clone().map_err(|why| NokhwaError::ProcessFrameError {
+            src: src_format,
+            destination: "OpenCV Mat".to_string(),
+            error: why.to_string(),
+        })
+    }
+}
+
+/// Helper: write decoded pixel data into an existing `opencv::core::Mat`,
+/// re-allocating it if empty, or validating dimensions/type if already allocated.
+#[cfg(feature = "opencv-mat")]
+#[allow(clippy::cast_possible_wrap)]
+fn mat_write_decoded(
+    data: &[u8],
+    resolution: Resolution,
+    cv_type: i32,
+    src_format: FrameFormat,
+    dst: &mut opencv::core::Mat,
+) -> Result<(), NokhwaError> {
+    use opencv::core::{Mat, MatTraitConst, MatTraitManual, Scalar};
+
+    if dst.empty() {
+        *dst = Mat::new_rows_cols_with_default(
+            resolution.height_y as i32,
+            resolution.width_x as i32,
+            cv_type,
+            Scalar::default(),
+        )
+        .map_err(|why| NokhwaError::ProcessFrameError {
+            src: src_format,
+            destination: "OpenCV Mat".to_string(),
+            error: why.to_string(),
+        })?;
+    } else if dst.typ() != cv_type {
+        return Err(NokhwaError::ProcessFrameError {
+            src: src_format,
+            destination: "OpenCV Mat".to_string(),
+            error: "Matrix type mismatch".to_string(),
+        });
+    } else if dst.rows() != resolution.height_y as i32 || dst.cols() != resolution.width_x as i32 {
+        return Err(NokhwaError::ProcessFrameError {
+            src: src_format,
+            destination: "OpenCV Mat".to_string(),
+            error: "Matrix dimensions mismatch".to_string(),
+        });
+    }
+
+    let bytes = dst
+        .data_bytes_mut()
+        .map_err(|_| NokhwaError::ProcessFrameError {
+            src: src_format,
+            destination: "OpenCV Mat".to_string(),
+            error: "Matrix must be continuous".to_string(),
+        })?;
+
+    if bytes.len() != data.len() {
+        return Err(NokhwaError::ProcessFrameError {
+            src: src_format,
+            destination: "OpenCV Mat".to_string(),
+            error: format!(
+                "Buffer size mismatch (mat has {}, data has {})",
+                bytes.len(),
+                data.len()
+            ),
+        });
+    }
+
+    bytes.copy_from_slice(data);
+    Ok(())
+}
+
+#[cfg(feature = "opencv-mat")]
+#[cfg_attr(feature = "docs-features", doc(cfg(feature = "opencv-mat")))]
+impl RgbConversion {
+    /// Converts the frame to RGB and produces an OpenCV `Mat` (CV_8UC3).
+    ///
+    /// Note: OpenCV uses BGR channel ordering internally. If you need BGR,
+    /// call `opencv::imgproc::cvt_color` with `COLOR_RGB2BGR` on the result.
+    /// # Errors
+    /// Returns an error if pixel conversion or Mat creation fails.
+    pub fn to_opencv_mat(self) -> Result<opencv::core::Mat, NokhwaError> {
+        let resolution = self.buffer.resolution();
+        let data = self.buffer.buffer();
+        let fcc = self.buffer.source_frame_format();
+        let rgb_data = convert_to_rgb(fcc, resolution, data)?;
+        mat_from_decoded(&rgb_data, resolution, opencv::core::CV_8UC3, fcc)
+    }
+
+    /// Converts the frame to RGB and writes into an existing OpenCV `Mat` (CV_8UC3).
+    ///
+    /// Note: OpenCV uses BGR channel ordering internally. If you need BGR,
+    /// call `opencv::imgproc::cvt_color` with `COLOR_RGB2BGR` on the result.
+    /// # Errors
+    /// Returns an error if pixel conversion fails, or the destination Mat has
+    /// incompatible type/dimensions.
+    pub fn write_to_opencv_mat(self, dst: &mut opencv::core::Mat) -> Result<(), NokhwaError> {
+        let resolution = self.buffer.resolution();
+        let data = self.buffer.buffer();
+        let fcc = self.buffer.source_frame_format();
+        let rgb_data = convert_to_rgb(fcc, resolution, data)?;
+        mat_write_decoded(&rgb_data, resolution, opencv::core::CV_8UC3, fcc, dst)
+    }
+}
+
+#[cfg(feature = "opencv-mat")]
+#[cfg_attr(feature = "docs-features", doc(cfg(feature = "opencv-mat")))]
+impl RgbaConversion {
+    /// Converts the frame to RGBA and produces an OpenCV `Mat` (CV_8UC4).
+    /// # Errors
+    /// Returns an error if pixel conversion or Mat creation fails.
+    pub fn to_opencv_mat(self) -> Result<opencv::core::Mat, NokhwaError> {
+        let resolution = self.buffer.resolution();
+        let data = self.buffer.buffer();
+        let fcc = self.buffer.source_frame_format();
+        let rgba_data = convert_to_rgba(fcc, resolution, data)?;
+        mat_from_decoded(&rgba_data, resolution, opencv::core::CV_8UC4, fcc)
+    }
+
+    /// Converts the frame to RGBA and writes into an existing OpenCV `Mat` (CV_8UC4).
+    /// # Errors
+    /// Returns an error if pixel conversion fails, or the destination Mat has
+    /// incompatible type/dimensions.
+    pub fn write_to_opencv_mat(self, dst: &mut opencv::core::Mat) -> Result<(), NokhwaError> {
+        let resolution = self.buffer.resolution();
+        let data = self.buffer.buffer();
+        let fcc = self.buffer.source_frame_format();
+        let rgba_data = convert_to_rgba(fcc, resolution, data)?;
+        mat_write_decoded(&rgba_data, resolution, opencv::core::CV_8UC4, fcc, dst)
+    }
+}
+
+#[cfg(feature = "opencv-mat")]
+#[cfg_attr(feature = "docs-features", doc(cfg(feature = "opencv-mat")))]
+impl LumaConversion {
+    /// Converts the frame to grayscale and produces an OpenCV `Mat` (CV_8UC1).
+    /// # Errors
+    /// Returns an error if pixel conversion or Mat creation fails.
+    pub fn to_opencv_mat(self) -> Result<opencv::core::Mat, NokhwaError> {
+        let resolution = self.buffer.resolution();
+        let data = self.buffer.buffer();
+        let fcc = self.buffer.source_frame_format();
+        let luma_data = convert_to_luma(fcc, resolution, data)?;
+        mat_from_decoded(&luma_data, resolution, opencv::core::CV_8UC1, fcc)
+    }
+
+    /// Converts the frame to grayscale and writes into an existing OpenCV `Mat` (CV_8UC1).
+    /// # Errors
+    /// Returns an error if pixel conversion fails, or the destination Mat has
+    /// incompatible type/dimensions.
+    pub fn write_to_opencv_mat(self, dst: &mut opencv::core::Mat) -> Result<(), NokhwaError> {
+        let resolution = self.buffer.resolution();
+        let data = self.buffer.buffer();
+        let fcc = self.buffer.source_frame_format();
+        let luma_data = convert_to_luma(fcc, resolution, data)?;
+        mat_write_decoded(&luma_data, resolution, opencv::core::CV_8UC1, fcc, dst)
     }
 }
 

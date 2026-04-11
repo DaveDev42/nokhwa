@@ -13,7 +13,7 @@ default            = [  ]
 serialize          = [ "serde" ]
 wgpu-types         = [ "wgpu" ]
 mjpeg              = [ "mozjpeg" ]
-opencv-mat         = [ "opencv", "opencv/clang-runtime", "bytemuck" ]
+opencv-mat         = [ "opencv", "opencv/clang-runtime" ]
 docs-features      = [ "serialize", "wgpu-types", "mjpeg" ]
 test-fail-warnings = [  ]
 
@@ -38,10 +38,6 @@ optional         = true
 
 [dependencies.opencv]
 version  = "0.97"
-optional = true
-
-[dependencies.bytemuck]
-version  = "1"
 optional = true
 
 [dependencies.mozjpeg]
