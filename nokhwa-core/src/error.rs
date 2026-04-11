@@ -28,7 +28,7 @@ pub enum NokhwaError {
     InitializeError { backend: ApiBackend, error: String },
     #[error("Could not shutdown {backend}: {error}")]
     ShutdownError { backend: ApiBackend, error: String },
-    #[error("Error{}: {message}", backend.map(|b| format!(" (backend {b})")).unwrap_or_default())]
+    #[error("Error{}: {message}", backend.as_ref().map(|b| format!(" (backend {b})")).unwrap_or_default())]
     GeneralError {
         message: String,
         backend: Option<ApiBackend>,
@@ -45,7 +45,7 @@ pub enum NokhwaError {
         value: String,
         error: String,
     },
-    #[error("Could not open device stream{}: {message}", backend.map(|b| format!(" (backend {b})")).unwrap_or_default())]
+    #[error("Could not open device stream{}: {message}", backend.as_ref().map(|b| format!(" (backend {b})")).unwrap_or_default())]
     OpenStreamError {
         message: String,
         backend: Option<ApiBackend>,
@@ -61,7 +61,7 @@ pub enum NokhwaError {
         destination: String,
         error: String,
     },
-    #[error("Could not stop stream{}: {message}", backend.map(|b| format!(" (backend {b})")).unwrap_or_default())]
+    #[error("Could not stop stream{}: {message}", backend.as_ref().map(|b| format!(" (backend {b})")).unwrap_or_default())]
     StreamShutdownError {
         message: String,
         backend: Option<ApiBackend>,

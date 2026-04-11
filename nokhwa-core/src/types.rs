@@ -1483,7 +1483,7 @@ impl Display for ControlValueSetter {
 /// - `GStreamer` - ***DEPRECATED*** Uses `GStreamer` RTP to capture. Platform agnostic.
 /// - `Network` - Uses `OpenCV` to capture from an IP.
 /// - `Browser` - Uses browser APIs to capture from a webcam.
-#[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub enum ApiBackend {
     Auto,
@@ -1495,6 +1495,8 @@ pub enum ApiBackend {
     GStreamer,
     Network,
     Browser,
+    /// A custom backend not covered by the built-in variants.
+    Custom(String),
 }
 
 impl Display for ApiBackend {

@@ -113,7 +113,7 @@ impl CallbackCamera {
     /// # Errors
     /// This wraps an infallible call and should not return an error.
     pub fn backend(&self) -> Result<ApiBackend, NokhwaError> {
-        Ok(self.camera.lock().backend())
+        Ok(self.camera.lock().backend().clone())
     }
 
     /// Sets the current Camera's backend. Note that this re-initializes the camera.

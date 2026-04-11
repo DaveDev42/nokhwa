@@ -117,7 +117,7 @@ impl Camera {
         format: RequestedFormat,
         backend: ApiBackend,
     ) -> Result<Self, NokhwaError> {
-        let camera_backend = init_camera(&index, format, backend)?;
+        let camera_backend = init_camera(&index, format, backend.clone())?;
 
         Ok(Camera {
             idx: index,
@@ -186,7 +186,7 @@ impl Camera {
         let new_camera = init_camera(
             new_idx,
             RequestedFormat::with_formats(RequestedFormatType::Exact(new_camera_format), &temp),
-            self.api,
+            self.api.clone(),
         )?;
         self.device = new_camera;
         Ok(())
@@ -194,8 +194,8 @@ impl Camera {
 
     /// Gets the current Camera's backend
     #[must_use]
-    pub fn backend(&self) -> ApiBackend {
-        self.api
+    pub fn backend(&self) -> &ApiBackend {
+        &self.api
     }
 
     /// Sets the current Camera's backend. Note that this re-initializes the camera.
@@ -602,7 +602,7 @@ fn figure_out_auto() -> Option<ApiBackend> {
 ///
 /// The caller must resolve [`ApiBackend::Auto`] before calling this function.
 fn create_backend(
-    backend: ApiBackend,
+    backend: &ApiBackend,
     index: &CameraIndex,
     format: RequestedFormat,
 ) -> Result<Box<dyn CaptureBackendTrait + Send>, NokhwaError> {
@@ -660,5 +660,5 @@ fn init_camera(
         other => other,
     };
 
-    create_backend(resolved, index, format)
+    create_backend(&resolved, index, format)
 }
