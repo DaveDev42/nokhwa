@@ -42,7 +42,7 @@ pub(crate) fn bgr_to_rgb_simd(src: &[u8], dst: &mut [u8]) {
     #[cfg(target_arch = "x86_64")]
     // SAFETY: SSE2 is always available on x86_64
     unsafe {
-        bgr_to_rgb_sse2(src, dst);
+        bgr_to_rgb_x86(src, dst);
     }
 
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
@@ -86,7 +86,7 @@ fn bgr_to_rgb_neon(src: &[u8], dst: &mut [u8]) {
 
 #[cfg(target_arch = "x86_64")]
 #[inline]
-unsafe fn bgr_to_rgb_sse2(src: &[u8], dst: &mut [u8]) {
+unsafe fn bgr_to_rgb_x86(src: &[u8], dst: &mut [u8]) {
     if is_x86_feature_detected!("avx2") {
         bgr_to_rgb_avx2(src, dst);
         return;
@@ -849,6 +849,11 @@ pub(crate) fn nv12_to_rgb_simd(
     out: &mut [u8],
     rgba: bool,
 ) {
+    let pxsize = if rgba { 4 } else { 3 };
+    assert!(width.is_multiple_of(2) && height.is_multiple_of(2));
+    assert_eq!(data.len(), width * height * 3 / 2);
+    assert_eq!(out.len(), width * height * pxsize);
+
     #[cfg(target_arch = "aarch64")]
     nv12_to_rgb_neon(width, height, data, out, rgba);
 
@@ -1562,7 +1567,7 @@ unsafe fn rgb_to_luma_x86(src: &[u8], dst: &mut [u8]) {
 unsafe fn rgb_to_luma_sse2(src: &[u8], dst: &mut [u8]) {
     use std::arch::x86_64::{
         _mm_add_epi16, _mm_mulhi_epu16, _mm_packus_epi16, _mm_set1_epi16, _mm_setzero_si128,
-        _mm_storeu_si128, _mm_unpacklo_epi8,
+        _mm_unpacklo_epi8,
     };
 
     let zero = _mm_setzero_si128();
@@ -1607,10 +1612,8 @@ unsafe fn rgb_to_luma_sse2(src: &[u8], dst: &mut [u8]) {
         // Pack u16 → u8 (saturating)
         let result_8 = _mm_packus_epi16(result_16, zero);
 
-        // Store 8 bytes
-        let mut tmp = [0u8; 16];
-        _mm_storeu_si128(tmp.as_mut_ptr().cast(), result_8);
-        std::ptr::copy_nonoverlapping(tmp.as_ptr(), dst.as_mut_ptr().add(di), 8);
+        // Store 8 luma bytes directly
+        std::arch::x86_64::_mm_storel_epi64(dst.as_mut_ptr().add(di).cast(), result_8);
 
         si += 24;
         di += 8;
@@ -1821,10 +1824,11 @@ mod tests {
     #[test]
     fn nv12_to_rgb_matches_scalar() {
         // 4×2 image: smallest valid NV12 (width and height even)
+        // UV plane has 1 row (height/2) with 2 UV pairs (width/2) = 4 bytes
         let width = 4;
         let height = 2;
         let y_plane: Vec<u8> = vec![128, 64, 200, 16, 235, 100, 50, 180];
-        let uv_plane: Vec<u8> = vec![128, 128, 200, 50, 128, 128, 200, 50]; // shared for both rows
+        let uv_plane: Vec<u8> = vec![128, 128, 200, 50];
         let data: Vec<u8> = [y_plane, uv_plane].concat();
 
         let mut simd_rgb = vec![0u8; width * height * 3];
@@ -1841,7 +1845,7 @@ mod tests {
         let width = 4;
         let height = 2;
         let y_plane: Vec<u8> = vec![128, 64, 200, 16, 235, 100, 50, 180];
-        let uv_plane: Vec<u8> = vec![128, 128, 200, 50, 128, 128, 200, 50];
+        let uv_plane: Vec<u8> = vec![128, 128, 200, 50];
         let data: Vec<u8> = [y_plane, uv_plane].concat();
 
         let mut simd_rgba = vec![0u8; width * height * 4];
