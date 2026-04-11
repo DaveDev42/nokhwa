@@ -20,6 +20,9 @@ devenv.local.nix
 # Claude Code
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+.claude/CLAUDE.local.md
+docs/superpowers/
+docs/plans/
 
 # pre-commit
 .pre-commit-config.yaml
