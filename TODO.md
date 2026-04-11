@@ -1,17 +1,17 @@
 # TODO
 
 ## High Priority
-(None)
+- [x] Fix release-please config to prevent premature 1.0.0 bumps on breaking changes (`bump-major-pre-major: false`)
 
 ## Medium Priority
-- [ ] Add integration tests for each platform backend (currently only core unit tests + macOS format tests)
-  - [ ] Format conversion correctness (MJPEG, NV12, YUYV decoding validation) — Frame<F> tests currently skip MJPEG (requires compressed data + mjpeg feature)
-  - [ ] Camera control round-trip (set → get verification)
-  - [ ] Robustness against malformed input (e.g. malformed MJPEG)
+- [x] Add MJPEG unit tests — Frame<Mjpeg> into_rgb/into_rgba/into_luma + write_to + malformed/empty error cases added
 - [x] Port OpenCV Mat methods to new Frame<F> API (removed Buffer::decode_opencv_mat in 0.12.0)
 
 ## Low Priority
-(None)
+- [ ] Add platform integration tests (requires physical camera, gated behind `device-test` feature)
+  - [ ] End-to-end capture pipeline: format negotiation → stream open → frame capture → decode
+  - [ ] Camera control round-trip on real hardware (set → get value verification)
+  - [ ] Multi-frame streaming consistency (no corruption across frames)
 
 ## Performance
 (None)
