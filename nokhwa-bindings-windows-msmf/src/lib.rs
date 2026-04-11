@@ -34,7 +34,6 @@ pub mod wmf {
         ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo, ControlValueDescription,
         ControlValueSetter, FrameFormat, KnownCameraControl, KnownCameraControlFlag, Resolution,
     };
-    use once_cell::sync::Lazy;
     use std::ffi::c_void;
     use std::{
         borrow::Cow,
@@ -43,7 +42,7 @@ pub mod wmf {
         slice::from_raw_parts,
         sync::{
             atomic::{AtomicBool, AtomicUsize, Ordering},
-            Arc,
+            Arc, LazyLock,
         },
         time::Duration,
     };
@@ -79,8 +78,10 @@ pub mod wmf {
         },
     };
 
-    static INITIALIZED: Lazy<Arc<AtomicBool>> = Lazy::new(|| Arc::new(AtomicBool::new(false)));
-    static CAMERA_REFCNT: Lazy<Arc<AtomicUsize>> = Lazy::new(|| Arc::new(AtomicUsize::new(0)));
+    static INITIALIZED: LazyLock<Arc<AtomicBool>> =
+        LazyLock::new(|| Arc::new(AtomicBool::new(false)));
+    static CAMERA_REFCNT: LazyLock<Arc<AtomicUsize>> =
+        LazyLock::new(|| Arc::new(AtomicUsize::new(0)));
 
     // See: https://stackoverflow.com/questions/80160/what-does-coinit-speed-over-memory-do
     const CO_INIT_APARTMENT_THREADED: COINIT = COINIT(0x2);

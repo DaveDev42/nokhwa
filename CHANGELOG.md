@@ -63,7 +63,9 @@
 ## Cleanup
 - Replaced `flume` crate with `std::sync::mpsc` to reduce external dependencies (all channel usages migrated in library and examples)
 - Replaced `core-media-sys` / `core-video-sys` crate dependencies with direct FFI declarations in `ffi.rs`, eliminating legacy `objc 0.2` and `metal 0.18` transitive dependencies
-- Removed unused dependencies: `usb_enumeration`, `regex`, `cocoa-foundation`, `core-foundation`, `once_cell`
+- Removed unused dependencies from nokhwa-core: `usb_enumeration`, `regex`, `cocoa-foundation`, `core-foundation`, `once_cell`
+- Replaced `once_cell::sync::Lazy` with `std::sync::LazyLock` in Windows bindings, removing `once_cell` dependency from `nokhwa-bindings-windows-msmf`
+- Removed unused `once_cell` dependency from `nokhwactl` example
 - Removed dead code: empty `VirtualBackendTrait`, commented-out module declarations, obsolete code blocks
 - Removed obsolete `make-npm.sh` (JS bindings removed in 0.10.0)
 
