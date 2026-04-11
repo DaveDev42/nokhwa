@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+use nokhwa_core::format_types::{CaptureFormat, Mjpeg};
+#[cfg(feature = "decoding")]
+use nokhwa_core::frame::Frame;
 #[cfg(feature = "decoding")]
 use nokhwa_core::pixel_format::FormatDecoder;
 #[cfg(feature = "output-wgpu")]
@@ -28,62 +31,49 @@ use nokhwa_core::{
         ControlValueSetter, FrameFormat, KnownCameraControl, RequestedFormat, Resolution,
     },
 };
-use std::{borrow::Cow, collections::HashMap, time::Duration};
+use std::{borrow::Cow, collections::HashMap, marker::PhantomData, time::Duration};
 #[cfg(feature = "output-wgpu")]
 use wgpu::{Device as WgpuDevice, Queue as WgpuQueue, Texture as WgpuTexture};
 
 /// The main camera capture struct, abstracting over platform-specific backends.
 ///
-/// `Camera` provides a unified interface for webcam capture across operating systems.
-/// Internally it holds a [`CaptureBackendTrait`] implementation selected at construction
-/// time based on the enabled feature flags and the current platform:
+/// `Camera<F>` is parameterized by a [`CaptureFormat`] marker type (e.g.
+/// [`Mjpeg`], [`Yuyv`](nokhwa_core::format_types::Yuyv)) that pins the camera
+/// to a specific wire format at compile time. Use [`Camera::open`] to create an
+/// instance, which verifies at open time that the hardware supports the
+/// requested format.
 ///
-/// | Platform | Feature flag           | Backend                |
-/// |----------|------------------------|------------------------|
-/// | Linux    | `input-v4l`            | `Video4Linux`          |
-/// | macOS    | `input-avfoundation`   | `AVFoundation`         |
-/// | Windows  | `input-msmf`           | Media Foundation       |
-/// | Any      | `input-opencv`         | `OpenCV`               |
+/// The default type parameter is [`Mjpeg`], so `Camera` (without an explicit
+/// type) works like the pre-0.12 non-generic Camera.
 ///
-/// # Creating a Camera
-///
-/// Use [`Camera::new`] with a [`CameraIndex`] and a [`RequestedFormat`] that describes
-/// what resolution, frame rate, and pixel format you would like. The library will pick
-/// the closest match the hardware supports.
+/// # Creating a Camera (type-safe)
 ///
 /// ```no_run
-/// use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
-/// use nokhwa::pixel_format::RgbFormat;
 /// use nokhwa::Camera;
+/// use nokhwa::utils::{CameraIndex, RequestedFormatType};
+/// use nokhwa_core::format_types::Mjpeg;
 ///
-/// // Open the first camera at its highest available resolution
-/// let mut camera = Camera::new(
+/// let mut camera = Camera::open::<Mjpeg>(
 ///     CameraIndex::Index(0),
-///     RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution),
+///     RequestedFormatType::AbsoluteHighestResolution,
 /// ).expect("failed to open camera");
 /// ```
 ///
-/// # Capturing frames
-///
-/// Call [`Camera::open_stream`] to begin capture, then [`Camera::frame`] to grab
-/// decoded frames as [`Buffer`]s. Each [`Buffer`] can be further decoded into an
-/// `image::ImageBuffer` via [`Buffer::decode_image`].
+/// # Typed frame capture
 ///
 /// ```no_run
-/// # use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
-/// # use nokhwa::pixel_format::RgbFormat;
 /// # use nokhwa::Camera;
-/// # let mut camera = Camera::new(
+/// # use nokhwa::utils::{CameraIndex, RequestedFormatType};
+/// # use nokhwa_core::format_types::Mjpeg;
+/// use nokhwa_core::frame::IntoRgb;
+///
+/// # let mut camera = Camera::open::<Mjpeg>(
 /// #     CameraIndex::Index(0),
-/// #     RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution),
+/// #     RequestedFormatType::AbsoluteHighestResolution,
 /// # ).unwrap();
-/// camera.open_stream().expect("failed to open stream");
-///
-/// let frame = camera.frame().expect("failed to capture frame");
-/// println!("captured {}x{} frame", frame.resolution().width(), frame.resolution().height());
-///
-/// // Decode to an `image` RgbImage:
-/// let decoded = frame.decode_image::<RgbFormat>().expect("failed to decode");
+/// camera.open_stream().unwrap();
+/// let frame = camera.frame_typed().unwrap();
+/// let rgb_image = frame.into_rgb().materialize().unwrap();
 /// ```
 ///
 /// # Callback-based capture
@@ -95,13 +85,53 @@ use wgpu::{Device as WgpuDevice, Queue as WgpuQueue, Texture as WgpuTexture};
 ///
 /// The stream is automatically stopped when `Camera` is dropped. You can also call
 /// [`Camera::stop_stream`] explicitly.
-pub struct Camera {
+pub struct Camera<F: CaptureFormat = Mjpeg> {
     idx: CameraIndex,
     api: ApiBackend,
     device: Box<dyn CaptureBackendTrait + Send>,
+    _format: PhantomData<F>,
 }
 
 impl Camera {
+    /// Opens a camera with type-safe format selection.
+    ///
+    /// The camera is configured to capture in format `F` (e.g. `Mjpeg`, `Yuyv`).
+    /// The `requested` parameter controls resolution/framerate selection strategy.
+    ///
+    /// # Errors
+    /// Returns an error if the platform backend cannot be initialized, the camera
+    /// doesn't support the requested format, or permissions are denied.
+    pub fn open<F: CaptureFormat>(
+        index: CameraIndex,
+        requested: RequestedFormatType,
+    ) -> Result<Camera<F>, NokhwaError> {
+        Camera::open_with_backend::<F>(index, requested, ApiBackend::Auto)
+    }
+
+    /// Opens a camera with type-safe format selection and an explicit backend.
+    ///
+    /// # Errors
+    /// Returns an error if the backend cannot be initialized or the camera
+    /// doesn't support format `F`.
+    pub fn open_with_backend<F: CaptureFormat>(
+        index: CameraIndex,
+        requested: RequestedFormatType,
+        backend: ApiBackend,
+    ) -> Result<Camera<F>, NokhwaError> {
+        let formats = &[F::FRAME_FORMAT];
+        let req = RequestedFormat::with_formats(requested, formats);
+        let camera_backend = init_camera(&index, req, backend.clone())?;
+
+        Ok(Camera {
+            idx: index,
+            api: backend,
+            device: camera_backend,
+            _format: PhantomData,
+        })
+    }
+}
+
+impl<F: CaptureFormat> Camera<F> {
     /// Create a new camera from an `index` and `format`
     /// # Errors
     /// This will error if you either have a bad platform configuration (e.g. `input-v4l` but not on linux) or the backend cannot create the camera (e.g. permission denied).
@@ -123,6 +153,7 @@ impl Camera {
             idx: index,
             api: backend,
             device: camera_backend,
+            _format: PhantomData,
         })
     }
 
@@ -135,7 +166,12 @@ impl Camera {
         api: ApiBackend,
         device: Box<dyn CaptureBackendTrait + Send>,
     ) -> Self {
-        Self { idx, api, device }
+        Self {
+            idx,
+            api,
+            device,
+            _format: PhantomData,
+        }
     }
 
     /// Create a new camera from an `index`, automatically selecting the highest available resolution.
@@ -166,6 +202,20 @@ impl Camera {
                 color_frame_formats(),
             ),
         )
+    }
+
+    /// Captures a frame and returns a type-safe [`Frame<F>`].
+    ///
+    /// The returned frame carries the compile-time format tag, enabling
+    /// type-checked conversions (e.g. `frame.into_rgb().materialize()`).
+    ///
+    /// # Errors
+    /// Returns an error if the stream is not open or frame capture fails.
+    #[cfg(feature = "decoding")]
+    #[cfg_attr(feature = "docs-features", doc(cfg(feature = "decoding")))]
+    pub fn frame_typed(&mut self) -> Result<Frame<F>, NokhwaError> {
+        let buffer = self.device.frame()?;
+        Ok(Frame::new(buffer))
     }
 
     /// Gets the current Camera's index.
@@ -413,11 +463,8 @@ impl Camera {
     }
 
     /// Sets the control to `control` in the camera.
-    /// Usually, the pipeline is calling [`camera_control()`](crate::camera_traits::CaptureBackendTrait::camera_control), getting a camera control that way
-    /// then calling [`value()`](crate::utils::CameraControl::value()) to get a [`ControlValueSetter`](crate::utils::ControlValueSetter) and setting the value that way.
     /// # Errors
-    /// If the `control` is not supported, the value is invalid (less than min, greater than max, not in step), or there was an error setting the control,
-    /// this will error.
+    /// If the `control` is not supported, the value is invalid, or there was an error setting the control, this will error.
     pub fn set_camera_control(
         &mut self,
         id: KnownCameraControl,
@@ -426,7 +473,7 @@ impl Camera {
         self.device.set_camera_control(id, value)
     }
 
-    /// Will open the camera stream with set parameters. This will be called internally if you try and call [`frame()`](CaptureBackendTrait::frame()) before you call [`open_stream()`](CaptureBackendTrait::open_stream()).
+    /// Will open the camera stream with set parameters.
     /// # Errors
     /// If the specific backend fails to open the camera (e.g. already taken, busy, doesn't exist anymore) this will error.
     pub fn open_stream(&mut self) -> Result<(), NokhwaError> {
@@ -439,44 +486,21 @@ impl Camera {
         self.device.is_stream_open()
     }
 
-    /// Will get a frame from the camera as a Raw RGB image buffer. Depending on the backend, if you have not called [`open_stream()`](CaptureBackendTrait::open_stream()) before you called this,
-    /// it will either return an error.
+    /// Will get a frame from the camera as a [`Buffer`]. This is the untyped version;
+    /// prefer [`frame_typed()`](Self::frame_typed) for type-safe access.
     /// # Errors
-    /// If the backend fails to get the frame (e.g. already taken, busy, doesn't exist anymore), the decoding fails (e.g. MJPEG -> u8), or [`open_stream()`](CaptureBackendTrait::open_stream()) has not been called yet,
-    /// this will error.
+    /// If the backend fails to get the frame, or [`open_stream()`](CaptureBackendTrait::open_stream()) has not been called yet, this will error.
     pub fn frame(&mut self) -> Result<Buffer, NokhwaError> {
         self.device.frame()
     }
 
-    /// Will get a frame from the camera as a [`Buffer`], but with a timeout. If the frame is not
-    /// received within the given `duration`, this will return a [`TimeoutError`](NokhwaError::TimeoutError).
-    ///
-    /// This spawns the backend's [`frame_timeout()`](CaptureBackendTrait::frame_timeout) on a
-    /// background thread and waits with a timeout. If the backend overrides `frame_timeout`
-    /// with a platform-specific implementation, that implementation is used.
-    ///
-    /// **Note:** If the backend's frame capture blocks indefinitely, this method will also
-    /// block beyond the requested `duration` while waiting for the background thread to join.
-    /// The timeout is best-effort: it detects when the deadline has passed, but cannot
-    /// cancel an in-progress backend call. This method spawns a new thread per call and is
-    /// not suited for high-frequency capture loops. A zero `duration` will return
-    /// [`TimeoutError`](NokhwaError::TimeoutError) immediately.
-    ///
+    /// Will get a frame from the camera as a [`Buffer`], but with a timeout.
     /// # Errors
-    /// If the backend fails to get the frame within the timeout, or if the underlying
-    /// [`frame()`](CaptureBackendTrait::frame()) call fails, this will error.
+    /// If the backend fails to get the frame within the timeout, this will error.
     pub fn frame_timeout(&mut self, duration: Duration) -> Result<Buffer, NokhwaError> {
-        // SAFETY invariant: `SendPtr` wraps a raw pointer to `self.device`. This is sound
-        // because we always call `handle.join()` before returning, which guarantees:
-        //   1. The spawned thread has finished using the pointer before we return.
-        //   2. No other code can access `self` while this method holds `&mut self`.
-        //   3. The pointee (`self.device`) outlives the thread's access.
-        // Do NOT add early returns after the thread is spawned.
         struct SendPtr(*mut dyn CaptureBackendTrait);
         unsafe impl Send for SendPtr {}
         impl SendPtr {
-            /// # Safety
-            /// The caller must ensure exclusive access to the pointee and that it is valid.
             unsafe fn frame_timeout(&self, duration: Duration) -> Result<Buffer, NokhwaError> {
                 unsafe { (&mut *self.0).frame_timeout(duration) }
             }
@@ -492,7 +516,6 @@ impl Camera {
             &mut *self.device,
         ));
         let handle = std::thread::spawn(move || {
-            // SAFETY: We have exclusive access; see invariant above.
             let _ = tx.send(unsafe { ptr.frame_timeout(duration) });
         });
         let remaining = duration.saturating_sub(start.elapsed());
@@ -509,26 +532,23 @@ impl Camera {
         result
     }
 
-    /// Will get a frame from the camera **without** any processing applied, meaning you will usually get a frame you need to decode yourself.
+    /// Will get a frame from the camera **without** any processing applied.
     /// # Errors
-    /// If the backend fails to get the frame (e.g. already taken, busy, doesn't exist anymore), or [`open_stream()`](CaptureBackendTrait::open_stream()) has not been called yet, this will error.
+    /// If the backend fails to get the frame, or [`open_stream()`](CaptureBackendTrait::open_stream()) has not been called yet, this will error.
     pub fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
-        match self.device.frame_raw() {
-            Ok(f) => Ok(f),
-            Err(why) => Err(why),
-        }
+        self.device.frame_raw()
     }
 
     /// Directly writes the current frame into said `buffer`.
     /// # Errors
-    /// If the backend fails to get the frame (e.g. already taken, busy, doesn't exist anymore), or [`open_stream()`](CaptureBackendTrait::open_stream()) has not been called yet, this will error.
+    /// If the backend fails to get the frame or decoding fails, this will error.
     #[cfg(feature = "decoding")]
     #[cfg_attr(feature = "docs-features", doc(cfg(feature = "decoding")))]
-    pub fn write_frame_to_buffer<F: FormatDecoder>(
+    pub fn write_frame_to_buffer<D: FormatDecoder>(
         &mut self,
         buffer: &mut [u8],
     ) -> Result<(), NokhwaError> {
-        self.device.frame()?.decode_image_to_buffer::<F>(buffer)
+        self.device.frame()?.decode_image_to_buffer::<D>(buffer)
     }
 
     #[cfg(all(feature = "output-wgpu", feature = "decoding"))]
@@ -539,7 +559,7 @@ impl Camera {
     /// Directly copies a frame to a Wgpu texture. This will automatically convert the frame into a RGBA frame.
     /// # Errors
     /// If the frame cannot be captured or the resolution is 0 on any axis, this will error.
-    pub fn frame_texture<'a, F: FormatDecoder>(
+    pub fn frame_texture<'a, D: FormatDecoder>(
         &mut self,
         device: &WgpuDevice,
         queue: &WgpuQueue,
@@ -550,9 +570,7 @@ impl Camera {
 
     #[cfg(feature = "output-wgpu")]
     #[cfg_attr(feature = "docs-features", doc(cfg(feature = "output-wgpu")))]
-    /// Copies a frame to a Wgpu texture in the camera's native pixel format
-    /// (e.g. NV12, YUYV) without converting to RGBA. See [`RawTextureData`]
-    /// for the format metadata needed to decode on the GPU.
+    /// Copies a frame to a Wgpu texture in the camera's native pixel format.
     /// # Errors
     /// If the frame cannot be captured or the resolution is 0 on any axis, this will error.
     pub fn frame_texture_raw(
@@ -572,7 +590,7 @@ impl Camera {
     }
 }
 
-impl Drop for Camera {
+impl<F: CaptureFormat> Drop for Camera<F> {
     fn drop(&mut self) {
         self.stop_stream().unwrap();
     }
@@ -598,9 +616,6 @@ fn figure_out_auto() -> Option<ApiBackend> {
     Some(cap)
 }
 
-/// Creates the appropriate backend for the given [`ApiBackend`] variant.
-///
-/// The caller must resolve [`ApiBackend::Auto`] before calling this function.
 fn create_backend(
     backend: &ApiBackend,
     index: &CameraIndex,

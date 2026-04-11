@@ -121,6 +121,10 @@ pub use camera::Camera;
 pub use init::*;
 pub use nokhwa_core::buffer::{Buffer, TimestampKind};
 pub use nokhwa_core::error::NokhwaError;
+pub use nokhwa_core::format_types;
+#[cfg(feature = "decoding")]
+#[cfg_attr(feature = "docs-features", doc(cfg(feature = "decoding")))]
+pub use nokhwa_core::frame;
 #[cfg(feature = "output-wgpu")]
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "output-wgpu")))]
 pub use nokhwa_core::traits::{raw_texture_layout, RawTextureData};
