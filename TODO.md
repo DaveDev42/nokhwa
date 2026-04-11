@@ -8,6 +8,7 @@
   - [ ] Format conversion correctness (MJPEG, NV12, YUYV decoding validation)
   - [ ] Camera control round-trip (set → get verification)
   - [ ] Robustness against malformed input (e.g. malformed MJPEG)
+- [ ] Port OpenCV Mat methods to new Frame<F> API (removed Buffer::decode_opencv_mat in 0.12.0)
 
 ## Low Priority
 (None)
