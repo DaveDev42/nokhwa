@@ -11,6 +11,10 @@
   - [ ] GRAY→RGB: compile error (Frame\<Gray\> does not implement IntoRgb)
   - [ ] Remove `FormatDecoder` trait and old decode API
   - [ ] Revert `image` crate to required dependency (#81 revert)
+  - [ ] Third-party backend extensibility
+    - [ ] Add `ApiBackend::Custom(String)` variant for external backends
+    - [ ] Ensure `CaptureBackendTrait` in `nokhwa-core` is sufficient for external crates to implement
+    - [ ] `Camera::with_custom()` works with typed `Camera<F>` — accept `Box<dyn CaptureBackendTrait + Send>` with format verification
   - [ ] Version bump to 0.12.0
 
 ## Medium Priority
