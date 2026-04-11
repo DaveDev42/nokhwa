@@ -231,6 +231,7 @@ const JPEG_RED_2X2: &[u8] = &[
 /// The `channels` parameter is used only for diagnostic formatting (pixel index / channel id).
 #[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
 fn assert_pixels_near(actual: &[u8], expected: &[u8], channels: usize, tolerance: u8) {
+    debug_assert_ne!(channels, 0, "channels must be non-zero");
     assert_eq!(
         actual.len(),
         expected.len(),
