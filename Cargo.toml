@@ -77,6 +77,8 @@ input-opencv = [
 output-wgpu = [ "wgpu", "nokhwa-core/wgpu-types" ]
 # CallbackCamera: runs capture on a background thread with user-supplied callbacks
 output-threaded  = [ "parking_lot", "arc-swap" ]
+# Background-thread capture helper (CameraRunner)
+runner = [ ]
 
 # ── Documentation / CI helpers ────────────────────────────────────────
 # Enables all features for documentation builds (used by docs.rs)

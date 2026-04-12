@@ -58,6 +58,11 @@ pub use session::{
     CameraSession, HybridCamera, OpenRequest, OpenedCamera, ShutterCamera, StreamCamera,
 };
 
+#[cfg(feature = "runner")]
+pub mod runner;
+#[cfg(feature = "runner")]
+pub use runner::{CameraRunner, Overflow, RunnerConfig};
+
 pub use init::*;
 pub use nokhwa_core::buffer::{Buffer, TimestampKind};
 pub use nokhwa_core::error::NokhwaError;
