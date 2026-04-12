@@ -224,9 +224,11 @@ impl CameraRunner {
             // Tell the events thread to stop too.
             if let Some((ev_cmd_tx, handle)) = event_join_opt {
                 let _ = ev_cmd_tx.send(());
-                if let Err(_err) = handle.join() {
+                if let Err(err) = handle.join() {
                     #[cfg(feature = "logging")]
-                    log::warn!("CameraRunner: event worker thread panicked: {_err:?}");
+                    log::warn!("CameraRunner: event worker thread panicked: {err:?}");
+                    #[cfg(not(feature = "logging"))]
+                    let _ = err;
                 }
             }
         });
@@ -295,9 +297,11 @@ impl CameraRunner {
     fn shutdown(&mut self) {
         let _ = self.cmd.send(Command::Die);
         if let Some(handle) = self.join.take() {
-            if let Err(_err) = handle.join() {
+            if let Err(err) = handle.join() {
                 #[cfg(feature = "logging")]
-                log::warn!("CameraRunner: worker thread panicked: {_err:?}");
+                log::warn!("CameraRunner: worker thread panicked: {err:?}");
+                #[cfg(not(feature = "logging"))]
+                let _ = err;
             }
         }
     }

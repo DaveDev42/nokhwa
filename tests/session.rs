@@ -240,3 +240,22 @@ fn hybrid_camera_without_events_returns_none() {
     let mut cam = HybridCamera::from_device(Box::new(make_hybrid()));
     assert!(cam.take_events().is_none());
 }
+
+/// M12: ensures the V4L branch in [`CameraSession::open`] stays stubbed
+/// until it is intentionally re-enabled in 0.13.1. When the dispatch path
+/// is rewired, this test will start failing and the assertion should be
+/// deleted along with the stub.
+#[cfg(all(target_os = "linux", feature = "input-v4l"))]
+#[test]
+fn camera_session_open_v4l_is_stubbed_in_0_13_0() {
+    use nokhwa::{CameraSession, OpenRequest};
+    use nokhwa_core::types::CameraIndex;
+
+    let err = CameraSession::open(CameraIndex::Index(0), OpenRequest::any())
+        .expect_err("V4L path must be stubbed in 0.13.0");
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("0.13.1"),
+        "stub error should reference 0.13.1 deferral, got: {msg}"
+    );
+}

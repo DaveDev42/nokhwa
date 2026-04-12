@@ -279,3 +279,73 @@ fn runner_drop_joins_thread() {
     let runner = CameraRunner::spawn(opened, RunnerConfig::default()).unwrap();
     drop(runner);
 }
+
+/// M10: verify `RunnerConfig::shutter_timeout` is actually forwarded to
+/// `ShutterCapture::take_picture`. An instrumented shutter records the
+/// `timeout` passed to it and the runner is spawned with a custom value.
+#[test]
+fn runner_shutter_timeout_is_forwarded() {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
+
+    struct TimeoutProbe {
+        info: CameraInfo,
+        observed_ms: Arc<AtomicU64>,
+    }
+
+    impl CameraDevice for TimeoutProbe {
+        fn backend(&self) -> ApiBackend {
+            ApiBackend::Browser
+        }
+        fn info(&self) -> &CameraInfo {
+            &self.info
+        }
+        fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+            Ok(vec![])
+        }
+        fn set_control(
+            &mut self,
+            _id: KnownCameraControl,
+            _v: ControlValueSetter,
+        ) -> Result<(), NokhwaError> {
+            Ok(())
+        }
+    }
+
+    impl ShutterCapture for TimeoutProbe {
+        fn trigger(&mut self) -> Result<(), NokhwaError> {
+            Ok(())
+        }
+        fn take_picture(&mut self, timeout: Duration) -> Result<Buffer, NokhwaError> {
+            self.observed_ms
+                .store(timeout.as_millis() as u64, Ordering::SeqCst);
+            Ok(mock_frame(4, 4, FrameFormat::MJPEG))
+        }
+    }
+
+    nokhwa_backend!(TimeoutProbe: ShutterCapture);
+
+    let observed = Arc::new(AtomicU64::new(0));
+    let probe = TimeoutProbe {
+        info: CameraInfo::new(
+            "probe",
+            "probe",
+            "probe",
+            nokhwa_core::types::CameraIndex::Index(0),
+        ),
+        observed_ms: Arc::clone(&observed),
+    };
+    let opened = OpenedCamera::from_device(Box::new(probe));
+    let cfg = RunnerConfig {
+        shutter_timeout: Duration::from_millis(1234),
+        ..RunnerConfig::default()
+    };
+    let runner = CameraRunner::spawn(opened, cfg).unwrap();
+    runner.trigger().unwrap();
+    let _ = runner
+        .pictures()
+        .expect("shutter runner has pictures channel")
+        .recv_timeout(Duration::from_secs(1))
+        .expect("picture timed out");
+    assert_eq!(observed.load(Ordering::SeqCst), 1234);
+}

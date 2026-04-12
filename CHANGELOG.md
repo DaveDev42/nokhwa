@@ -60,27 +60,31 @@
   Linux CI validation; users can still construct `V4LCaptureDevice`
   directly via the `nokhwa-bindings-linux-v4l` crate.
 
-### Post-review cleanup
+### Additional breaking changes
 
-* Removed vestigial `RunnerConfig` fields (`frames_capacity`,
-  `pictures_capacity`, `events_capacity`, `overflow`) and the
-  `Overflow` enum — they did not affect anything because
-  `std::sync::mpsc::channel` is unbounded. Bounded channels with an
-  overflow policy are tracked for 0.14. Renamed `tick` →
-  `poll_interval` with a clarifying doc comment, and added a
-  `shutter_timeout` field (default 5s) to replace the previously
-  hard-coded 200ms.
+* `RunnerConfig` has been trimmed to three fields (`poll_interval` —
+  renamed from `tick`, `event_tick`, and the new `shutter_timeout`
+  defaulting to 5 s, replacing the previously hard-coded 200 ms).
+  The vestigial `frames_capacity` / `pictures_capacity` /
+  `events_capacity` / `overflow` fields and the `Overflow` enum were
+  removed because `std::sync::mpsc::channel` is unbounded. Bounded
+  channels with an overflow policy are tracked for 0.14.
 * `CameraSession` is now a unit struct; the no-op `CameraSession::new`
   constructor was removed. `CameraSession::open(index, req)` is
   unchanged.
+
+### Diagnostics
+
+* `HybridCamera::from_device` / `CameraRunner::spawn_hybrid` and the
+  `CameraRunner` worker thread joins now log event-poller init
+  failures and worker panics via `log::warn!` (gated on the `logging`
+  feature) instead of swallowing or burying them in an `Option`.
+
+### Internal
+
 * Hidden macro-internal items (`from_device`, `AnyDevice`,
   `HybridBackend`, `CAP_*`) are now `#[doc(hidden)]` throughout.
 * Deleted the unused `__nokhwa_cap_bit!` helper macro.
-* `HybridCamera::from_device` / `CameraRunner::spawn_hybrid` now log
-  event-poller initialization failures via `log::warn!` (gated on the
-  `logging` feature) instead of storing `Some(Err(_))`.
-* `CameraRunner` worker thread joins now log panics via `log::warn!`
-  when the `logging` feature is enabled.
 * Replaced stale `tests/device_tests.rs` body with a placeholder
   pending migration to the 0.13 API.
 

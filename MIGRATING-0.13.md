@@ -115,7 +115,9 @@ declared capabilities.
 - `poll_interval` (was `tick`): worker poll interval.
 - `event_tick`: event-poll timeout.
 - `shutter_timeout` (new): replaces the previously hard-coded 200 ms
-  timeout on `take_picture(…)`; defaults to 5 s.
+  timeout on `take_picture(…)`; defaults to 5 s. If your shutter code
+  relied on the short fast-fail behaviour, set
+  `shutter_timeout = Duration::from_millis(200)` explicitly.
 
 The vestigial `frames_capacity` / `pictures_capacity` / `events_capacity`
 / `overflow` fields (and the `Overflow` enum) were removed because the

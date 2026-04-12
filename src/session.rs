@@ -154,7 +154,8 @@ impl CameraSession {
             let _ = (&index, &requested);
             return Err(NokhwaError::general(
                 "V4L backend path via CameraSession::open is pending re-validation in 0.13.1; \
-                 construct V4LCaptureDevice directly from nokhwa-bindings-linux-v4l for now",
+                 construct `nokhwa::backends::capture::V4LCaptureDevice` directly \
+                 (re-exported from nokhwa-bindings-linux-v4l) for now",
             ));
         }
         #[cfg(all(
@@ -506,6 +507,10 @@ impl HybridCamera {
     /// Returns `None` on subsequent calls, for non-event backends, and when
     /// the backend's initial event-poll construction failed (that error is
     /// logged via `log::warn!` when the `logging` feature is enabled).
+    ///
+    /// The inner `Result` is always `Ok(_)` in 0.13.0 — init failures are
+    /// normalised to `None` above. The shape is preserved for
+    /// forward-compatibility with backends that may produce a poll lazily.
     pub fn take_events(&mut self) -> Option<Result<Box<dyn EventPoll + Send>, NokhwaError>> {
         if !self.event_source {
             return None;
