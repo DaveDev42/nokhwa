@@ -61,6 +61,9 @@ input-native              = [ "input-avfoundation", "input-v4l", "input-msmf" ]
 # Convenience alias for input-native
 input-auto                = [ "input-native" ]
 # Cross-platform OpenCV backend (requires OpenCV system library)
+# NOTE: pending migration to the 0.13.0 trait split (see TODO.md).
+# Enabling this feature currently triggers a compile_error!() in src/lib.rs.
+# Deps are preserved so the migration can resume without rewriting this list.
 input-opencv = [
     "opencv",
     "opencv/videoio",
