@@ -12,9 +12,6 @@
   - [ ] Camera control round-trip on real hardware (set → get value verification)
   - [ ] Multi-frame streaming consistency (no corruption across frames)
 
-## Medium Priority
-(None)
-
 ## Performance
 (None)
 
