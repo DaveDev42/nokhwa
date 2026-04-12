@@ -29,7 +29,7 @@ use std::arch::aarch64::{int16x8_t, int32x4_t, uint8x8_t};
 /// Processes `src` (YUYV 4:2:2, 4 bytes per 2 pixels) into `dst` (RGB888, 3 bytes per pixel).
 /// `dst` must be `(src.len() / 4) * 6` bytes.
 #[inline]
-pub fn yuyv_to_rgb_simd(src: &[u8], dst: &mut [u8]) {
+pub(crate) fn yuyv_to_rgb_simd(src: &[u8], dst: &mut [u8]) {
     assert!(src.len().is_multiple_of(4));
     assert_eq!(dst.len(), (src.len() / 4) * 6);
 
@@ -49,7 +49,7 @@ pub fn yuyv_to_rgb_simd(src: &[u8], dst: &mut [u8]) {
 /// Convert YUYV to RGBA using SIMD where available.
 /// `dst` must be `(src.len() / 4) * 8` bytes.
 #[inline]
-pub fn yuyv_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
+pub(crate) fn yuyv_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
     assert!(src.len().is_multiple_of(4));
     assert_eq!(dst.len(), (src.len() / 4) * 8);
 
@@ -77,7 +77,7 @@ pub fn yuyv_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
 ///   - Dest: each iteration writes `di..di+5` where di = i*6, max di+5 = (N-1)*6+5 = `dst.len()-1` ✓
 #[inline]
 #[allow(clippy::cast_sign_loss)]
-pub fn yuyv_to_rgb_scalar(src: &[u8], dst: &mut [u8]) {
+pub(crate) fn yuyv_to_rgb_scalar(src: &[u8], dst: &mut [u8]) {
     debug_assert!(src.len().is_multiple_of(4));
     debug_assert_eq!(dst.len(), (src.len() / 4) * 6);
 
@@ -132,7 +132,7 @@ pub fn yuyv_to_rgb_scalar(src: &[u8], dst: &mut [u8]) {
 ///   - Dest: each iteration writes `di..di+7` where di = i*8, max di+7 = (N-1)*8+7 = `dst.len()-1` ✓
 #[inline]
 #[allow(clippy::cast_sign_loss)]
-pub fn yuyv_to_rgba_scalar(src: &[u8], dst: &mut [u8]) {
+pub(crate) fn yuyv_to_rgba_scalar(src: &[u8], dst: &mut [u8]) {
     debug_assert!(src.len().is_multiple_of(4));
     debug_assert_eq!(dst.len(), (src.len() / 4) * 8);
 

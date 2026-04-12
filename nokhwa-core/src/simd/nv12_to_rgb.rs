@@ -31,7 +31,13 @@ use super::yuyv_to_rgb::yuv_to_rgb_neon_8px;
 /// `width` and `height` must be even. `out` must be `width * height * pxsize` bytes
 /// where `pxsize` is 3 (RGB) or 4 (RGBA).
 #[inline]
-pub fn nv12_to_rgb_simd(width: usize, height: usize, data: &[u8], out: &mut [u8], rgba: bool) {
+pub(crate) fn nv12_to_rgb_simd(
+    width: usize,
+    height: usize,
+    data: &[u8],
+    out: &mut [u8],
+    rgba: bool,
+) {
     let pxsize = if rgba { 4 } else { 3 };
     assert!(width.is_multiple_of(2) && height.is_multiple_of(2));
     assert_eq!(data.len(), width * height * 3 / 2);
@@ -57,7 +63,13 @@ pub fn nv12_to_rgb_simd(width: usize, height: usize, data: &[u8], out: &mut [u8]
     clippy::similar_names,
     dead_code
 )]
-pub fn nv12_to_rgb_scalar(width: usize, height: usize, data: &[u8], out: &mut [u8], rgba: bool) {
+pub(crate) fn nv12_to_rgb_scalar(
+    width: usize,
+    height: usize,
+    data: &[u8],
+    out: &mut [u8],
+    rgba: bool,
+) {
     let pxsize = if rgba { 4 } else { 3 };
     let y_plane = &data[..width * height];
     let uv_plane = &data[width * height..];

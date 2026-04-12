@@ -76,9 +76,13 @@ pub mod buffer;
 pub mod error;
 pub mod format_types;
 pub mod frame;
-#[cfg(not(feature = "bench"))]
 pub(crate) mod simd;
+
+/// Internal: wrappers around SIMD/scalar pixel conversion routines for
+/// benchmarking only. Not part of the stable API; may change or disappear
+/// without notice.
 #[cfg(feature = "bench")]
-pub mod simd;
+#[doc(hidden)]
+pub use simd::bench_exports;
 pub mod traits;
 pub mod types;

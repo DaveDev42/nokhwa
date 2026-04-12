@@ -23,7 +23,7 @@
 /// Compute `(R+G+B)/3` per pixel using SIMD where available.
 /// `src.len()` must be a multiple of 3, `dst.len()` must be `src.len() / 3`.
 #[inline]
-pub fn rgb_to_luma_simd(src: &[u8], dst: &mut [u8]) {
+pub(crate) fn rgb_to_luma_simd(src: &[u8], dst: &mut [u8]) {
     assert!(src.len().is_multiple_of(3));
     assert_eq!(dst.len(), src.len() / 3);
 
@@ -41,7 +41,7 @@ pub fn rgb_to_luma_simd(src: &[u8], dst: &mut [u8]) {
 }
 
 #[allow(dead_code, clippy::cast_possible_truncation)]
-pub fn rgb_to_luma_scalar(src: &[u8], dst: &mut [u8]) {
+pub(crate) fn rgb_to_luma_scalar(src: &[u8], dst: &mut [u8]) {
     for (rgb, out) in src.chunks_exact(3).zip(dst.iter_mut()) {
         *out = ((u16::from(rgb[0]) + u16::from(rgb[1]) + u16::from(rgb[2])) / 3) as u8;
     }

@@ -16,6 +16,8 @@ mjpeg              = [ "mozjpeg" ]
 opencv-mat         = [ "opencv", "opencv/clang-runtime" ]
 docs-features      = [ "serialize", "wgpu-types", "mjpeg" ]
 test-fail-warnings = [  ]
+# Internal: exposes bench-only wrappers around SIMD/scalar routines for
+# `cargo bench`. NOT part of the stable API — do not depend on this.
 bench              = [  ]
 
 
