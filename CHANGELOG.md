@@ -1,5 +1,105 @@
 # Changelog
 
+## [0.12.0](https://github.com/DaveDev42/nokhwa/compare/v0.11.0...v0.12.0) (2026-04-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* type-safe decode API (0.12.0) ([#85](https://github.com/DaveDev42/nokhwa/issues/85))
+* restructure error types with structured context, fix UninitializedError typo ([#47](https://github.com/DaveDev42/nokhwa/issues/47))
+* remove deprecated API methods (new_with, set_camera_format) ([#44](https://github.com/DaveDev42/nokhwa/issues/44))
+
+### Features
+
+* add frame_texture_raw() for native-format GPU textures ([#50](https://github.com/DaveDev42/nokhwa/issues/50)) ([a83bcd5](https://github.com/DaveDev42/nokhwa/commit/a83bcd5d380d9bb868adf64de88c0600b4c9d50a))
+* add frame_timeout() method for bounded frame capture ([#49](https://github.com/DaveDev42/nokhwa/issues/49)) ([daf3475](https://github.com/DaveDev42/nokhwa/commit/daf3475c533941c0d2f6b00b9d39fe5917cda5c3))
+* add structured logging behind optional feature flag ([#76](https://github.com/DaveDev42/nokhwa/issues/76)) ([485eebc](https://github.com/DaveDev42/nokhwa/commit/485eebcc2397cceb6f2d2c95e6b9ddaecef85d8b))
+* add TimestampKind to Buffer for platform-aware timestamp semantics ([#48](https://github.com/DaveDev42/nokhwa/issues/48)) ([a89b7d8](https://github.com/DaveDev42/nokhwa/commit/a89b7d8e2fbf872d7b20ee171ca0e7da138ada80))
+* **core:** port OpenCV Mat conversion to Frame&lt;F&gt; API ([#94](https://github.com/DaveDev42/nokhwa/issues/94)) ([8a5dab9](https://github.com/DaveDev42/nokhwa/commit/8a5dab917fbfb94d236b153a85237ecb80ef26e0))
+* type-safe decode API (0.12.0) ([#85](https://github.com/DaveDev42/nokhwa/issues/85)) ([6874fb6](https://github.com/DaveDev42/nokhwa/commit/6874fb6b20cdd282a487977f345653df88a87408))
+
+
+### Bug Fixes
+
+* address code review — filter logic, stream state, thread lifecycle, API typo ([#39](https://github.com/DaveDev42/nokhwa/issues/39)) ([4f3098e](https://github.com/DaveDev42/nokhwa/commit/4f3098ec5294627def6bddeb879d86e15be208dc))
+* **ci:** prevent release-please from bumping to 1.0.0 on breaking changes ([#91](https://github.com/DaveDev42/nokhwa/issues/91)) ([38b879d](https://github.com/DaveDev42/nokhwa/commit/38b879dfbc17a2690bbe952a98d3461e5cac9731))
+* **ci:** switch release-please to simple type for workspace compatibility ([#63](https://github.com/DaveDev42/nokhwa/issues/63)) ([4bd8243](https://github.com/DaveDev42/nokhwa/commit/4bd8243eda4ae623c743822ad20f91fdd1dab11a))
+* replace unsafe impl Send for Camera with type-level Send bound ([#45](https://github.com/DaveDev42/nokhwa/issues/45)) ([200b6b3](https://github.com/DaveDev42/nokhwa/commit/200b6b355af0ef67b36b7a6885a5ad50432470ae))
+* revert workspace version to 0.11.0, will release 0.12.0 when ready ([#87](https://github.com/DaveDev42/nokhwa/issues/87)) ([0cdf3f4](https://github.com/DaveDev42/nokhwa/commit/0cdf3f4119fae9d526f80a74ab6e6042497dc4ec))
+* update release-please last-release-sha to current main, cleanup TODO ([#102](https://github.com/DaveDev42/nokhwa/issues/102)) ([252ccf9](https://github.com/DaveDev42/nokhwa/commit/252ccf905244bfd64451404cbffa15d87f078347))
+
+
+### Performance
+
+* add SIMD-optimized pixel format conversion for YUYV and BGR ([#58](https://github.com/DaveDev42/nokhwa/issues/58)) ([81c4670](https://github.com/DaveDev42/nokhwa/commit/81c4670e525f76f1cf6d3cdd9f3bb71c6c4be3f9))
+* add zero-copy Buffer constructors, eliminate redundant frame copies ([#56](https://github.com/DaveDev42/nokhwa/issues/56)) ([d74887b](https://github.com/DaveDev42/nokhwa/commit/d74887be6c549f1d697f903c24f688d2615c6571))
+* eliminate double copy in AVFoundation frame capture pipeline ([#52](https://github.com/DaveDev42/nokhwa/issues/52)) ([9ae0609](https://github.com/DaveDev42/nokhwa/commit/9ae0609063cdbd36e227d9af0d4b0803efd0b6a5))
+* inline YUV-to-RGB conversion in NV12 decoder ([#67](https://github.com/DaveDev42/nokhwa/issues/67)) ([576e19b](https://github.com/DaveDev42/nokhwa/commit/576e19b09baeabf0fa149240b14fbc8302c74f3a))
+* optimize NV12 decoder with pre-computed UV offsets ([#53](https://github.com/DaveDev42/nokhwa/issues/53)) ([6f3929e](https://github.com/DaveDev42/nokhwa/commit/6f3929e1c253f57426cb9724828289605a98f201))
+* reduce CallbackCamera lock contention with lock-free last_frame ([#59](https://github.com/DaveDev42/nokhwa/issues/59)) ([b84add4](https://github.com/DaveDev42/nokhwa/commit/b84add42a85d6d9e8351cea4f337d5e3180b48d7))
+* SIMD optimizations for all pixel format converters ([#98](https://github.com/DaveDev42/nokhwa/issues/98)) ([17ac2bb](https://github.com/DaveDev42/nokhwa/commit/17ac2bbc4293c3f19c3e3f3abd25a2af9b67949a))
+* use unchecked indexing in NV12 scalar decoder hot loops ([#70](https://github.com/DaveDev42/nokhwa/issues/70)) ([031dfe2](https://github.com/DaveDev42/nokhwa/commit/031dfe2b095f9ad1bd0e0e2e5e7f2eb5fd213f73))
+* use unchecked indexing in YUYV scalar decoder hot loops ([#73](https://github.com/DaveDev42/nokhwa/issues/73)) ([73576aa](https://github.com/DaveDev42/nokhwa/commit/73576aab676b4aa88a5d231ae869821b9fe12270))
+* use unchecked indexing in YUYV/NV12 scalar decoder hot loops ([#69](https://github.com/DaveDev42/nokhwa/issues/69)) ([52cfa3f](https://github.com/DaveDev42/nokhwa/commit/52cfa3feb406bc1beca34bd6b6108021b1eb075d))
+
+
+### Refactoring
+
+* **core:** split simd.rs into domain-based module directory ([#101](https://github.com/DaveDev42/nokhwa/issues/101)) ([37bbb7a](https://github.com/DaveDev42/nokhwa/commit/37bbb7a501e37fd3392d06effea8ceec615b99e0))
+* extract common backend logic to nokhwa-core, normalize query function names ([#80](https://github.com/DaveDev42/nokhwa/issues/80)) ([1adddeb](https://github.com/DaveDev42/nokhwa/commit/1adddeb767e83966ec03d8038910d0aa8069bbfa))
+* improve Camera API ergonomics ([#77](https://github.com/DaveDev42/nokhwa/issues/77)) ([2b9a4d7](https://github.com/DaveDev42/nokhwa/commit/2b9a4d706e7992598f4a2c769bd63719945804b2))
+* **macos:** reduce unsafe surface area with safe wrapper methods ([#78](https://github.com/DaveDev42/nokhwa/issues/78)) ([5b834f7](https://github.com/DaveDev42/nokhwa/commit/5b834f79634787382eb6cc4adf0d19e0eda048e2))
+* replace backend dispatch macros with explicit factory functions ([#43](https://github.com/DaveDev42/nokhwa/issues/43)) ([f9fe9f6](https://github.com/DaveDev42/nokhwa/commit/f9fe9f69e8d28879f440a9b48c077834c0a180b8))
+* restructure error types with structured context, fix UninitializedError typo ([#47](https://github.com/DaveDev42/nokhwa/issues/47)) ([3fd2fe0](https://github.com/DaveDev42/nokhwa/commit/3fd2fe0811aad9e5aed7f9d0d25c466c82791c3e))
+* restructure OpenDeviceError with named fields ([#66](https://github.com/DaveDev42/nokhwa/issues/66)) ([21c1471](https://github.com/DaveDev42/nokhwa/commit/21c1471d9b808e559b397688d8229107836ac8a1))
+* simplify recently changed code — reduce duplication across Frame/Camera/SIMD ([#105](https://github.com/DaveDev42/nokhwa/issues/105)) ([935ffc2](https://github.com/DaveDev42/nokhwa/commit/935ffc248976d20c869f3d0005c83ced14dc6cc8))
+
+
+### Infrastructure
+
+* add Claude Code local files and planning artifacts to .gitignore ([#89](https://github.com/DaveDev42/nokhwa/issues/89)) ([6c7f19e](https://github.com/DaveDev42/nokhwa/commit/6c7f19e89fd5ec1578b870a04aacf9aff6e182c0))
+* **ci:** correct release-please baseline to actual v0.11.0 commit ([#111](https://github.com/DaveDev42/nokhwa/issues/111)) ([66ae79c](https://github.com/DaveDev42/nokhwa/commit/66ae79c51904a1517d898c7fd2f63bc108b6a18f))
+* **ci:** force release-please to 0.12.0 via release-as override ([#113](https://github.com/DaveDev42/nokhwa/issues/113)) ([4bddb78](https://github.com/DaveDev42/nokhwa/commit/4bddb78e6c982847b7a05b6949031d9225d5a906))
+* **ci:** set release-please baseline to v0.11.0 commit ([#109](https://github.com/DaveDev42/nokhwa/issues/109)) ([f5c9a4f](https://github.com/DaveDev42/nokhwa/commit/f5c9a4f5e81fc70c5aaee34eab33004a325897a2))
+* **examples:** migrate to 0.12.0 Frame&lt;F&gt; / Camera&lt;F&gt; API ([#106](https://github.com/DaveDev42/nokhwa/issues/106)) ([d9bb67f](https://github.com/DaveDev42/nokhwa/commit/d9bb67f2c97037cb5ff522507ee0400b5e01136f))
+* gitignore Claude Code runtime files ([#82](https://github.com/DaveDev42/nokhwa/issues/82)) ([7108742](https://github.com/DaveDev42/nokhwa/commit/7108742987709041431b7e27aea3c8b2ee0e8391))
+* improve feature flag discoverability with compile-time checks and documentation ([#74](https://github.com/DaveDev42/nokhwa/issues/74)) ([5af7c79](https://github.com/DaveDev42/nokhwa/commit/5af7c798dcb0a3af671a01d3aa6aa3b81ba1e29c))
+* **main:** release 0.11.1 ([#64](https://github.com/DaveDev42/nokhwa/issues/64)) ([c6b0053](https://github.com/DaveDev42/nokhwa/commit/c6b0053ac6c74620280fc417c671069502bcb4b5))
+* make image crate dependency optional, gated behind decoding feature ([#81](https://github.com/DaveDev42/nokhwa/issues/81)) ([addbe44](https://github.com/DaveDev42/nokhwa/commit/addbe4495f4c7f0fa3cae8a3143a2c3b24bc4a3c))
+* remove deprecated API methods (new_with, set_camera_format) ([#44](https://github.com/DaveDev42/nokhwa/issues/44)) ([5c4a7cc](https://github.com/DaveDev42/nokhwa/commit/5c4a7cc1fa39aefb96554e6c425a2b5534622578))
+* replace once_cell with std::sync::LazyLock ([#75](https://github.com/DaveDev42/nokhwa/issues/75)) ([f436290](https://github.com/DaveDev42/nokhwa/commit/f43629095b582950531fb154290a6ad69f992da3))
+* set up release-please for automated patch versioning ([#62](https://github.com/DaveDev42/nokhwa/issues/62)) ([3f606f1](https://github.com/DaveDev42/nokhwa/commit/3f606f1abcd674ecfefafaefe595fb1ab83a3d38))
+
+
+### Documentation
+
+* add 0.13.0 roadmap — separate streaming vs still-image capture ([#99](https://github.com/DaveDev42/nokhwa/issues/99)) ([5f2cd7c](https://github.com/DaveDev42/nokhwa/commit/5f2cd7c944a174ed05ce8c824c0d3c57f2aea3f0))
+* add comprehensive SIMD performance items to TODO.md ([#95](https://github.com/DaveDev42/nokhwa/issues/95)) ([4633cf2](https://github.com/DaveDev42/nokhwa/commit/4633cf269e869e92894aca6fe22fc66edfa07d7a))
+* add new improvement items to TODO.md, add gw TODO rule to CLAUDE.md ([#72](https://github.com/DaveDev42/nokhwa/issues/72)) ([e5c1a7f](https://github.com/DaveDev42/nokhwa/commit/e5c1a7f65f3a16047be931600aa8eae26d5222c8))
+* add performance improvement items to TODO.md ([#51](https://github.com/DaveDev42/nokhwa/issues/51)) ([1516922](https://github.com/DaveDev42/nokhwa/commit/15169220b97882aa140cabe2aa0ec6458bc2a6f8))
+* add simd.rs module split task, mark SIMD items completed ([#100](https://github.com/DaveDev42/nokhwa/issues/100)) ([bd66460](https://github.com/DaveDev42/nokhwa/commit/bd66460b63933020c302c0f996342f3531ce2ae7))
+* add simplify review, docs update, examples update, benchmarks to TODO.md ([#104](https://github.com/DaveDev42/nokhwa/issues/104)) ([10a5509](https://github.com/DaveDev42/nokhwa/commit/10a55090fca3a601c144911283b239bb05080e49))
+* clean up TODO.md — remove all completed items from recent PRs ([#83](https://github.com/DaveDev42/nokhwa/issues/83)) ([11427f3](https://github.com/DaveDev42/nokhwa/commit/11427f32545a3cfa8332b37d49de9509e9938dd6))
+* **core:** replace ignore doc-tests with compilable examples ([#40](https://github.com/DaveDev42/nokhwa/issues/40)) ([187b182](https://github.com/DaveDev42/nokhwa/commit/187b182a102df4d3138ddf64d6784c515ae6a892))
+* fix stale YUYV comments, update TODO.md for completed performance items ([#60](https://github.com/DaveDev42/nokhwa/issues/60)) ([e6033e6](https://github.com/DaveDev42/nokhwa/commit/e6033e6e53b17084b6c5c5354099608d6f6f02f4))
+* improve Camera, lib.rs, RequestedFormat, CaptureBackendTrait, and examples documentation ([#79](https://github.com/DaveDev42/nokhwa/issues/79)) ([6f5bf2d](https://github.com/DaveDev42/nokhwa/commit/6f5bf2d6249e1369575435ff9c4dda291cd05a2a))
+* mark CallbackCamera Drop panic as already fixed in TODO.md ([#42](https://github.com/DaveDev42/nokhwa/issues/42)) ([c773b12](https://github.com/DaveDev42/nokhwa/commit/c773b12b0ff95e051c47d908c2f9294c4d27d983))
+* remove completed items from TODO.md ([#96](https://github.com/DaveDev42/nokhwa/issues/96)) ([5aae15f](https://github.com/DaveDev42/nokhwa/commit/5aae15f307004fe1483d3ed3a75d591114e3c4a6))
+* remove completed items from TODO.md for readability ([#61](https://github.com/DaveDev42/nokhwa/issues/61)) ([afdfb10](https://github.com/DaveDev42/nokhwa/commit/afdfb103beb07b981fa9ee6246d191756657aaa1))
+* remove completed OpenDeviceError and NV12 inline items from TODO.md ([#68](https://github.com/DaveDev42/nokhwa/issues/68)) ([fe8e1d4](https://github.com/DaveDev42/nokhwa/commit/fe8e1d4ee33d681dda3a4f00af1e335a09d40a66))
+* separate MJPEG unit tests from integration tests in TODO.md ([#92](https://github.com/DaveDev42/nokhwa/issues/92)) ([fd7052d](https://github.com/DaveDev42/nokhwa/commit/fd7052d3f6b35c5c1452cb28d85b84dcbf5278d2))
+* update CHANGELOG and TODO for NV12 decoder optimization ([#53](https://github.com/DaveDev42/nokhwa/issues/53)) ([#54](https://github.com/DaveDev42/nokhwa/issues/54)) ([ee88024](https://github.com/DaveDev42/nokhwa/commit/ee88024f2f950846bbf571c3e70c6642adf9ee97))
+* update README, lib.rs, and add migration guide for 0.12.0 API ([#108](https://github.com/DaveDev42/nokhwa/issues/108)) ([3ebfe03](https://github.com/DaveDev42/nokhwa/commit/3ebfe03c6b7d16b2968b16d2c911de842d312263))
+* update TODO.md — reflect NV12 unchecked indexing done in [#70](https://github.com/DaveDev42/nokhwa/issues/70) ([#71](https://github.com/DaveDev42/nokhwa/issues/71)) ([f3c5a2e](https://github.com/DaveDev42/nokhwa/commit/f3c5a2e32f066d9f4d80d692011e6f8d91ce4bc0))
+* update TODO.md — remove completed items, clean up stale entries ([#65](https://github.com/DaveDev42/nokhwa/issues/65)) ([3c6f5bb](https://github.com/DaveDev42/nokhwa/commit/3c6f5bb485c0491d6d44148754e76135c0c4fb2f))
+* update TODO.md with structural improvement items from project review ([#41](https://github.com/DaveDev42/nokhwa/issues/41)) ([c7333eb](https://github.com/DaveDev42/nokhwa/commit/c7333eb9f542b6786606ee5d3dacae962548ef43))
+
+
+### Testing
+
+* add format conversion, control round-trip, and robustness tests ([#46](https://github.com/DaveDev42/nokhwa/issues/46)) ([1afaa2b](https://github.com/DaveDev42/nokhwa/commit/1afaa2b7bcbbdd9ecd169d313bfb90d20780676a))
+* **core:** add MJPEG positive correctness and robustness unit tests ([#93](https://github.com/DaveDev42/nokhwa/issues/93)) ([8e87327](https://github.com/DaveDev42/nokhwa/commit/8e87327cb311a2dd1eeca3524dbf1a21eaea94b6))
+
 ## 0.12.0 (unreleased)
 
 ### Breaking Changes
