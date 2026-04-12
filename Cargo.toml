@@ -79,7 +79,6 @@ output-threaded  = [ "parking_lot", "arc-swap" ]
 # Enables all features for documentation builds (used by docs.rs)
 docs-only = [
     "input-native",
-    "input-opencv",
     "output-wgpu",
     "output-threaded",
     "serialize",
