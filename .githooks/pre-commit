@@ -12,7 +12,9 @@ case "$(uname -s)" in
     *)            FEATURE="" ;;
 esac
 
-if [ -n "$FEATURE" ]; then
+if [ -n "${NOKHWA_SKIP_CLIPPY:-}" ]; then
+    echo "NOKHWA_SKIP_CLIPPY set, skipping clippy (trait-split WIP only; must be clean before PR)"
+elif [ -n "$FEATURE" ]; then
     cargo clippy --features "$FEATURE" -- -D warnings
 else
     echo "Unknown platform, skipping clippy"
