@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.11.1](https://github.com/DaveDev42/nokhwa/compare/v0.11.0...v0.11.1) (2026-04-12)
+
+
+### Bug Fixes
+
+* update release-please last-release-sha to current main, cleanup TODO ([#102](https://github.com/DaveDev42/nokhwa/issues/102)) ([252ccf9](https://github.com/DaveDev42/nokhwa/commit/252ccf905244bfd64451404cbffa15d87f078347))
+
+
+### Refactoring
+
+* simplify recently changed code — reduce duplication across Frame/Camera/SIMD ([#105](https://github.com/DaveDev42/nokhwa/issues/105)) ([935ffc2](https://github.com/DaveDev42/nokhwa/commit/935ffc248976d20c869f3d0005c83ced14dc6cc8))
+
+
+### Infrastructure
+
+* **examples:** migrate to 0.12.0 Frame&lt;F&gt; / Camera&lt;F&gt; API ([#106](https://github.com/DaveDev42/nokhwa/issues/106)) ([d9bb67f](https://github.com/DaveDev42/nokhwa/commit/d9bb67f2c97037cb5ff522507ee0400b5e01136f))
+
+
+### Documentation
+
+* add simplify review, docs update, examples update, benchmarks to TODO.md ([#104](https://github.com/DaveDev42/nokhwa/issues/104)) ([10a5509](https://github.com/DaveDev42/nokhwa/commit/10a55090fca3a601c144911283b239bb05080e49))
+* update README, lib.rs, and add migration guide for 0.12.0 API ([#108](https://github.com/DaveDev42/nokhwa/issues/108)) ([3ebfe03](https://github.com/DaveDev42/nokhwa/commit/3ebfe03c6b7d16b2968b16d2c911de842d312263))
+
 ## 0.12.0 (unreleased)
 
 ### Breaking Changes
