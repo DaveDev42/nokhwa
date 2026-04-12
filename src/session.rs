@@ -31,8 +31,8 @@ use nokhwa_core::buffer::Buffer;
 use nokhwa_core::error::NokhwaError;
 use nokhwa_core::traits::{CameraDevice, EventPoll, FrameSource, ShutterCapture};
 use nokhwa_core::types::{
-    ApiBackend, CameraControl, CameraFormat, CameraInfo, ControlValueSetter, FrameFormat,
-    KnownCameraControl,
+    ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo, ControlValueSetter,
+    FrameFormat, KnownCameraControl,
 };
 
 /// Capability bit: backend implements [`FrameSource`].
@@ -78,7 +78,7 @@ pub trait HybridBackend: FrameSource + ShutterCapture + Send {}
 impl<T: FrameSource + ShutterCapture + Send> HybridBackend for T {}
 
 /// A request to open a camera. Future tasks wire this into `CameraSession::open`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct OpenRequest {
     format: Option<CameraFormat>,
 }
@@ -126,15 +126,59 @@ impl CameraSession {
         Self { request }
     }
 
-    /// Open the camera. Not yet wired; a later task (T13) connects this to
-    /// the platform default backends.
+    /// Open the camera at `index` using the platform's default native backend.
+    ///
+    /// Dispatches at compile time via `cfg` to the V4L2 backend on Linux,
+    /// the `AVFoundation` backend on macOS/iOS, or the Media Foundation
+    /// backend on Windows (subject to the corresponding `input-*` feature
+    /// being enabled).
     ///
     /// # Errors
-    /// Always returns [`NokhwaError::NotImplementedError`] in this task.
-    pub fn open(self) -> Result<OpenedCamera, NokhwaError> {
-        Err(NokhwaError::NotImplementedError(
-            "CameraSession::open is not yet wired (pending T13)".to_string(),
-        ))
+    /// Returns [`NokhwaError`] if no native backend is available for the
+    /// current platform/feature configuration, or if the underlying backend
+    /// fails to open the device.
+    pub fn open(index: CameraIndex, req: OpenRequest) -> Result<OpenedCamera, NokhwaError> {
+        use nokhwa_core::types::{color_frame_formats, RequestedFormat, RequestedFormatType};
+
+        let requested = match req.format {
+            Some(fmt) => RequestedFormat::with_formats(
+                RequestedFormatType::Exact(fmt),
+                color_frame_formats(),
+            ),
+            None => RequestedFormat::with_formats(
+                RequestedFormatType::AbsoluteHighestResolution,
+                color_frame_formats(),
+            ),
+        };
+
+        #[cfg(all(target_os = "linux", feature = "input-v4l"))]
+        {
+            use crate::backends::capture::V4LBackend;
+            let dev = V4LBackend::new(&index, requested)?;
+            return Ok(OpenedCamera::from_device(Box::new(dev)));
+        }
+        #[cfg(all(
+            any(target_os = "macos", target_os = "ios"),
+            feature = "input-avfoundation"
+        ))]
+        {
+            use nokhwa_bindings_macos_avfoundation::AVFoundationCaptureDevice;
+            let dev = AVFoundationCaptureDevice::new(&index, requested)?;
+            return Ok(OpenedCamera::from_device(Box::new(dev)));
+        }
+        #[cfg(all(target_os = "windows", feature = "input-msmf"))]
+        {
+            use nokhwa_bindings_windows_msmf::MediaFoundationCaptureDevice;
+            let dev = MediaFoundationCaptureDevice::new(&index, requested)?;
+            return Ok(OpenedCamera::from_device(Box::new(dev)));
+        }
+        #[allow(unreachable_code)]
+        {
+            let _ = (index, requested);
+            Err(NokhwaError::general(
+                "no native backend available for this platform/feature configuration",
+            ))
+        }
     }
 }
 
