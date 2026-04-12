@@ -57,9 +57,9 @@
 //! struct, then call `materialize()` (or `write_to()`) to actually run the
 //! decoder and produce an [`image::ImageBuffer`].
 //!
-//! - [`frame::IntoRgb`] → [`frame::RgbConversion`] → `ImageBuffer<Rgb<u8>>`
-//! - [`frame::IntoRgba`] → [`frame::RgbaConversion`] → `ImageBuffer<Rgba<u8>>`
-//! - [`frame::IntoLuma`] → [`frame::LumaConversion`] → `ImageBuffer<Luma<u8>>`
+//! - [`frame::IntoRgb`] → [`frame::RgbConversion`] → `ImageBuffer<Rgb<u8>, Vec<u8>>`
+//! - [`frame::IntoRgba`] → [`frame::RgbaConversion`] → `ImageBuffer<Rgba<u8>, Vec<u8>>`
+//! - [`frame::IntoLuma`] → [`frame::LumaConversion`] → `ImageBuffer<Luma<u8>, Vec<u8>>`
 //!
 //! `Frame<Gray>` intentionally does not implement [`frame::IntoRgb`] or
 //! [`frame::IntoRgba`]: grayscale frames carry no color information, so the

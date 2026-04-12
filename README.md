@@ -95,7 +95,7 @@ A command line app made with `nokhwa` can be found in the `examples` folder.
 
 ## Features
 
-The crate's default features enable only `mjpeg`. You **must** additionally enable at least one `input-*` feature.
+The default feature set enables only `mjpeg`. You **must** additionally enable at least one `input-*` feature.
 
 **Input backends:**
 - `input-native`: Auto-selects V4L2 (Linux), MSMF (Windows), or AVFoundation (macOS)

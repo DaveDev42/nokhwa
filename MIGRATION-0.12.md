@@ -108,7 +108,7 @@ Use `frame.into_luma().materialize()` for grayscale frames.
 |-----------|---------------------------------------------|---------------------|
 | `Yuyv`    | USB UVC webcams (uncompressed)              | `into_rgb` / `into_luma` |
 | `Nv12`    | Many integrated and Windows cameras         | `into_rgb` / `into_luma` |
-| `Mjpeg`   | High-resolution USB webcams (compressed)    | `into_rgb` (via mozjpeg)  |
+| `Mjpeg`   | High-resolution USB webcams (compressed)    | `into_rgb` (requires `mjpeg` feature) |
 | `Gray`    | Monochrome / IR cameras                     | `into_luma` only    |
 | `RawRgb`  | Cameras exposing packed RGB888              | `into_rgb`          |
 | `RawBgr`  | Some industrial / screen-capture sources    | `into_rgb`          |
