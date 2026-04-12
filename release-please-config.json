@@ -4,6 +4,7 @@
   "packages": {
     ".": {
       "release-type": "simple",
+      "release-as": "0.12.0",
       "bump-major-pre-major": false,
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": true,
