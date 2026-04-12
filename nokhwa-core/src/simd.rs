@@ -626,10 +626,10 @@ unsafe fn yuyv_to_rgba_sse41(src: &[u8], dst: &mut [u8]) {
 #[allow(clippy::similar_names)]
 unsafe fn yuyv_8px_to_rgb_sse41(src: *const u8, dst: *mut u8) {
     use std::arch::x86_64::{
-        _mm_add_epi32, _mm_cvtepi16_epi32, _mm_loadl_epi64, _mm_loadu_si128, _mm_max_epi16,
-        _mm_mullo_epi32, _mm_packs_epi32, _mm_packus_epi16, _mm_set1_epi16, _mm_set1_epi32,
-        _mm_setr_epi8, _mm_setzero_si128, _mm_shuffle_epi8, _mm_srai_epi32, _mm_srli_si128,
-        _mm_storeu_si128, _mm_sub_epi16, _mm_sub_epi32, _mm_unpacklo_epi8,
+        _mm_add_epi32, _mm_cvtepi16_epi32, _mm_loadu_si128, _mm_max_epi16, _mm_mullo_epi32,
+        _mm_packs_epi32, _mm_packus_epi16, _mm_set1_epi16, _mm_set1_epi32, _mm_setr_epi8,
+        _mm_setzero_si128, _mm_shuffle_epi8, _mm_srai_epi32, _mm_srli_si128, _mm_storeu_si128,
+        _mm_sub_epi16, _mm_sub_epi32, _mm_unpacklo_epi8,
     };
 
     let zero = _mm_setzero_si128();
@@ -1052,17 +1052,17 @@ unsafe fn nv12_to_rgb_x86(width: usize, height: usize, data: &[u8], out: &mut [u
     }
 }
 
-/// Process NV12 using SSE4.1 (available on all x86_64 CPUs since ~2008).
+/// Process NV12 using SSE4.1 (available on all `x86_64` CPUs since ~2008).
 /// Processes 8 Y pixels + 4 UV pairs per iteration using `_mm_mullo_epi32` (SSE4.1).
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "sse4.1")]
 #[allow(clippy::similar_names, clippy::cast_sign_loss, clippy::too_many_lines)]
 unsafe fn nv12_to_rgb_sse41(width: usize, height: usize, data: &[u8], out: &mut [u8], rgba: bool) {
     use std::arch::x86_64::{
-        _mm_add_epi32, _mm_loadl_epi64, _mm_max_epi16, _mm_mullo_epi32, _mm_packs_epi32,
-        _mm_packus_epi16, _mm_set1_epi16, _mm_set1_epi32, _mm_setr_epi8, _mm_setzero_si128,
-        _mm_shuffle_epi8, _mm_srai_epi32, _mm_storeu_si128, _mm_sub_epi16, _mm_sub_epi32,
-        _mm_unpacklo_epi8,
+        _mm_add_epi32, _mm_cvtepi16_epi32, _mm_loadl_epi64, _mm_max_epi16, _mm_mullo_epi32,
+        _mm_packs_epi32, _mm_packus_epi16, _mm_set1_epi16, _mm_set1_epi32, _mm_setr_epi8,
+        _mm_setzero_si128, _mm_shuffle_epi8, _mm_srai_epi32, _mm_srli_si128, _mm_storeu_si128,
+        _mm_sub_epi16, _mm_sub_epi32, _mm_unpacklo_epi8,
     };
 
     let pxsize = if rgba { 4 } else { 3 };
@@ -1105,7 +1105,6 @@ unsafe fn nv12_to_rgb_sse41(width: usize, height: usize, data: &[u8], out: &mut 
             let v16 = _mm_sub_epi16(_mm_unpacklo_epi8(v8_dup, zero), offset128);
 
             // Sign-extend low 4 i16 → i32 using SSE4.1 _mm_cvtepi16_epi32
-            use std::arch::x86_64::_mm_cvtepi16_epi32;
             let y_lo = _mm_cvtepi16_epi32(y16);
             let u_lo = _mm_cvtepi16_epi32(u16);
             let v_lo = _mm_cvtepi16_epi32(v16);
@@ -1128,7 +1127,6 @@ unsafe fn nv12_to_rgb_sse41(width: usize, height: usize, data: &[u8], out: &mut 
             ));
 
             // High 4 pixels: shift the i16x8 right by 4 lanes, then sign-extend
-            use std::arch::x86_64::_mm_srli_si128;
             let y_hi = _mm_cvtepi16_epi32(_mm_srli_si128::<8>(y16));
             let u_hi = _mm_cvtepi16_epi32(_mm_srli_si128::<8>(u16));
             let v_hi = _mm_cvtepi16_epi32(_mm_srli_si128::<8>(v16));
