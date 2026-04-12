@@ -24,20 +24,19 @@ use crate::session::{
 use nokhwa_core::{
     buffer::{Buffer, TimestampKind},
     error::NokhwaError,
-    traits::CaptureBackendTrait,
+    traits::{CameraDevice, FrameSource},
     types::{
         color_frame_formats, ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo,
         ControlValueSetter, FrameFormat, KnownCameraControl, RequestedFormat, RequestedFormatType,
-        Resolution,
     },
 };
 use objc2::rc::Retained;
 use objc2_av_foundation::{AVCaptureDeviceInput, AVCaptureSession, AVCaptureVideoDataOutput};
 use std::sync::mpsc::{Receiver, Sender};
-use std::{borrow::Cow, collections::HashMap, ffi::CString, sync::Arc};
+use std::{borrow::Cow, ffi::CString, sync::Arc};
 
 /// The backend struct that interfaces with `AVFoundation`.
-/// To see what this does, please see [`CaptureBackendTrait`].
+/// Implements [`CameraDevice`] and [`FrameSource`].
 /// # Quirks
 /// - While working with `iOS` is allowed, it is not officially supported and may not work.
 /// - You **must** call [`nokhwa_initialize`](crate::nokhwa_initialize) **before** doing anything with `AVFoundation`.
@@ -123,51 +122,72 @@ impl AVFoundationCaptureDevice {
     }
 }
 
-impl CaptureBackendTrait for AVFoundationCaptureDevice {
-    fn backend(&self) -> ApiBackend {
-        ApiBackend::AVFoundation
-    }
-
-    fn camera_info(&self) -> &CameraInfo {
-        &self.info
-    }
-
+impl AVFoundationCaptureDevice {
+    /// Refreshes the cached camera format by querying the AVFoundation device.
+    /// Kept as an inherent helper after the trait split; used internally by
+    /// `open()` and `frame()`.
     fn refresh_camera_format(&mut self) -> Result<(), NokhwaError> {
         self.format = self.device.active_format()?;
         Ok(())
     }
 
-    fn camera_format(&self) -> CameraFormat {
+    /// Look up a single control by its [`KnownCameraControl`] identifier.
+    /// Kept as an inherent helper after the trait split.
+    pub fn camera_control(
+        &self,
+        control: KnownCameraControl,
+    ) -> Result<CameraControl, NokhwaError> {
+        for ctrl in self.device.get_controls()? {
+            if ctrl.control() == control {
+                return Ok(ctrl);
+            }
+        }
+
+        Err(NokhwaError::GetPropertyError {
+            property: control.to_string(),
+            error: "Not Found".to_string(),
+        })
+    }
+}
+
+impl CameraDevice for AVFoundationCaptureDevice {
+    fn backend(&self) -> ApiBackend {
+        ApiBackend::AVFoundation
+    }
+
+    fn info(&self) -> &CameraInfo {
+        &self.info
+    }
+
+    fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        self.device.get_controls()
+    }
+
+    fn set_control(
+        &mut self,
+        id: KnownCameraControl,
+        value: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        self.device.lock()?;
+        let res = self.device.set_control(id, value);
+        self.device.unlock();
+        res
+    }
+}
+
+impl FrameSource for AVFoundationCaptureDevice {
+    fn negotiated_format(&self) -> CameraFormat {
         self.format
     }
 
-    fn set_camera_format(&mut self, new_fmt: CameraFormat) -> Result<(), NokhwaError> {
+    fn set_format(&mut self, new_fmt: CameraFormat) -> Result<(), NokhwaError> {
         self.device.set_all(new_fmt)?;
         self.format = new_fmt;
         Ok(())
     }
 
-    #[allow(clippy::cast_possible_truncation)]
-    #[allow(clippy::cast_sign_loss)]
-    fn compatible_list_by_resolution(
-        &mut self,
-        fourcc: FrameFormat,
-    ) -> Result<HashMap<Resolution, Vec<u32>>, NokhwaError> {
-        let supported_cfmt = self
-            .device
-            .supported_formats()?
-            .into_iter()
-            .filter(|x: &CameraFormat| x.format() == fourcc);
-        let mut res_list = HashMap::new();
-        for format in supported_cfmt {
-            match res_list.get_mut(&format.resolution()) {
-                Some(fpses) => Vec::push(fpses, format.frame_rate()),
-                None => {
-                    res_list.insert(format.resolution(), vec![format.frame_rate()]);
-                }
-            }
-        }
-        Ok(res_list)
+    fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+        self.device.supported_formats()
     }
 
     fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
@@ -182,65 +202,7 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
         Ok(formats)
     }
 
-    fn resolution(&self) -> Resolution {
-        self.camera_format().resolution()
-    }
-
-    fn set_resolution(&mut self, new_res: Resolution) -> Result<(), NokhwaError> {
-        let mut format = self.camera_format();
-        format.set_resolution(new_res);
-        self.set_camera_format(format)
-    }
-
-    fn frame_rate(&self) -> u32 {
-        self.camera_format().frame_rate()
-    }
-
-    fn set_frame_rate(&mut self, new_fps: u32) -> Result<(), NokhwaError> {
-        let mut format = self.camera_format();
-        format.set_frame_rate(new_fps);
-        self.set_camera_format(format)
-    }
-
-    fn frame_format(&self) -> FrameFormat {
-        self.camera_format().format()
-    }
-
-    fn set_frame_format(&mut self, fourcc: FrameFormat) -> Result<(), NokhwaError> {
-        let mut format = self.camera_format();
-        format.set_format(fourcc);
-        self.set_camera_format(format)
-    }
-
-    fn camera_control(&self, control: KnownCameraControl) -> Result<CameraControl, NokhwaError> {
-        for ctrl in self.device.get_controls()? {
-            if ctrl.control() == control {
-                return Ok(ctrl);
-            }
-        }
-
-        Err(NokhwaError::GetPropertyError {
-            property: control.to_string(),
-            error: "Not Found".to_string(),
-        })
-    }
-
-    fn camera_controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
-        self.device.get_controls()
-    }
-
-    fn set_camera_control(
-        &mut self,
-        id: KnownCameraControl,
-        value: ControlValueSetter,
-    ) -> Result<(), NokhwaError> {
-        self.device.lock()?;
-        let res = self.device.set_control(id, value);
-        self.device.unlock();
-        res
-    }
-
-    fn open_stream(&mut self) -> Result<(), NokhwaError> {
+    fn open(&mut self) -> Result<(), NokhwaError> {
         self.refresh_camera_format()?;
 
         let input = create_device_input(self.device.inner())?;
@@ -254,7 +216,7 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
         let videocallback = AVCaptureVideoCallback::new(bufname, &self.fbufsnd)?;
         let output = create_video_data_output();
         output_add_delegate(&output, &videocallback)?;
-        output_set_frame_format(&output, self.camera_format().format())?;
+        output_set_frame_format(&output, self.format.format())?;
         session_add_output(&session, &output)?;
         session_commit_configuration(&session);
         session_start(&session)?;
@@ -266,7 +228,7 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
         Ok(())
     }
 
-    fn is_stream_open(&self) -> bool {
+    fn is_open(&self) -> bool {
         match (
             &self.session,
             &self.data_out,
@@ -282,7 +244,7 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
 
     fn frame(&mut self) -> Result<Buffer, NokhwaError> {
         self.refresh_camera_format()?;
-        let cfmt = self.camera_format();
+        let cfmt = self.format;
         let (bytes, _fmt, capture_ts) =
             self.frame_buffer_receiver
                 .recv()
@@ -305,13 +267,13 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
             Ok(recv) => Ok(Cow::from(recv.0)),
             Err(why) => Err(NokhwaError::ReadFrameError {
                 message: why.to_string(),
-                format: Some(self.camera_format().format()),
+                format: Some(self.format.format()),
             }),
         }
     }
 
-    fn stop_stream(&mut self) -> Result<(), NokhwaError> {
-        if !self.is_stream_open() {
+    fn close(&mut self) -> Result<(), NokhwaError> {
+        if !self.is_open() {
             return Ok(());
         }
 
@@ -352,7 +314,7 @@ impl CaptureBackendTrait for AVFoundationCaptureDevice {
 
 impl Drop for AVFoundationCaptureDevice {
     fn drop(&mut self) {
-        let _ = self.stop_stream();
+        let _ = self.close();
         self.device.unlock();
     }
 }
