@@ -19,12 +19,63 @@
 #![cfg_attr(feature = "docs-features", feature(doc_cfg))]
 //! # nokhwa (녹화)
 //!
-//! A cross-platform Rust library for webcam capture.
+//! A cross-platform Rust library for camera capture. Supports webcam streaming
+//! (V4L2, `AVFoundation`, Media Foundation) and plug-in backends for cameras
+//! with distinct capture models (DSLR/industrial via external crates).
 //!
-//! This crate is mid-migration to the 0.13.0 trait-split architecture.
-//! The top-level `Camera` / `CallbackCamera` API has been removed and will
-//! be superseded by `CameraSession` (Layer 2) and `CameraRunner` (Layer 3)
-//! in subsequent tasks. See TODO.md for migration status.
+//! ## Quick start
+//!
+//! ```no_run
+//! use nokhwa::{CameraSession, OpenRequest, OpenedCamera};
+//! use nokhwa_core::types::CameraIndex;
+//!
+//! # fn main() -> Result<(), nokhwa_core::error::NokhwaError> {
+//! let req = OpenRequest::any();
+//! match CameraSession::open(CameraIndex::Index(0), req)? {
+//!     OpenedCamera::Stream(mut cam) => {
+//!         cam.open()?;
+//!         let frame = cam.frame()?;
+//!         println!(
+//!             "captured {}x{}",
+//!             frame.resolution().width(),
+//!             frame.resolution().height()
+//!         );
+//!         cam.close()?;
+//!     }
+//!     OpenedCamera::Shutter(mut cam) => {
+//!         let photo = cam.capture(std::time::Duration::from_secs(5))?;
+//!         println!("photo: {} bytes", photo.buffer().len());
+//!     }
+//!     OpenedCamera::Hybrid(mut cam) => {
+//!         cam.open()?;
+//!         let _preview = cam.frame()?;
+//!         let _photo = cam.capture(std::time::Duration::from_secs(5))?;
+//!     }
+//! }
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! For apps that need live-view + pictures + events concurrently, see
+//! [`CameraRunner`] (feature = `runner`).
+//!
+//! ## Feature flags
+//!
+//! Enable at least one input backend: `input-native` (auto-selects), or
+//! `input-v4l` / `input-avfoundation` / `input-msmf` for a specific platform.
+//!
+//! - `mjpeg` (default): MJPEG decoding via `mozjpeg`.
+//! - `runner`: threaded helper [`CameraRunner`].
+//! - `output-wgpu`: direct frame-to-wgpu texture copy.
+//! - `serialize`: serde on core types.
+//! - `logging`: route internal diagnostics through the `log` crate.
+//!
+//! ## Traits
+//!
+//! Backends implement [`CameraDevice`](nokhwa_core::traits::CameraDevice) plus
+//! any of [`FrameSource`](nokhwa_core::traits::FrameSource),
+//! [`ShutterCapture`](nokhwa_core::traits::ShutterCapture),
+//! [`EventSource`](nokhwa_core::traits::EventSource).
 
 // input-opencv backend is pending migration to the 0.13.0 trait split.
 #[cfg(feature = "input-opencv")]
