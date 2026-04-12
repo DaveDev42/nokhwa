@@ -24,22 +24,59 @@ features = ["input-v4l"]           # Linux
 features = ["input-msmf"]          # Windows
 ```
 
-## Example
-```rust
-// first camera in system
-let index = CameraIndex::Index(0);
-// request the absolute highest resolution CameraFormat that can be decoded to RGB.
-let requested = RequestedFormat::<RgbFormat>::new(RequestedFormatType::AbsoluteHighestFrameRate);
-// make the camera
-let mut camera = Camera::new(index, requested).unwrap();
+## Quick Start
 
-// get a frame
-let frame = camera.frame().unwrap();
-println!("Captured Single Frame of {}", frame.buffer().len());
-// decode into an ImageBuffer
-let decoded = frame.decode_image::<RgbFormat>().unwrap();
-println!("Decoded Frame of {}", decoded.len());
+Nokhwa 0.12 uses a **type-safe frame API**: `Camera<F>` is parameterized by a
+`CaptureFormat` marker (e.g. `Yuyv`, `Mjpeg`, `Nv12`, `Gray`, `RawRgb`,
+`RawBgr`), and `Frame<F>` carries that format tag at compile time. Invalid
+conversions (e.g. a grayscale frame into RGB) are caught by the compiler.
+
+```rust
+use nokhwa::Camera;
+use nokhwa::utils::{CameraIndex, RequestedFormatType};
+use nokhwa_core::format_types::Yuyv;
+use nokhwa_core::frame::IntoRgb;
+
+fn main() -> Result<(), nokhwa::NokhwaError> {
+    // Open the first camera capturing YUYV at the highest available frame rate.
+    let mut camera = Camera::open::<Yuyv>(
+        CameraIndex::Index(0),
+        RequestedFormatType::AbsoluteHighestFrameRate,
+    )?;
+
+    // Start the stream and grab a typed frame.
+    camera.open_stream()?;
+    let frame = camera.frame_typed()?;          // Frame<Yuyv>
+    println!("captured {}x{}", frame.resolution().width(), frame.resolution().height());
+
+    // Decode lazily, then materialize into an `image::RgbImage`.
+    let rgb = frame.into_rgb().materialize()?;  // ImageBuffer<Rgb<u8>, Vec<u8>>
+    println!("decoded {} bytes", rgb.len());
+    Ok(())
+}
 ```
+
+Other common conversions: `frame.into_rgba().materialize()` →
+`ImageBuffer<Rgba<u8>>`, `frame.into_luma().materialize()` →
+`ImageBuffer<Luma<u8>>`.
+
+### Compile-time format safety
+
+`Frame<Gray>` does **not** implement `IntoRgb` — grayscale carries no color
+information, so converting to RGB is a category error and a compile-time
+failure:
+
+```rust,compile_fail
+use nokhwa_core::format_types::Gray;
+use nokhwa_core::frame::{Frame, IntoRgb};
+
+fn demo(frame: Frame<Gray>) {
+    // error[E0277]: the trait bound `Frame<Gray>: IntoRgb` is not satisfied
+    let _ = frame.into_rgb();
+}
+```
+
+Use `frame.into_luma().materialize()` instead for `Gray` frames.
 
 A command line app made with `nokhwa` can be found in the `examples` folder.
 
@@ -58,7 +95,7 @@ A command line app made with `nokhwa` can be found in the `examples` folder.
 
 ## Features
 
-The default feature includes nothing. You **must** enable at least one `input-*` feature.
+The default feature set enables only `mjpeg`. You **must** additionally enable at least one `input-*` feature.
 
 **Input backends:**
 - `input-native`: Auto-selects V4L2 (Linux), MSMF (Windows), or AVFoundation (macOS)
@@ -72,7 +109,7 @@ The default feature includes nothing. You **must** enable at least one `input-*`
 - `output-threaded`: Enable `CallbackCamera` with background capture thread
 
 **Other features:**
-- `decoding`: MJPEG decoding via `mozjpeg` (enabled by default)
+- `mjpeg`: MJPEG decoding via `mozjpeg` (enabled by default)
 - `serialize`: `serde` support for core types
 
 ## Minimum Supported Rust Version

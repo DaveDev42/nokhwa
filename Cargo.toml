@@ -5,7 +5,7 @@ authors.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "A Simple-to-use, cross-platform Rust Webcam Capture Library"
+description = "A simple-to-use, cross-platform Rust webcam capture library with a type-safe frame API"
 keywords    = [ "camera", "webcam", "capture", "cross-platform" ]
 categories  = [ "api-bindings", "multimedia", "os", "web-programming" ]
 
