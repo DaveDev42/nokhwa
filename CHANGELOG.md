@@ -34,6 +34,10 @@
 * **nokhwa**: Expanded top-level module docs with Key Types for `Camera<F>`, `CallbackCamera<F>`, and `Frame<F>`.
 * **MIGRATION-0.12.md**: New migration guide from 0.11.x with API map, before/after examples, removed items, and a format picker table.
 
+### Cleanup
+
+* **examples**: Updated `examples/` to the 0.12.0 typed API (`Camera::open::<F>`, `Camera<F>::frame_typed`, `Frame<F>` + `IntoRgb`/`IntoRgba`); added READMEs for `captesting`, `decoder_test`, and `threaded-capture`; each example now opts out of the root workspace so it builds standalone.
+
 ## [0.11.1](https://github.com/DaveDev42/nokhwa/compare/v0.11.0...v0.11.1) (2026-04-11)
 
 

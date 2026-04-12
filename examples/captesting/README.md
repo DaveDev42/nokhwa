@@ -14,6 +14,6 @@ Minimal single-frame capture example that showcases the 0.12.0 type-safe API.
 cargo run --manifest-path examples/captesting/Cargo.toml
 ```
 
-The example opens camera index `50` (edit `src/main.rs` to pick your device), captures one MJPEG frame, decodes it, and saves `turtle.jpeg` to the current directory.
+The example opens camera index `0` (edit `src/main.rs` to pick a different device), captures one MJPEG frame, decodes it, and saves `turtle.jpeg` to the current directory.
 
 By default the `input-native` feature is enabled. Edit `Cargo.toml` to pick a specific backend (`input-avfoundation`, `input-v4l`, `input-msmf`) if needed.

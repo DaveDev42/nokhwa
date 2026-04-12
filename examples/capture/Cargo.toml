@@ -25,4 +25,5 @@ features = ["input-native", "output-threaded"]
 version = "0.24.5"
 features = ["png"]
 
+# Opt out of the root workspace so this example builds standalone.
 [workspace]

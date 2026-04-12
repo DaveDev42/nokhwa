@@ -36,19 +36,19 @@ fn main() {
 
     let mut threaded: CallbackCamera<Mjpeg> =
         CallbackCamera::new(first_camera.index().clone(), format, |buffer| {
-            let frame: Frame<Mjpeg> = Frame::new(buffer);
-            let image = frame.into_rgba().materialize().unwrap();
-            println!("{}x{} {}", image.width(), image.height(), image.len());
+            println!(
+                "callback: received buffer of {} bytes",
+                buffer.buffer().len()
+            );
         })
         .unwrap();
     threaded.open_stream().unwrap();
-    #[allow(clippy::empty_loop)] // keep it running
     loop {
-        let frame = threaded.poll_frame().unwrap();
-        let typed: Frame<Mjpeg> = Frame::new(frame);
-        let image = typed.into_rgba().materialize().unwrap();
+        let buffer = threaded.poll_frame().unwrap();
+        let frame: Frame<Mjpeg> = Frame::new(buffer);
+        let image = frame.into_rgba().materialize().unwrap();
         println!(
-            "{}x{} {} naripoggers",
+            "poll: {}x{} ({} bytes)",
             image.width(),
             image.height(),
             image.len()

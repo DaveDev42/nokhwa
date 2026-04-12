@@ -34,14 +34,8 @@ use nokhwa::{
     },
     Buffer, CallbackCamera, Camera,
 };
-use std::sync::mpsc::Receiver;
-// This example demonstrates the 0.12.0 type-safe API:
-//   - `Camera::open::<Mjpeg>(index, requested)` returns `Camera<Mjpeg>`
-//   - `camera.frame_typed()` returns `Frame<Mjpeg>`
-//   - `frame.into_rgb().materialize()` decodes to an `image::ImageBuffer`
-// `CallbackCamera` still takes a `RequestedFormat` today; the callback receives
-// a raw `Buffer` that the user wraps into `Frame<F>` for decoding.
 use std::str::FromStr;
+use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
 struct CaptureState {

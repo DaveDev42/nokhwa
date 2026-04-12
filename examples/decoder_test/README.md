@@ -23,7 +23,11 @@ The example reads `cchlop.nv12` (1920×1080 NV12 raw bytes, included in this dir
 Swap the type parameter and `FrameFormat` to test a different decoder:
 
 ```rust
+use nokhwa_core::buffer::Buffer;
 use nokhwa_core::format_types::Yuyv;
+use nokhwa_core::frame::{Frame, IntoRgb};
+use nokhwa_core::types::{FrameFormat, Resolution};
+
 let buffer = Buffer::new(Resolution::new(w, h), &raw, FrameFormat::YUYV);
 let frame: Frame<Yuyv> = Frame::new(buffer);
 frame.into_rgb().materialize().unwrap().save("out.png").unwrap();
