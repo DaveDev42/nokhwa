@@ -456,14 +456,30 @@ pub(crate) fn convert_to_rgba(
         FrameFormat::MJPEG => mjpeg_to_rgb(data, true),
         FrameFormat::YUYV => yuyv422_to_rgb(data, true),
         FrameFormat::NV12 => nv12_to_rgb(resolution, data, true),
-        FrameFormat::RAWRGB => Ok(data
-            .chunks_exact(3)
-            .flat_map(|x| [x[0], x[1], x[2], 255])
-            .collect()),
-        FrameFormat::RAWBGR => Ok(data
-            .chunks_exact(3)
-            .flat_map(|x| [x[2], x[1], x[0], 255])
-            .collect()),
+        FrameFormat::RAWRGB => {
+            if !data.len().is_multiple_of(3) {
+                return Err(NokhwaError::ProcessFrameError {
+                    src: fcc,
+                    destination: "RGBA".to_string(),
+                    error: "RAWRGB data length not a multiple of 3".to_string(),
+                });
+            }
+            let mut rgba = vec![0u8; (data.len() / 3) * 4];
+            crate::simd::rgb_to_rgba_simd(data, &mut rgba);
+            Ok(rgba)
+        }
+        FrameFormat::RAWBGR => {
+            if !data.len().is_multiple_of(3) {
+                return Err(NokhwaError::ProcessFrameError {
+                    src: fcc,
+                    destination: "RGBA".to_string(),
+                    error: "RAWBGR data length not a multiple of 3".to_string(),
+                });
+            }
+            let mut rgba = vec![0u8; (data.len() / 3) * 4];
+            crate::simd::bgr_to_rgba_simd(data, &mut rgba);
+            Ok(rgba)
+        }
         FrameFormat::GRAY => Ok(data.iter().flat_map(|&x| [x, x, x, 255]).collect()),
     }
 }
@@ -479,6 +495,13 @@ pub(crate) fn convert_to_rgba_buffer(
         FrameFormat::YUYV => buf_yuyv422_to_rgb(data, dest, true),
         FrameFormat::NV12 => buf_nv12_to_rgb(resolution, data, dest, true),
         FrameFormat::RAWRGB => {
+            if !data.len().is_multiple_of(3) {
+                return Err(NokhwaError::ProcessFrameError {
+                    src: fcc,
+                    destination: "RGBA".to_string(),
+                    error: "RAWRGB data length not a multiple of 3".to_string(),
+                });
+            }
             let expected = (data.len() / 3) * 4;
             if dest.len() != expected {
                 return Err(NokhwaError::ProcessFrameError {
@@ -490,16 +513,17 @@ pub(crate) fn convert_to_rgba_buffer(
                     ),
                 });
             }
-            data.chunks_exact(3).enumerate().for_each(|(idx, px)| {
-                let i = idx * 4;
-                dest[i] = px[0];
-                dest[i + 1] = px[1];
-                dest[i + 2] = px[2];
-                dest[i + 3] = 255;
-            });
+            crate::simd::rgb_to_rgba_simd(data, dest);
             Ok(())
         }
         FrameFormat::RAWBGR => {
+            if !data.len().is_multiple_of(3) {
+                return Err(NokhwaError::ProcessFrameError {
+                    src: fcc,
+                    destination: "RGBA".to_string(),
+                    error: "RAWBGR data length not a multiple of 3".to_string(),
+                });
+            }
             let expected = (data.len() / 3) * 4;
             if dest.len() != expected {
                 return Err(NokhwaError::ProcessFrameError {
@@ -511,13 +535,7 @@ pub(crate) fn convert_to_rgba_buffer(
                     ),
                 });
             }
-            data.chunks_exact(3).enumerate().for_each(|(idx, px)| {
-                let i = idx * 4;
-                dest[i] = px[2];
-                dest[i + 1] = px[1];
-                dest[i + 2] = px[0];
-                dest[i + 3] = 255;
-            });
+            crate::simd::bgr_to_rgba_simd(data, dest);
             Ok(())
         }
         FrameFormat::GRAY => {
@@ -571,13 +589,19 @@ pub(crate) fn convert_to_luma(
                 (sum / 3) as u8
             })
             .collect()),
-        FrameFormat::RAWRGB | FrameFormat::RAWBGR => Ok(data
-            .chunks_exact(3)
-            .map(|px| {
-                let sum = u16::from(px[0]) + u16::from(px[1]) + u16::from(px[2]);
-                (sum / 3) as u8
-            })
-            .collect()),
+        // RAWBGR works with the same function: (R+G+B)/3 == (B+G+R)/3 (addition is commutative)
+        FrameFormat::RAWRGB | FrameFormat::RAWBGR => {
+            if !data.len().is_multiple_of(3) {
+                return Err(NokhwaError::ProcessFrameError {
+                    src: fcc,
+                    destination: "Luma".to_string(),
+                    error: "RGB/BGR data length not a multiple of 3".to_string(),
+                });
+            }
+            let mut luma = vec![0u8; data.len() / 3];
+            crate::simd::rgb_to_luma_simd(data, &mut luma);
+            Ok(luma)
+        }
     }
 }
 
@@ -605,7 +629,15 @@ pub(crate) fn convert_to_luma_buffer(
         }
         FrameFormat::YUYV => buf_yuyv_extract_luma(data, dest),
         FrameFormat::NV12 => buf_nv12_extract_luma(resolution, data, dest),
+        // RAWBGR works with the same function: (R+G+B)/3 == (B+G+R)/3 (addition is commutative)
         FrameFormat::RAWRGB | FrameFormat::RAWBGR => {
+            if !data.len().is_multiple_of(3) {
+                return Err(NokhwaError::ProcessFrameError {
+                    src: fcc,
+                    destination: "Luma".to_string(),
+                    error: "RGB/BGR data length not a multiple of 3".to_string(),
+                });
+            }
             let pixel_count = data.len() / 3;
             if dest.len() != pixel_count {
                 return Err(NokhwaError::ProcessFrameError {
@@ -617,10 +649,7 @@ pub(crate) fn convert_to_luma_buffer(
                     ),
                 });
             }
-            #[allow(clippy::cast_possible_truncation)]
-            for (idx, px) in data.chunks_exact(3).enumerate() {
-                dest[idx] = ((u16::from(px[0]) + u16::from(px[1]) + u16::from(px[2])) / 3) as u8;
-            }
+            crate::simd::rgb_to_luma_simd(data, dest);
             Ok(())
         }
         FrameFormat::MJPEG => {
