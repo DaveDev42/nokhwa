@@ -24,5 +24,5 @@ pub const SIZES: &[(usize, usize)] = &[(640, 480), (1920, 1080), (3840, 2160)];
 /// not exercise data-dependent constant folding.
 #[must_use]
 pub fn pattern(len: usize) -> Vec<u8> {
-    (0..len).map(|i| (i & 0xFF) as u8).collect()
+    (0..len).map(|i| u8::try_from(i & 0xFF).unwrap()).collect()
 }

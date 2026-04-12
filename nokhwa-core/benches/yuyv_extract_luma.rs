@@ -21,9 +21,10 @@ mod common;
 use common::{pattern, SIZES};
 
 fn verify() {
-    let src = pattern(128);
-    let mut a = vec![0u8; 64];
-    let mut b = vec![0u8; 64];
+    // 40 bytes, not a multiple of the 32-byte SIMD block.
+    let src = pattern(40);
+    let mut a = vec![0u8; 20];
+    let mut b = vec![0u8; 20];
     yuyv_extract_luma_simd(&src, &mut a);
     yuyv_extract_luma_scalar(&src, &mut b);
     assert_eq!(a, b, "yuyv_extract_luma SIMD vs scalar mismatch");
@@ -37,7 +38,7 @@ fn bench(c: &mut Criterion) {
         let src_len = pixels * 2;
         let src = pattern(src_len);
         let mut dst = vec![0u8; pixels];
-        group.throughput(Throughput::Bytes(src_len as u64));
+        group.throughput(Throughput::Bytes(u64::try_from(src_len).unwrap()));
         let id = format!("{w}x{h}");
         group.bench_with_input(BenchmarkId::new("simd", &id), &src, |b, src| {
             b.iter(|| yuyv_extract_luma_simd(black_box(src), black_box(&mut dst)));

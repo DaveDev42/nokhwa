@@ -23,7 +23,8 @@ mod common;
 use common::{pattern, SIZES};
 
 fn verify() {
-    let (w, h) = (16usize, 16usize);
+    // Non-multiple of the 16-pixel SIMD block so the scalar tail is exercised.
+    let (w, h) = (20usize, 18usize);
     let src = pattern(w * h * 3 / 2);
     let mut a = vec![0u8; w * h * 3];
     let mut b = vec![0u8; w * h * 3];
@@ -50,7 +51,7 @@ fn bench(c: &mut Criterion) {
             let dst_len = w * h * pxsize;
             let src = pattern(src_len);
             let mut dst = vec![0u8; dst_len];
-            group.throughput(Throughput::Bytes(src_len as u64));
+            group.throughput(Throughput::Bytes(u64::try_from(src_len).unwrap()));
             let id = format!("{w}x{h}");
             group.bench_with_input(BenchmarkId::new("simd", &id), &src, |b, src| {
                 b.iter(|| {

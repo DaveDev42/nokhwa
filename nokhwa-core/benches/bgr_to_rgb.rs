@@ -21,6 +21,7 @@ mod common;
 use common::{pattern, SIZES};
 
 fn verify() {
+    // 30 bytes = 10 pixels, not a multiple of the 24-byte SIMD block.
     let src = pattern(30);
     let mut a = vec![0u8; 30];
     let mut b = vec![0u8; 30];
@@ -36,7 +37,7 @@ fn bench(c: &mut Criterion) {
         let n = w * h * 3;
         let src = pattern(n);
         let mut dst = vec![0u8; n];
-        group.throughput(Throughput::Bytes(n as u64));
+        group.throughput(Throughput::Bytes(u64::try_from(n).unwrap()));
         let id = format!("{w}x{h}");
         group.bench_with_input(BenchmarkId::new("simd", &id), &src, |b, src| {
             b.iter(|| bgr_to_rgb_simd(black_box(src), black_box(&mut dst)));

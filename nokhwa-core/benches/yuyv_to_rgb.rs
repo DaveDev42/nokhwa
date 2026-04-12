@@ -23,15 +23,17 @@ mod common;
 use common::{pattern, SIZES};
 
 fn verify() {
-    let src = pattern(32);
-    let mut a = vec![0u8; 48];
-    let mut b = vec![0u8; 48];
+    // 9 YUYV pairs = 36 src bytes, non-multiple of any SIMD block; exercises
+    // the scalar tail of both the SIMD and scalar paths.
+    let src = pattern(36);
+    let mut a = vec![0u8; 54];
+    let mut b = vec![0u8; 54];
     yuyv_to_rgb_simd(&src, &mut a);
     yuyv_to_rgb_scalar(&src, &mut b);
     assert_eq!(a, b, "yuyv_to_rgb SIMD vs scalar mismatch");
 
-    let mut a = vec![0u8; 64];
-    let mut b = vec![0u8; 64];
+    let mut a = vec![0u8; 72];
+    let mut b = vec![0u8; 72];
     yuyv_to_rgba_simd(&src, &mut a);
     yuyv_to_rgba_scalar(&src, &mut b);
     assert_eq!(a, b, "yuyv_to_rgba SIMD vs scalar mismatch");
@@ -48,7 +50,7 @@ fn bench(c: &mut Criterion) {
             let dst_len = pixels * 3;
             let src = pattern(src_len);
             let mut dst = vec![0u8; dst_len];
-            group.throughput(Throughput::Bytes(src_len as u64));
+            group.throughput(Throughput::Bytes(u64::try_from(src_len).unwrap()));
             let id = format!("{w}x{h}");
             group.bench_with_input(BenchmarkId::new("simd", &id), &src, |b, src| {
                 b.iter(|| yuyv_to_rgb_simd(black_box(src), black_box(&mut dst)));
@@ -67,7 +69,7 @@ fn bench(c: &mut Criterion) {
         let dst_len = pixels * 4;
         let src = pattern(src_len);
         let mut dst = vec![0u8; dst_len];
-        group.throughput(Throughput::Bytes(src_len as u64));
+        group.throughput(Throughput::Bytes(u64::try_from(src_len).unwrap()));
         let id = format!("{w}x{h}");
         group.bench_with_input(BenchmarkId::new("simd", &id), &src, |b, src| {
             b.iter(|| yuyv_to_rgba_simd(black_box(src), black_box(&mut dst)));

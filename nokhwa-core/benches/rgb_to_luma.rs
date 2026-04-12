@@ -21,9 +21,10 @@ mod common;
 use common::{pattern, SIZES};
 
 fn verify() {
-    let src = pattern(96);
-    let mut a = vec![0u8; 32];
-    let mut b = vec![0u8; 32];
+    // 60 bytes = 20 pixels, not a multiple of the 48-byte SIMD block.
+    let src = pattern(60);
+    let mut a = vec![0u8; 20];
+    let mut b = vec![0u8; 20];
     rgb_to_luma_simd(&src, &mut a);
     rgb_to_luma_scalar(&src, &mut b);
     assert_eq!(a, b, "rgb_to_luma SIMD vs scalar mismatch");
@@ -36,7 +37,7 @@ fn bench(c: &mut Criterion) {
         let pixels = w * h;
         let src = pattern(pixels * 3);
         let mut dst = vec![0u8; pixels];
-        group.throughput(Throughput::Bytes((pixels * 3) as u64));
+        group.throughput(Throughput::Bytes(u64::try_from(pixels * 3).unwrap()));
         let id = format!("{w}x{h}");
         group.bench_with_input(BenchmarkId::new("simd", &id), &src, |b, src| {
             b.iter(|| rgb_to_luma_simd(black_box(src), black_box(&mut dst)));
