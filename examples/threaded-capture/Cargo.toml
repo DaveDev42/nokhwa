@@ -15,3 +15,6 @@ default-features = false
 path = "../.."
 # EDIT THIS!
 features = ["input-native", "output-threaded"]
+
+# Opt out of the root workspace so this example builds standalone.
+[workspace]

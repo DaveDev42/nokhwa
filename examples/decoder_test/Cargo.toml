@@ -10,3 +10,6 @@ image = "0.25"
 
 [dependencies.nokhwa-core]
 path = "../../nokhwa-core"
+
+# Opt out of the root workspace so this example builds standalone.
+[workspace]

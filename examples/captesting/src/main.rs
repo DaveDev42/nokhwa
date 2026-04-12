@@ -1,10 +1,10 @@
+use nokhwa::format_types::Mjpeg;
+use nokhwa::frame::IntoRgb;
 use nokhwa::utils::{CameraIndex, RequestedFormatType};
 use nokhwa::Camera;
-use nokhwa_core::format_types::Mjpeg;
-use nokhwa_core::frame::IntoRgb;
 
 fn main() {
-    let index = CameraIndex::Index(50);
+    let index = CameraIndex::Index(0);
     let mut camera =
         Camera::open::<Mjpeg>(index, RequestedFormatType::AbsoluteHighestResolution).unwrap();
     println!("{}", camera.camera_format());

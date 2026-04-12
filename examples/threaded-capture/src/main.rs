@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
+use nokhwa::format_types::Mjpeg;
+use nokhwa::frame::{Frame, IntoRgba};
 use nokhwa::{
     nokhwa_initialize, query,
     utils::{ApiBackend, RequestedFormat, RequestedFormatType},
     CallbackCamera,
 };
-use nokhwa_core::format_types::Mjpeg;
-use nokhwa_core::frame::{Frame, IntoRgba};
 
 fn main() {
     // only needs to be run on OSX
@@ -34,20 +34,21 @@ fn main() {
 
     let first_camera = cameras.first().unwrap();
 
-    let mut threaded = CallbackCamera::new(first_camera.index().clone(), format, |buffer| {
+    let mut threaded: CallbackCamera<Mjpeg> =
+        CallbackCamera::new(first_camera.index().clone(), format, |buffer| {
+            println!(
+                "callback: received buffer of {} bytes",
+                buffer.buffer().len()
+            );
+        })
+        .unwrap();
+    threaded.open_stream().unwrap();
+    loop {
+        let buffer = threaded.poll_frame().unwrap();
         let frame: Frame<Mjpeg> = Frame::new(buffer);
         let image = frame.into_rgba().materialize().unwrap();
-        println!("{}x{} {}", image.width(), image.height(), image.len());
-    })
-    .unwrap();
-    threaded.open_stream().unwrap();
-    #[allow(clippy::empty_loop)] // keep it running
-    loop {
-        let frame = threaded.poll_frame().unwrap();
-        let typed: Frame<Mjpeg> = Frame::new(frame);
-        let image = typed.into_rgba().materialize().unwrap();
         println!(
-            "{}x{} {} naripoggers",
+            "poll: {}x{} ({} bytes)",
             image.width(),
             image.height(),
             image.len()

@@ -14,17 +14,16 @@
  * limitations under the License.
  */
 
-// Some assembly required. For developers 7 and up.
-
 use clap::{Parser, Subcommand};
 use color_eyre::Report;
-use std::sync::mpsc::Receiver;
 use ggez::graphics::ImageFormat;
 use ggez::{
     event::{run, EventHandler},
     graphics::{Canvas, Image},
     Context, ContextBuilder, GameError,
 };
+use nokhwa::format_types::Mjpeg;
+use nokhwa::frame::{Frame, IntoRgb, IntoRgba};
 use nokhwa::{
     native_api_backend, query,
     utils::{
@@ -33,9 +32,8 @@ use nokhwa::{
     },
     Buffer, CallbackCamera, Camera,
 };
-use nokhwa_core::format_types::Mjpeg;
-use nokhwa_core::frame::{Frame, IntoRgb, IntoRgba};
 use std::str::FromStr;
+use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
 struct CaptureState {
@@ -192,9 +190,9 @@ impl RequestedCliFormat {
 
                 let resolution = Resolution::new(x, y);
                 let camera_format = CameraFormat::new(resolution, fourcc, fps);
-                Some(RequestedFormat::new::<Mjpeg>(
-                    RequestedFormatType::Exact(camera_format),
-                ))
+                Some(RequestedFormat::new::<Mjpeg>(RequestedFormatType::Exact(
+                    camera_format,
+                )))
             }
             "Closest" => {
                 let fmtv = self.format_option.unwrap();
@@ -206,9 +204,9 @@ impl RequestedCliFormat {
 
                 let resolution = Resolution::new(x, y);
                 let camera_format = CameraFormat::new(resolution, fourcc, fps);
-                Some(RequestedFormat::new::<Mjpeg>(
-                    RequestedFormatType::Closest(camera_format),
-                ))
+                Some(RequestedFormat::new::<Mjpeg>(RequestedFormatType::Closest(
+                    camera_format,
+                )))
             }
             "None" => Some(RequestedFormat::new::<Mjpeg>(RequestedFormatType::None)),
             _ => None,
@@ -302,11 +300,7 @@ fn nokhwa_main() {
                 IndexKind::String(s) => CameraIndex::String(s.clone()),
                 IndexKind::Index(i) => CameraIndex::Index(*i),
             };
-            let mut camera = Camera::new(
-                index,
-                RequestedFormat::new::<Mjpeg>(RequestedFormatType::None),
-            )
-            .unwrap();
+            let mut camera = Camera::open::<Mjpeg>(index, RequestedFormatType::None).unwrap();
             match kind {
                 PropertyKind::All => {
                     camera_print_controls(&camera);
@@ -337,10 +331,11 @@ fn nokhwa_main() {
             if display {
                 let (sender, receiver) = std::sync::mpsc::channel();
 
-                let mut camera = CallbackCamera::new(index, requested, move |buf| {
-                    sender.send(buf).expect("Error sending frame!!!!");
-                })
-                .unwrap();
+                let mut camera: CallbackCamera<Mjpeg> =
+                    CallbackCamera::new(index, requested, move |buf| {
+                        sender.send(buf).expect("Error sending frame!!!!");
+                    })
+                    .unwrap();
 
                 let camera_info = camera.info().clone();
                 let format = camera.camera_format().unwrap();
@@ -358,7 +353,7 @@ fn nokhwa_main() {
 
                 run(ctx, el, state)
             } else {
-                let mut cb = CallbackCamera::new(index, requested, |buf| {
+                let mut cb: CallbackCamera<Mjpeg> = CallbackCamera::new(index, requested, |buf| {
                     println!("Captured frame of size {}", buf.buffer().len());
                 })
                 .unwrap();
@@ -381,13 +376,12 @@ fn nokhwa_main() {
                 .flatten()
                 .expect("Expected AbsoluteHighestResolution, AbsoluteHighestFrameRate, HighestResolution, HighestFrameRate, Exact, Closest, or None");
 
-            let mut camera = Camera::new(index, requested).unwrap();
+            let mut camera: Camera<Mjpeg> = Camera::new(index, requested).unwrap();
             camera.open_stream().unwrap();
-            let frame = camera.frame().unwrap();
+            let frame: Frame<Mjpeg> = camera.frame_typed().unwrap();
             camera.stop_stream().unwrap();
             println!("Captured Single Frame of {}", frame.buffer().len());
-            let typed: Frame<Mjpeg> = Frame::new(frame);
-            let decoded = typed.into_rgb().materialize().unwrap();
+            let decoded = frame.into_rgb().materialize().unwrap();
             println!("DecodedFrame of {}", decoded.len());
 
             if let Some(path) = save {
