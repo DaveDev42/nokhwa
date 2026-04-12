@@ -29,26 +29,45 @@
 //!
 //! ## Quick start
 //!
+//! `Camera<F>` is parameterized by a [`CaptureFormat`](nokhwa_core::format_types::CaptureFormat)
+//! marker type. The format `F` is checked against the hardware at open time,
+//! and every [`Frame<F>`](nokhwa_core::frame::Frame) produced by the camera
+//! carries that tag at compile time.
+//!
 //! ```no_run
 //! use nokhwa::Camera;
 //! use nokhwa::utils::{CameraIndex, RequestedFormatType};
-//! use nokhwa_core::format_types::Mjpeg;
+//! use nokhwa_core::format_types::Yuyv;
 //! use nokhwa_core::frame::IntoRgb;
 //!
-//! // Open the first camera capturing MJPEG at highest resolution.
-//! let mut camera = Camera::open::<Mjpeg>(
+//! // Open the first camera capturing YUYV at the highest available resolution.
+//! let mut camera = Camera::open::<Yuyv>(
 //!     CameraIndex::Index(0),
 //!     RequestedFormatType::AbsoluteHighestResolution,
 //! )?;
 //!
 //! // Start the stream and grab a typed frame.
 //! camera.open_stream()?;
-//! let frame = camera.frame_typed()?;
+//! let frame = camera.frame_typed()?;                 // Frame<Yuyv>
 //! println!("captured {}x{}", frame.resolution().width(), frame.resolution().height());
 //!
-//! // Decode to an `image` RgbImage.
-//! let image = frame.into_rgb().materialize()?;
+//! // Lazy conversion: `into_rgb()` is infallible and cheap; `materialize()`
+//! // runs the actual pixel conversion.
+//! let image = frame.into_rgb().materialize()?;       // ImageBuffer<Rgb<u8>>
 //! # Ok::<(), nokhwa::NokhwaError>(())
+//! ```
+//!
+//! Invalid conversions are rejected by the compiler. `Frame<Gray>` does not
+//! implement [`IntoRgb`](nokhwa_core::frame::IntoRgb), so this will not
+//! compile:
+//!
+//! ```compile_fail
+//! use nokhwa_core::format_types::Gray;
+//! use nokhwa_core::frame::{Frame, IntoRgb};
+//!
+//! fn demo(frame: Frame<Gray>) {
+//!     let _ = frame.into_rgb();   // error[E0277]: not satisfied
+//! }
 //! ```
 //!
 //! ## Feature flags
@@ -75,12 +94,27 @@
 //!
 //! ## Key types
 //!
-//! - [`Camera`] — main capture struct (start here)
-//! - [`CallbackCamera`](crate::threaded::CallbackCamera) — callback-based background capture (`output-threaded`)
-//! - [`Frame`](nokhwa_core::frame::Frame) — type-safe frame handle with compile-time format tag
-//! - [`Buffer`] — raw frame data with metadata
-//! - [`CaptureBackendTrait`](crate::camera_traits::CaptureBackendTrait) — trait implemented by every backend
-//! - [`CaptureFormat`](nokhwa_core::format_types::CaptureFormat) — marker trait for format types
+//! - [`Camera`] — main capture struct, generic over `F: CaptureFormat`. Start here.
+//! - [`CallbackCamera`](crate::threaded::CallbackCamera) — background-thread
+//!   capture with user callbacks (`output-threaded` feature); also generic over `F`.
+//! - [`Frame`](nokhwa_core::frame::Frame) — type-safe frame handle. Tagged with a
+//!   [`CaptureFormat`](nokhwa_core::format_types::CaptureFormat) so invalid
+//!   conversions are compile errors.
+//! - [`Buffer`] — raw frame payload plus resolution, source
+//!   [`FrameFormat`](nokhwa_core::types::FrameFormat), and capture timestamp.
+//! - [`CaptureBackendTrait`](crate::camera_traits::CaptureBackendTrait) — the
+//!   trait every platform backend implements.
+//! - [`CaptureFormat`](nokhwa_core::format_types::CaptureFormat) marker types:
+//!   [`Yuyv`](nokhwa_core::format_types::Yuyv),
+//!   [`Nv12`](nokhwa_core::format_types::Nv12),
+//!   [`Mjpeg`](nokhwa_core::format_types::Mjpeg),
+//!   [`Gray`](nokhwa_core::format_types::Gray),
+//!   [`RawRgb`](nokhwa_core::format_types::RawRgb),
+//!   [`RawBgr`](nokhwa_core::format_types::RawBgr).
+//! - Conversion traits: [`IntoRgb`](nokhwa_core::frame::IntoRgb),
+//!   [`IntoRgba`](nokhwa_core::frame::IntoRgba),
+//!   [`IntoLuma`](nokhwa_core::frame::IntoLuma) — call these on a `Frame<F>`,
+//!   then `materialize()` to produce an [`image::ImageBuffer`].
 //!
 //! ## Backend access
 //!
