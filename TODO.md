@@ -13,10 +13,7 @@
   - [ ] Multi-frame streaming consistency (no corruption across frames)
 
 ## Medium Priority
-- [ ] Split `nokhwa-core/src/simd.rs` (1,450+ lines) into a `simd/` module directory by conversion domain
-  - `simd/bgr_to_rgb.rs`, `simd/yuyv_to_rgb.rs`, `simd/nv12_to_rgb.rs`, `simd/rgb_to_rgba.rs`, `simd/yuyv_extract_luma.rs`, `simd/rgb_to_luma.rs`
-  - Each file holds all platform variants (NEON / SSE / AVX / scalar) for its domain
-  - `simd/mod.rs` exposes public API and runtime dispatch
+(None)
 
 ## Performance
 (None)

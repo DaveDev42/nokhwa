@@ -19,6 +19,10 @@
 * **Direct Y-channel extraction**: `buf_yuyv_extract_luma()` and `buf_nv12_extract_luma()` extract luminance without intermediate RGB conversion.
 * **`Camera::frame_typed()`**: Returns `Frame<F>` for type-checked frame capture.
 
+### Refactoring
+
+* **SIMD module split**: `nokhwa-core/src/simd.rs` (2,150+ lines) split into `simd/` module directory organized by conversion domain (`bgr_to_rgb`, `yuyv_to_rgb`, `nv12_to_rgb`, `rgb_to_rgba`, `yuyv_extract_luma`, `rgb_to_luma`). Pure refactor — no behavior changes.
+
 ### Bug Fixes
 
 * **wgpu**: Fixed `frame_texture()` writing to `mip_level: 1` instead of `mip_level: 0` (base level).
