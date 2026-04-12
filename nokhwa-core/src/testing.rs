@@ -21,7 +21,7 @@
 
 use std::borrow::Cow;
 use std::collections::VecDeque;
-use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
 use crate::buffer::Buffer;
@@ -309,10 +309,7 @@ impl EventPoll for MpscEventPoll {
         self.rx.try_recv().ok()
     }
     fn next_timeout(&mut self, d: Duration) -> Option<CameraEvent> {
-        match self.rx.recv_timeout(d) {
-            Ok(ev) => Some(ev),
-            Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => None,
-        }
+        self.rx.recv_timeout(d).ok()
     }
 }
 

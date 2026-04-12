@@ -17,6 +17,12 @@
 #[cfg(all(feature = "input-v4l", target_os = "linux"))]
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-v4l")))]
 pub use nokhwa_bindings_linux_v4l::V4LCaptureDevice;
+
+#[cfg(all(feature = "input-v4l", target_os = "linux"))]
+#[doc(hidden)]
+pub type V4LBackend = nokhwa_bindings_linux_v4l::V4LCaptureDevice<'static>;
+#[cfg(all(feature = "input-v4l", target_os = "linux"))]
+crate::nokhwa_backend!(V4LBackend: FrameSource);
 #[cfg(any(
     all(
         feature = "input-avfoundation",
@@ -30,12 +36,33 @@ pub use nokhwa_bindings_linux_v4l::V4LCaptureDevice;
 ))]
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-avfoundation")))]
 pub use nokhwa_bindings_macos_avfoundation::AVFoundationCaptureDevice;
+
+#[cfg(any(
+    all(
+        feature = "input-avfoundation",
+        any(target_os = "macos", target_os = "ios")
+    ),
+    all(
+        feature = "docs-only",
+        feature = "docs-nolink",
+        feature = "input-avfoundation"
+    )
+))]
+crate::nokhwa_backend!(nokhwa_bindings_macos_avfoundation::AVFoundationCaptureDevice: FrameSource);
 #[cfg(any(
     all(feature = "input-msmf", target_os = "windows"),
     all(feature = "docs-only", feature = "docs-nolink", feature = "input-msmf")
 ))]
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-msmf")))]
 pub use nokhwa_bindings_windows_msmf::MediaFoundationCaptureDevice;
+
+#[cfg(any(
+    all(feature = "input-msmf", target_os = "windows"),
+    all(feature = "docs-only", feature = "docs-nolink", feature = "input-msmf")
+))]
+crate::nokhwa_backend!(
+    nokhwa_bindings_windows_msmf::MediaFoundationCaptureDevice: FrameSource
+);
 // input-opencv backend is pending migration to the 0.13.0 trait split.
 // See TODO.md (T21/T22). The opencv_backend.rs file is preserved on disk
 // as dead code until the migration lands.

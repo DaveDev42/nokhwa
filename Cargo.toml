@@ -146,5 +146,9 @@ optional = true
 version  = "0.4"
 optional = true
 
+[dev-dependencies.nokhwa-core]
+path     = "nokhwa-core"
+features = [ "testing" ]
+
 [package.metadata.docs.rs]
 features = [ "docs-only", "docs-nolink", "docs-features" ]

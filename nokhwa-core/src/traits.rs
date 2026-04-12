@@ -38,7 +38,11 @@ use crate::wgpu::{raw_texture_layout, RawTextureData};
 pub trait CameraDevice {
     fn backend(&self) -> ApiBackend;
     fn info(&self) -> &CameraInfo;
+    /// # Errors
+    /// Returns [`NokhwaError`] if enumerating controls fails.
     fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError>;
+    /// # Errors
+    /// Returns [`NokhwaError`] if setting the control fails.
     fn set_control(
         &mut self,
         id: KnownCameraControl,
@@ -52,17 +56,33 @@ pub trait CameraDevice {
 /// by the device. `close()` halts the stream.
 pub trait FrameSource: CameraDevice {
     fn negotiated_format(&self) -> CameraFormat;
+    /// # Errors
+    /// Returns [`NokhwaError`] if the format is not supported by the backend.
     fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError>;
+    /// # Errors
+    /// Returns [`NokhwaError`] if enumerating compatible formats fails.
     fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError>;
+    /// # Errors
+    /// Returns [`NokhwaError`] if enumerating compatible fourcc codes fails.
     fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError>;
 
+    /// # Errors
+    /// Returns [`NokhwaError`] if opening the stream fails.
     fn open(&mut self) -> Result<(), NokhwaError>;
     fn is_open(&self) -> bool;
+    /// # Errors
+    /// Returns [`NokhwaError`] if reading a frame fails.
     fn frame(&mut self) -> Result<Buffer, NokhwaError>;
+    /// # Errors
+    /// Returns [`NokhwaError`] if reading a frame fails or times out.
     fn frame_timeout(&mut self, _duration: Duration) -> Result<Buffer, NokhwaError> {
         self.frame()
     }
+    /// # Errors
+    /// Returns [`NokhwaError`] if reading a frame fails.
     fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError>;
+    /// # Errors
+    /// Returns [`NokhwaError`] if closing the stream fails.
     fn close(&mut self) -> Result<(), NokhwaError>;
 
     #[must_use]
@@ -206,19 +226,29 @@ pub trait FrameSource: CameraDevice {
 /// picture is buffered. Ordering/dropping semantics across multiple triggers
 /// are backend-specific.
 pub trait ShutterCapture: CameraDevice {
+    /// # Errors
+    /// Returns [`NokhwaError`] if triggering the shutter fails.
     fn trigger(&mut self) -> Result<(), NokhwaError>;
+    /// # Errors
+    /// Returns [`NokhwaError`] if no picture is available within `timeout`.
     fn take_picture(&mut self, timeout: Duration) -> Result<Buffer, NokhwaError>;
 
     /// UI/physical-control lock. No-op default — webcams do not need this.
+    /// # Errors
+    /// Returns [`NokhwaError`] if acquiring the lock fails.
     fn lock(&mut self) -> Result<(), NokhwaError> {
         Ok(())
     }
+    /// # Errors
+    /// Returns [`NokhwaError`] if releasing the lock fails.
     fn unlock(&mut self) -> Result<(), NokhwaError> {
         Ok(())
     }
 
-    /// Convenience: lock → trigger → take_picture → unlock, with unlock always
+    /// Convenience: lock → trigger → `take_picture` → unlock, with unlock always
     /// attempted (errors from `unlock` are discarded if the inner sequence failed).
+    /// # Errors
+    /// Returns [`NokhwaError`] if any step of the sequence fails.
     fn capture(&mut self, timeout: Duration) -> Result<Buffer, NokhwaError> {
         self.lock()?;
         self.trigger()?;
@@ -232,6 +262,9 @@ pub trait ShutterCapture: CameraDevice {
 pub trait EventSource: CameraDevice {
     /// Take the event poller. Succeeds at most once. Subsequent calls must
     /// return `Err(NokhwaError::UnsupportedOperationError(...))`.
+    /// # Errors
+    /// Returns [`NokhwaError::UnsupportedOperationError`] if the poller has
+    /// already been taken or the backend does not support events.
     fn take_events(&mut self) -> Result<Box<dyn EventPoll + Send>, NokhwaError>;
 }
 

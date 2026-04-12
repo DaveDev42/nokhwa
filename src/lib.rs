@@ -51,8 +51,12 @@ pub mod backends;
 mod init;
 mod query;
 
-// Layer 2 (CameraSession) and Layer 3 (CameraRunner) are introduced in
-// subsequent tasks (T11-T15).
+// Layer 2: CameraSession / OpenedCamera and the per-capability wrappers.
+// Layer 3 (CameraRunner) arrives in later tasks (T14-T15).
+pub mod session;
+pub use session::{
+    CameraSession, HybridCamera, OpenRequest, OpenedCamera, ShutterCamera, StreamCamera,
+};
 
 pub use init::*;
 pub use nokhwa_core::buffer::{Buffer, TimestampKind};
