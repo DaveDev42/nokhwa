@@ -63,7 +63,9 @@
 //!
 //! `Frame<Gray>` intentionally does not implement [`frame::IntoRgb`] or
 //! [`frame::IntoRgba`]: grayscale frames carry no color information, so the
-//! compiler rejects the conversion instead of silently upsampling.
+//! compiler rejects the conversion instead of silently upsampling. `Gray`
+//! does implement [`frame::IntoLuma`], so `frame.into_luma().materialize()`
+//! is the positive path for grayscale.
 //!
 //! ## Traits and error types
 //!

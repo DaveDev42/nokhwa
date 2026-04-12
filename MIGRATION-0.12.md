@@ -11,16 +11,16 @@ instead of erroring at runtime.
 
 | 0.11                                                  | 0.12                                                        |
 |-------------------------------------------------------|-------------------------------------------------------------|
-| `Camera::new(index, RequestedFormat::<RgbFormat>…)`   | `Camera::open::<F>(index, RequestedFormatType::…)`          |
+| `Camera::new(index, RequestedFormat::new::<RgbFormat>(…))` | `Camera::open::<F>(index, RequestedFormatType::…)`      |
 | `camera.frame()` → `Buffer`                           | `camera.frame_typed()` → `Frame<F>`                         |
 | `buffer.decode_image::<RgbFormat>()`                  | `frame.into_rgb().materialize()`                            |
 | `buffer.decode_image::<RgbAFormat>()`                 | `frame.into_rgba().materialize()`                           |
 | `buffer.decode_image::<LumaFormat>()`                 | `frame.into_luma().materialize()`                           |
 | `FormatDecoder` trait                                 | `CaptureFormat` marker + `IntoRgb`/`IntoRgba`/`IntoLuma`    |
 | `RgbFormat` / `RgbAFormat` / `LumaFormat` ZSTs        | Produced by `into_rgb()` / `into_rgba()` / `into_luma()`    |
-| `RequestedFormat<F>` (generic over output)            | `RequestedFormatType` + wire format picked by `Camera::open::<F>` |
+| `RequestedFormat<F>` (generic over output)            | `RequestedFormatType` + wire format picked by `Camera::open::<F>` (`RequestedFormat` still exists for advanced use) |
 | `decoding` feature flag                               | `mjpeg` feature flag                                        |
-| `image` as optional dependency                        | `image` is always required                                  |
+| `image` pulled in via default `decoding` feature      | `image` is an unconditional dependency                      |
 
 ## Before and after
 
@@ -31,7 +31,7 @@ use nokhwa::{Camera, pixel_format::RgbFormat};
 use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
 
 let index = CameraIndex::Index(0);
-let requested = RequestedFormat::<RgbFormat>::new(
+let requested = RequestedFormat::new::<RgbFormat>(
     RequestedFormatType::AbsoluteHighestFrameRate,
 );
 let mut camera = Camera::new(index, requested)?;
@@ -74,11 +74,13 @@ let decoded = frame.into_rgb().materialize()?; // ImageBuffer<Rgb<u8>>
 
 ## New requirements
 
-- **`image` is now always a dependency.** `Frame::into_*()` materializes to
-  `image::ImageBuffer`, so there is no longer an "image-less" build mode.
-- **Streaming is explicit.** Call `camera.open_stream()` before
-  `camera.frame_typed()`. In 0.11 the first `frame()` call implicitly opened
-  the stream for some backends; 0.12 requires the explicit call everywhere.
+- **`image` is now an unconditional dependency.** In 0.11 it was pulled in by
+  the default `decoding` feature; in 0.12 it is always linked because
+  `Frame::into_*()` materializes to `image::ImageBuffer`. If you previously
+  disabled default features to drop `image`, that path is gone.
+- **Streaming must be opened explicitly.** Call `camera.open_stream()` before
+  `camera.frame_typed()`. Some 0.11 backends implicitly opened the stream on
+  first `frame()`; 0.12 is consistent in requiring `open_stream()` first.
 
 ## Compile-time safety you now get for free
 
@@ -107,5 +109,7 @@ Use `frame.into_luma().materialize()` for grayscale frames.
 | `RawRgb`  | Cameras exposing packed RGB888              | `into_rgb`          |
 | `RawBgr`  | Some industrial / screen-capture sources    | `into_rgb`          |
 
-If you don't know which format a camera supports, query it first with
-`nokhwa::query()` + `CameraInfo::compatible_formats()` (platform-dependent).
+If you don't know which format a camera supports, enumerate devices with
+`nokhwa::query()` then open one and call `Camera::compatible_fourcc()` or
+`Camera::compatible_camera_formats()` to discover supported formats
+(platform-dependent).

@@ -27,6 +27,13 @@
 
 * **wgpu**: Fixed `frame_texture()` writing to `mip_level: 1` instead of `mip_level: 0` (base level).
 
+### Docs
+
+* **README**: Rewrote Quick Start for the `Camera::open::<F>()` / `frame_typed()` / `into_rgb().materialize()` flow and added a compile-fail demo for `Frame<Gray>`.
+* **nokhwa-core**: Added module-level overview covering `Buffer`, `Frame<F>`, `CaptureFormat` markers, and the `IntoRgb`/`IntoRgba`/`IntoLuma` lazy-conversion traits.
+* **nokhwa**: Expanded top-level module docs with Key Types for `Camera<F>`, `CallbackCamera<F>`, and `Frame<F>`.
+* **MIGRATION-0.12.md**: New migration guide from 0.11.x with API map, before/after examples, removed items, and a format picker table.
+
 ## [0.11.1](https://github.com/DaveDev42/nokhwa/compare/v0.11.0...v0.11.1) (2026-04-11)
 
 

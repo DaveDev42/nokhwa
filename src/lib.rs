@@ -95,8 +95,8 @@
 //! ## Key types
 //!
 //! - [`Camera`] — main capture struct, generic over `F: CaptureFormat`. Start here.
-//! - [`CallbackCamera`](crate::threaded::CallbackCamera) — background-thread
-//!   capture with user callbacks (`output-threaded` feature); also generic over `F`.
+//! - [`CallbackCamera`] — background-thread capture with user callbacks
+//!   (`output-threaded` feature); also generic over `F`.
 //! - [`Frame`](nokhwa_core::frame::Frame) — type-safe frame handle. Tagged with a
 //!   [`CaptureFormat`](nokhwa_core::format_types::CaptureFormat) so invalid
 //!   conversions are compile errors.

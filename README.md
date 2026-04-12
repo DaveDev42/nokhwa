@@ -27,9 +27,9 @@ features = ["input-msmf"]          # Windows
 ## Quick Start
 
 Nokhwa 0.12 uses a **type-safe frame API**: `Camera<F>` is parameterized by a
-[`CaptureFormat`] marker (e.g. `Yuyv`, `Mjpeg`, `Nv12`, `Gray`), and
-`Frame<F>` carries that format tag at compile time. Invalid conversions
-(e.g. a grayscale frame into RGB) are caught by the compiler.
+`CaptureFormat` marker (e.g. `Yuyv`, `Mjpeg`, `Nv12`, `Gray`, `RawRgb`,
+`RawBgr`), and `Frame<F>` carries that format tag at compile time. Invalid
+conversions (e.g. a grayscale frame into RGB) are caught by the compiler.
 
 ```rust
 use nokhwa::Camera;
@@ -37,10 +37,10 @@ use nokhwa::utils::{CameraIndex, RequestedFormatType};
 use nokhwa_core::format_types::Yuyv;
 use nokhwa_core::frame::IntoRgb;
 
-// Open the first camera capturing YUYV at the highest available resolution.
+// Open the first camera capturing YUYV at the highest available frame rate.
 let mut camera = Camera::open::<Yuyv>(
     CameraIndex::Index(0),
-    RequestedFormatType::AbsoluteHighestResolution,
+    RequestedFormatType::AbsoluteHighestFrameRate,
 )?;
 
 // Start the stream and grab a typed frame.
@@ -93,7 +93,7 @@ A command line app made with `nokhwa` can be found in the `examples` folder.
 
 ## Features
 
-The default feature includes nothing. You **must** enable at least one `input-*` feature.
+The default feature enables only `mjpeg`. You **must** additionally enable at least one `input-*` feature.
 
 **Input backends:**
 - `input-native`: Auto-selects V4L2 (Linux), MSMF (Windows), or AVFoundation (macOS)
