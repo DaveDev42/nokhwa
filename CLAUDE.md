@@ -54,7 +54,7 @@ This is a Cargo workspace with these crates:
 2. **Platform binding crates** (`nokhwa-bindings-*`) — Each implements `CaptureBackendTrait` for its platform's API.
 3. **`src/backends/capture/`** — Re-exports and wraps backend structs. Conditional compilation via `cfg` features selects the right backend per platform.
 4. **`src/camera.rs` → `Camera`** — User-facing struct holding a `Box<dyn CaptureBackendTrait>`. Delegates all calls to the selected backend.
-5. **`src/threaded.rs` → `CallbackCamera`** — Wraps `Camera` with a background thread and callback support (feature `output-threaded`).
+5. **`src/runner.rs` → `CameraRunner`** — Wraps a `StreamCamera` with a background thread and event channels (feature `runner`).
 
 ### Feature flags drive compilation
 
@@ -62,7 +62,7 @@ Almost everything is behind feature flags. A build **must** enable at least one 
 - `input-native` = `input-avfoundation` + `input-v4l` + `input-msmf`
 - `mjpeg` (default) = MJPEG decoding via `mozjpeg`
 - `output-wgpu` = Direct frame-to-wgpu-texture copy
-- `output-threaded` = `CallbackCamera` with `parking_lot`
+- `runner` = `CameraRunner` background-thread helper
 
 ### Frame pipeline
 

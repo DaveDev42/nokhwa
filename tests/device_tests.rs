@@ -1,6 +1,6 @@
 //! Integration tests requiring a physical camera device.
 //! Only compiled when `device-test` feature is enabled.
-//! Run with: cargo test --features device-test,input-avfoundation,output-threaded
+//! Run with: cargo test --features device-test,input-avfoundation,runner
 
 #![cfg(feature = "device-test")]
 
@@ -75,7 +75,7 @@ fn query_compatible_formats() {
     assert!(!fourccs.is_empty(), "expected at least one fourcc");
 }
 
-#[cfg(feature = "output-threaded")]
+#[cfg(feature = "runner")]
 #[test]
 fn callback_camera_receives_frames() {
     let Some(idx) = require_camera() else {

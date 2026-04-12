@@ -75,8 +75,6 @@ input-opencv = [
 # ── Output features ───────────────────────────────────────────────────
 # Copy frames directly into wgpu textures
 output-wgpu = [ "wgpu", "nokhwa-core/wgpu-types" ]
-# CallbackCamera: runs capture on a background thread with user-supplied callbacks
-output-threaded  = [ "parking_lot", "arc-swap" ]
 # Background-thread capture helper (CameraRunner)
 runner = [ ]
 
@@ -85,7 +83,7 @@ runner = [ ]
 docs-only = [
     "input-native",
     "output-wgpu",
-    "output-threaded",
+    "runner",
     "serialize",
     "logging",
 ]
@@ -134,14 +132,6 @@ optional = true
 
 [dependencies.nokhwa-bindings-linux-v4l]
 path     = "nokhwa-bindings-linux-v4l"
-optional = true
-
-[dependencies.parking_lot]
-version  = "0.12"
-optional = true
-
-[dependencies.arc-swap]
-version  = "1"
 optional = true
 
 [dependencies.log]

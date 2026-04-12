@@ -11,7 +11,7 @@ A command-line tool for testing nokhwa camera backends. It can list devices, ins
 
 ## Building
 
-The example depends on `nokhwa` with `input-native` and `output-threaded` features, plus `ggez` for the live display window.
+The example depends on `nokhwa` with `input-native` and `runner` features, plus `ggez` for the live display window.
 
 ```bash
 # From the repository root:

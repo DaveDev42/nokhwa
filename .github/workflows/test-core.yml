@@ -28,7 +28,7 @@ jobs:
       fail-fast: false
       matrix:
         features:
-          - output-threaded
+          - runner
           - output-wgpu
     steps:
       - uses: actions/checkout@v4

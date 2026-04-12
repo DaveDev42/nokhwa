@@ -106,7 +106,7 @@ The default feature set enables only `mjpeg`. You **must** additionally enable a
 
 **Output features:**
 - `output-wgpu`: Copy frames directly into a `wgpu` texture
-- `output-threaded`: Enable `CallbackCamera` with background capture thread
+- `runner`: Enable `CameraRunner` background-thread capture helper
 
 **Other features:**
 - `mjpeg`: MJPEG decoding via `mozjpeg` (enabled by default)
