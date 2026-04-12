@@ -115,29 +115,22 @@ impl Camera {
         requested: RequestedFormatType,
         backend: ApiBackend,
     ) -> Result<Camera<F>, NokhwaError> {
-        let formats = &[F::FRAME_FORMAT];
-        let req = RequestedFormat::with_formats(requested, formats);
+        let req = RequestedFormat::with_formats(requested, &[F::FRAME_FORMAT]);
         let camera_backend = init_camera(&index, req, backend.clone())?;
-        let actual_format = camera_backend.frame_format();
-        if actual_format != F::FRAME_FORMAT {
-            return Err(NokhwaError::SetPropertyError {
-                property: "FrameFormat".to_string(),
-                value: format!("{actual_format:?}"),
-                error: format!(
-                    "camera negotiated {:?} but Camera<{:?}> requires {:?}",
-                    actual_format,
-                    F::FRAME_FORMAT,
-                    F::FRAME_FORMAT
-                ),
-            });
-        }
+        Camera::<F>::from_backend(index, backend, camera_backend)
+    }
+}
 
-        Ok(Camera {
-            idx: index,
-            api: backend,
-            device: camera_backend,
-            _format: PhantomData,
-        })
+fn format_mismatch_error<F: CaptureFormat>(actual: FrameFormat) -> NokhwaError {
+    NokhwaError::SetPropertyError {
+        property: "FrameFormat".to_string(),
+        value: format!("{actual:?}"),
+        error: format!(
+            "camera negotiated {:?} but Camera<{:?}> requires {:?}",
+            actual,
+            F::FRAME_FORMAT,
+            F::FRAME_FORMAT
+        ),
     }
 }
 
@@ -158,24 +151,22 @@ impl<F: CaptureFormat> Camera<F> {
         backend: ApiBackend,
     ) -> Result<Self, NokhwaError> {
         let camera_backend = init_camera(&index, format, backend.clone())?;
-        let actual_format = camera_backend.frame_format();
-        if actual_format != F::FRAME_FORMAT {
-            return Err(NokhwaError::SetPropertyError {
-                property: "FrameFormat".to_string(),
-                value: format!("{actual_format:?}"),
-                error: format!(
-                    "camera negotiated {:?} but Camera<{:?}> requires {:?}",
-                    actual_format,
-                    F::FRAME_FORMAT,
-                    F::FRAME_FORMAT
-                ),
-            });
-        }
+        Self::from_backend(index, backend, camera_backend)
+    }
 
+    fn from_backend(
+        index: CameraIndex,
+        api: ApiBackend,
+        device: Box<dyn CaptureBackendTrait + Send>,
+    ) -> Result<Self, NokhwaError> {
+        let actual_format = device.frame_format();
+        if actual_format != F::FRAME_FORMAT {
+            return Err(format_mismatch_error::<F>(actual_format));
+        }
         Ok(Camera {
             idx: index,
-            api: backend,
-            device: camera_backend,
+            api,
+            device,
             _format: PhantomData,
         })
     }
