@@ -20,7 +20,7 @@
 //! These types replace the pre-0.13 `Camera` / `CallbackCamera` structs.
 //! Each wrapper delegates to a boxed backend implementing the appropriate
 //! capability traits from [`nokhwa_core::traits`]. Backends are registered
-//! via the [`nokhwa_backend!`] macro, which implements the (private)
+//! via the [`nokhwa_backend!`](crate::nokhwa_backend) macro, which implements the (private)
 //! [`AnyDevice`] trait for the backend and exposes its capability bits so
 //! [`OpenedCamera::from_device`] can dispatch to the right variant.
 
@@ -487,7 +487,7 @@ impl HybridCamera {
         ShutterCapture::capture(&mut *self.inner, timeout)
     }
 
-    /// Take the event poller, if this backend advertised [`EventSource`].
+    /// Take the event poller, if this backend advertised [`EventSource`](nokhwa_core::traits::EventSource).
     /// Returns `None` the second time and for non-event backends.
     pub fn take_events(&mut self) -> Option<Result<Box<dyn EventPoll + Send>, NokhwaError>> {
         if !self.event_source {
