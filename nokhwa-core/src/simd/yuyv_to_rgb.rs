@@ -809,6 +809,8 @@ mod tests {
             "SIMD and scalar RGBA must match for non-8-aligned pair count"
         );
     }
+
+    #[test]
     fn yuyv_to_rgb_extreme_values() {
         // Extreme YUV values that push clamping boundaries hard
         let yuyv: Vec<u8> = vec![
