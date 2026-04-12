@@ -23,7 +23,7 @@
 /// Expand RGB888 to RGBA8888 with alpha=255 using SIMD where available.
 /// `src.len()` must be a multiple of 3 and `dst.len()` must be `(src.len() / 3) * 4`.
 #[inline]
-pub(crate) fn rgb_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
+pub fn rgb_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
     assert!(src.len().is_multiple_of(3));
     assert_eq!(dst.len(), (src.len() / 3) * 4);
 
@@ -42,7 +42,7 @@ pub(crate) fn rgb_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
 
 /// Expand BGR888 to RGBA8888 (swap R/B + alpha=255) using SIMD where available.
 #[inline]
-pub(crate) fn bgr_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
+pub fn bgr_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
     assert!(src.len().is_multiple_of(3));
     assert_eq!(dst.len(), (src.len() / 3) * 4);
 

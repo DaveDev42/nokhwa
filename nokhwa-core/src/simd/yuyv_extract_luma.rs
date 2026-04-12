@@ -23,7 +23,7 @@
 /// Extract every other byte from YUYV data (Y0, Y1, Y2, ...) using SIMD.
 /// `src.len()` must be a multiple of 4, `dst.len()` must be `src.len() / 2`.
 #[inline]
-pub(crate) fn yuyv_extract_luma_simd(src: &[u8], dst: &mut [u8]) {
+pub fn yuyv_extract_luma_simd(src: &[u8], dst: &mut [u8]) {
     assert!(src.len().is_multiple_of(4));
     assert_eq!(dst.len(), src.len() / 2);
 
@@ -41,7 +41,7 @@ pub(crate) fn yuyv_extract_luma_simd(src: &[u8], dst: &mut [u8]) {
 }
 
 #[allow(dead_code)]
-fn yuyv_extract_luma_scalar(src: &[u8], dst: &mut [u8]) {
+pub fn yuyv_extract_luma_scalar(src: &[u8], dst: &mut [u8]) {
     for (chunk, out) in src.chunks_exact(4).zip(dst.chunks_exact_mut(2)) {
         out[0] = chunk[0]; // Y0
         out[1] = chunk[2]; // Y1

@@ -16,6 +16,7 @@ mjpeg              = [ "mozjpeg" ]
 opencv-mat         = [ "opencv", "opencv/clang-runtime" ]
 docs-features      = [ "serialize", "wgpu-types", "mjpeg" ]
 test-fail-warnings = [  ]
+bench              = [  ]
 
 
 [dependencies]
@@ -46,3 +47,31 @@ optional = true
 
 [package.metadata.docs.rs]
 features = [ "docs-features" ]
+
+[dev-dependencies]
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+
+[[bench]]
+name    = "bgr_to_rgb"
+harness = false
+required-features = ["bench"]
+
+[[bench]]
+name    = "yuyv_to_rgb"
+harness = false
+required-features = ["bench"]
+
+[[bench]]
+name    = "nv12_to_rgb"
+harness = false
+required-features = ["bench"]
+
+[[bench]]
+name    = "rgb_to_luma"
+harness = false
+required-features = ["bench"]
+
+[[bench]]
+name    = "yuyv_extract_luma"
+harness = false
+required-features = ["bench"]

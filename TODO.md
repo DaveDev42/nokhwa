@@ -4,7 +4,7 @@
 (None)
 
 ## Medium Priority
-- [ ] Add criterion benchmarks for pixel format conversions — measure actual SIMD speedup vs scalar for BGR, YUYV, NV12, RGB→Luma, etc. Gate behind `bench` feature.
+(None)
 
 ## Low Priority
 - [ ] Add platform integration tests (requires physical camera, gated behind `device-test` feature)

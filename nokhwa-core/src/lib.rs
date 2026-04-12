@@ -76,6 +76,9 @@ pub mod buffer;
 pub mod error;
 pub mod format_types;
 pub mod frame;
+#[cfg(not(feature = "bench"))]
 pub(crate) mod simd;
+#[cfg(feature = "bench")]
+pub mod simd;
 pub mod traits;
 pub mod types;

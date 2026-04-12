@@ -37,3 +37,17 @@ pub(crate) use rgb_to_luma::rgb_to_luma_simd;
 pub(crate) use rgb_to_rgba::{bgr_to_rgba_simd, rgb_to_rgba_simd};
 pub(crate) use yuyv_extract_luma::yuyv_extract_luma_simd;
 pub(crate) use yuyv_to_rgb::{yuyv_to_rgb_simd, yuyv_to_rgba_simd};
+
+/// Public re-exports of SIMD and scalar pixel conversion routines for benchmarking.
+///
+/// Gated behind the `bench` feature. Not part of the stable API.
+#[cfg(feature = "bench")]
+pub mod bench_exports {
+    pub use super::bgr_to_rgb::{bgr_to_rgb_scalar, bgr_to_rgb_simd};
+    pub use super::nv12_to_rgb::{nv12_to_rgb_scalar, nv12_to_rgb_simd};
+    pub use super::rgb_to_luma::{rgb_to_luma_scalar, rgb_to_luma_simd};
+    pub use super::yuyv_extract_luma::{yuyv_extract_luma_scalar, yuyv_extract_luma_simd};
+    pub use super::yuyv_to_rgb::{
+        yuyv_to_rgb_scalar, yuyv_to_rgb_simd, yuyv_to_rgba_scalar, yuyv_to_rgba_simd,
+    };
+}
