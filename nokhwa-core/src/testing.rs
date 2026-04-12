@@ -48,6 +48,11 @@ pub fn mock_info(index: u32) -> CameraInfo {
 /// Build a deterministic [`Buffer`] of the given shape. The payload is a
 /// zero-filled vector sized to `w * h * bpp`, where `bpp` is a plausible
 /// bytes-per-pixel for the chosen format.
+///
+/// The per-format `bpp` values here are intentionally coarse and meant only
+/// for test fixtures — the real encoded byte counts (especially for MJPEG
+/// and sub-sampled YUV formats) differ and should not be inferred from this
+/// helper.
 #[must_use]
 pub fn mock_frame(width: u32, height: u32, format: FrameFormat) -> Buffer {
     let bpp: usize = match format {

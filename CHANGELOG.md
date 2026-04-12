@@ -50,6 +50,40 @@
   `examples/stream_camera.rs` and `examples/runner.rs` at the
   workspace root.
 
+### Known limitations
+
+* **V4L dispatch via `CameraSession::open` is intentionally stubbed** and
+  returns a `NokhwaError::general` on Linux. The `V4LCaptureDevice<'a>`
+  lifetime parameter cannot be unified with `'static` (required for
+  `dyn AnyDevice`) without an `unsafe` transmute of the `MmapStream`
+  handle. Re-enabling the Linux path is deferred to **0.13.1** after
+  Linux CI validation; users can still construct `V4LCaptureDevice`
+  directly via the `nokhwa-bindings-linux-v4l` crate.
+
+### Post-review cleanup
+
+* Removed vestigial `RunnerConfig` fields (`frames_capacity`,
+  `pictures_capacity`, `events_capacity`, `overflow`) and the
+  `Overflow` enum — they did not affect anything because
+  `std::sync::mpsc::channel` is unbounded. Bounded channels with an
+  overflow policy are tracked for 0.14. Renamed `tick` →
+  `poll_interval` with a clarifying doc comment, and added a
+  `shutter_timeout` field (default 5s) to replace the previously
+  hard-coded 200ms.
+* `CameraSession` is now a unit struct; the no-op `CameraSession::new`
+  constructor was removed. `CameraSession::open(index, req)` is
+  unchanged.
+* Hidden macro-internal items (`from_device`, `AnyDevice`,
+  `HybridBackend`, `CAP_*`) are now `#[doc(hidden)]` throughout.
+* Deleted the unused `__nokhwa_cap_bit!` helper macro.
+* `HybridCamera::from_device` / `CameraRunner::spawn_hybrid` now log
+  event-poller initialization failures via `log::warn!` (gated on the
+  `logging` feature) instead of storing `Some(Err(_))`.
+* `CameraRunner` worker thread joins now log panics via `log::warn!`
+  when the `logging` feature is enabled.
+* Replaced stale `tests/device_tests.rs` body with a placeholder
+  pending migration to the 0.13 API.
+
 ## [0.12.0](https://github.com/DaveDev42/nokhwa/compare/v0.11.0...v0.12.0) (2026-04-12)
 
 

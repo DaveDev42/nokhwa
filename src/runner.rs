@@ -39,43 +39,28 @@ use nokhwa_core::types::{ControlValueSetter, KnownCameraControl};
 
 use crate::session::{HybridCamera, OpenedCamera, ShutterCamera, StreamCamera};
 
-/// How to behave when a channel is full.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Overflow {
-    /// Drop the newest item when the channel is at capacity.
-    #[default]
-    DropNewest,
-    /// Drop the oldest item (block briefly, then push).
-    DropOldest,
-}
-
 /// Configuration for [`CameraRunner::spawn`].
 #[derive(Debug, Clone, Copy)]
 pub struct RunnerConfig {
-    /// Bounded frames-channel capacity. `None` = unbounded.
-    pub frames_capacity: Option<usize>,
-    /// Bounded pictures-channel capacity. `None` = unbounded.
-    pub pictures_capacity: Option<usize>,
-    /// Bounded events-channel capacity. `None` = unbounded.
-    pub events_capacity: Option<usize>,
-    /// Behaviour when a bounded channel is full.
-    pub overflow: Overflow,
-    /// How long the worker waits on the command channel between frame polls.
-    /// Also used as the cadence for probing shutter `take_picture(…)`.
-    pub tick: Duration,
-    /// Event-poll timeout.
+    /// Worker poll interval.
+    ///
+    /// - In stream / hybrid variants: how long the worker sleeps before
+    ///   retrying after a failed `frame()` call.
+    /// - In the shutter variant: the command-channel receive timeout (i.e.
+    ///   the cadence at which the worker wakes up to check for shutdown).
+    pub poll_interval: Duration,
+    /// Event-poll timeout passed to [`EventPoll::next_timeout`].
     pub event_tick: Duration,
+    /// Timeout for shutter `take_picture(…)` after a trigger.
+    pub shutter_timeout: Duration,
 }
 
 impl Default for RunnerConfig {
     fn default() -> Self {
         Self {
-            frames_capacity: None,
-            pictures_capacity: None,
-            events_capacity: None,
-            overflow: Overflow::default(),
-            tick: Duration::from_millis(10),
+            poll_interval: Duration::from_millis(10),
             event_tick: Duration::from_millis(50),
+            shutter_timeout: Duration::from_secs(5),
         }
     }
 }
@@ -115,9 +100,7 @@ impl CameraRunner {
         cam.open()?;
         let (frame_tx, frame_rx) = channel::<Buffer>();
         let (cmd_tx, cmd_rx) = channel::<Command>();
-        let tick = cfg.tick;
-        let frames_cap = cfg.frames_capacity;
-        let overflow = cfg.overflow;
+        let poll_interval = cfg.poll_interval;
         let join = thread::spawn(move || loop {
             match cmd_rx.try_recv() {
                 Ok(Command::Die) | Err(TryRecvError::Disconnected) => break,
@@ -127,9 +110,11 @@ impl CameraRunner {
                 Ok(Command::Trigger) | Err(TryRecvError::Empty) => {}
             }
             match cam.frame() {
-                Ok(buf) => push_or_drop(&frame_tx, buf, frames_cap, overflow),
+                Ok(buf) => {
+                    let _ = frame_tx.send(buf);
+                }
                 Err(_) => {
-                    thread::sleep(tick);
+                    thread::sleep(poll_interval);
                 }
             }
         });
@@ -145,16 +130,15 @@ impl CameraRunner {
     fn spawn_shutter(mut cam: ShutterCamera, cfg: RunnerConfig) -> Self {
         let (pic_tx, pic_rx) = channel::<Buffer>();
         let (cmd_tx, cmd_rx) = channel::<Command>();
-        let tick = cfg.tick;
-        let pics_cap = cfg.pictures_capacity;
-        let overflow = cfg.overflow;
+        let poll_interval = cfg.poll_interval;
+        let shutter_timeout = cfg.shutter_timeout;
         let join = thread::spawn(move || loop {
-            match cmd_rx.recv_timeout(tick) {
+            match cmd_rx.recv_timeout(poll_interval) {
                 Ok(Command::Die) | Err(RecvTimeoutError::Disconnected) => break,
                 Ok(Command::Trigger) => {
                     if cam.trigger().is_ok() {
-                        if let Ok(pic) = cam.take_picture(Duration::from_millis(200)) {
-                            push_or_drop(&pic_tx, pic, pics_cap, overflow);
+                        if let Ok(pic) = cam.take_picture(shutter_timeout) {
+                            let _ = pic_tx.send(pic);
                         }
                     }
                 }
@@ -177,7 +161,14 @@ impl CameraRunner {
         cam.open()?;
         let events_poll: Option<Box<dyn EventPoll + Send>> = match cam.take_events() {
             Some(Ok(p)) => Some(p),
-            Some(Err(_)) | None => None,
+            Some(Err(e)) => {
+                #[cfg(feature = "logging")]
+                log::warn!("CameraRunner: failed to take event poller: {e}");
+                #[cfg(not(feature = "logging"))]
+                let _ = e;
+                None
+            }
+            None => None,
         };
 
         let (frame_tx, frame_rx) = channel::<Buffer>();
@@ -189,14 +180,12 @@ impl CameraRunner {
             let (ev_tx, ev_rx) = channel::<CameraEvent>();
             let (ev_cmd_tx, ev_cmd_rx) = channel::<()>();
             let event_tick = cfg.event_tick;
-            let ev_cap = cfg.events_capacity;
-            let overflow = cfg.overflow;
             let handle = thread::spawn(move || loop {
                 if let Ok(()) = ev_cmd_rx.try_recv() {
                     break;
                 }
                 if let Some(event) = poll.next_timeout(event_tick) {
-                    push_or_drop(&ev_tx, event, ev_cap, overflow);
+                    let _ = ev_tx.send(event);
                 }
             });
             (Some(ev_rx), Some((ev_cmd_tx, handle)))
@@ -204,10 +193,8 @@ impl CameraRunner {
             (None, None)
         };
 
-        let tick = cfg.tick;
-        let frames_cap = cfg.frames_capacity;
-        let pics_cap = cfg.pictures_capacity;
-        let overflow = cfg.overflow;
+        let poll_interval = cfg.poll_interval;
+        let shutter_timeout = cfg.shutter_timeout;
 
         let join = thread::spawn(move || {
             loop {
@@ -215,8 +202,8 @@ impl CameraRunner {
                     Ok(Command::Die) | Err(TryRecvError::Disconnected) => break,
                     Ok(Command::Trigger) => {
                         if cam.trigger().is_ok() {
-                            if let Ok(pic) = cam.take_picture(Duration::from_millis(200)) {
-                                push_or_drop(&pic_tx, pic, pics_cap, overflow);
+                            if let Ok(pic) = cam.take_picture(shutter_timeout) {
+                                let _ = pic_tx.send(pic);
                             }
                         }
                     }
@@ -226,16 +213,21 @@ impl CameraRunner {
                     Err(TryRecvError::Empty) => {}
                 }
                 match cam.frame() {
-                    Ok(buf) => push_or_drop(&frame_tx, buf, frames_cap, overflow),
+                    Ok(buf) => {
+                        let _ = frame_tx.send(buf);
+                    }
                     Err(_) => {
-                        thread::sleep(tick);
+                        thread::sleep(poll_interval);
                     }
                 }
             }
             // Tell the events thread to stop too.
             if let Some((ev_cmd_tx, handle)) = event_join_opt {
                 let _ = ev_cmd_tx.send(());
-                let _ = handle.join();
+                if let Err(_err) = handle.join() {
+                    #[cfg(feature = "logging")]
+                    log::warn!("CameraRunner: event worker thread panicked: {_err:?}");
+                }
             }
         });
 
@@ -303,7 +295,10 @@ impl CameraRunner {
     fn shutdown(&mut self) {
         let _ = self.cmd.send(Command::Die);
         if let Some(handle) = self.join.take() {
-            let _ = handle.join();
+            if let Err(_err) = handle.join() {
+                #[cfg(feature = "logging")]
+                log::warn!("CameraRunner: worker thread panicked: {_err:?}");
+            }
         }
     }
 }
@@ -312,11 +307,4 @@ impl Drop for CameraRunner {
     fn drop(&mut self) {
         self.shutdown();
     }
-}
-
-fn push_or_drop<T>(tx: &Sender<T>, item: T, _cap: Option<usize>, _overflow: Overflow) {
-    // std::sync::mpsc::channel is unbounded, so capacity bookkeeping is a
-    // no-op here. The fields are kept on RunnerConfig for future migration
-    // to a bounded channel (e.g. crossbeam / sync_channel).
-    let _ = tx.send(item);
 }

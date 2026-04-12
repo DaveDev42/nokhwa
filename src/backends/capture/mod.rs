@@ -18,11 +18,16 @@
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-v4l")))]
 pub use nokhwa_bindings_linux_v4l::V4LCaptureDevice;
 
+// NOTE: `V4LCaptureDevice<'a>` carries a lifetime parameter tied to a
+// `MutexGuard<Device>` borrowed inside `open()`. Instantiating the type with
+// `'static` (as would be required to store a boxed `V4LCaptureDevice<'static>`
+// behind `dyn AnyDevice`) cannot be proved sound without an `unsafe` transmute
+// of the stream handle. That rework is tracked for 0.13.1 — see TODO.md and
+// CHANGELOG.md. For 0.13.0, the V4L path through `CameraSession::open` is
+// intentionally stubbed out in `session.rs`; users may still construct
+// `V4LCaptureDevice` directly via the `nokhwa-bindings-linux-v4l` crate.
 #[cfg(all(feature = "input-v4l", target_os = "linux"))]
-#[doc(hidden)]
-pub type V4LBackend = nokhwa_bindings_linux_v4l::V4LCaptureDevice<'static>;
-#[cfg(all(feature = "input-v4l", target_os = "linux"))]
-crate::nokhwa_backend!(V4LBackend: FrameSource);
+crate::nokhwa_backend!(nokhwa_bindings_linux_v4l::V4LCaptureDevice<'static>: FrameSource);
 #[cfg(any(
     all(
         feature = "input-avfoundation",

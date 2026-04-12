@@ -111,21 +111,13 @@ impl Default for OpenRequest {
     }
 }
 
-/// A handle to a not-yet-opened camera by index.
+/// A handle namespace for opening cameras.
 ///
-/// Call [`CameraSession::open`] to produce an [`OpenedCamera`].
-pub struct CameraSession {
-    #[allow(dead_code)]
-    request: OpenRequest,
-}
+/// Call [`CameraSession::open`] to open a camera by index and produce an
+/// [`OpenedCamera`].
+pub struct CameraSession;
 
 impl CameraSession {
-    /// Build a session from an [`OpenRequest`].
-    #[must_use]
-    pub fn new(request: OpenRequest) -> Self {
-        Self { request }
-    }
-
     /// Open the camera at `index` using the platform's default native backend.
     ///
     /// Dispatches at compile time via `cfg` to the V4L2 backend on Linux,
@@ -151,11 +143,19 @@ impl CameraSession {
             ),
         };
 
+        // V4L: intentionally stubbed for 0.13.0. The `V4LCaptureDevice<'a>`
+        // lifetime parameter cannot be unified with `'static` (required for
+        // `dyn AnyDevice`) without an `unsafe` transmute of the MmapStream
+        // handle; that work is deferred to 0.13.1 after Linux CI validation.
+        // Users needing V4L today can instantiate `V4LCaptureDevice` directly
+        // from the `nokhwa-bindings-linux-v4l` crate.
         #[cfg(all(target_os = "linux", feature = "input-v4l"))]
         {
-            use crate::backends::capture::V4LBackend;
-            let dev = V4LBackend::new(&index, requested)?;
-            return Ok(OpenedCamera::from_device(Box::new(dev)));
+            let _ = (&index, &requested);
+            return Err(NokhwaError::general(
+                "V4L backend path via CameraSession::open is pending re-validation in 0.13.1; \
+                 construct V4LCaptureDevice directly from nokhwa-bindings-linux-v4l for now",
+            ));
         }
         #[cfg(all(
             any(target_os = "macos", target_os = "ios"),
@@ -198,6 +198,7 @@ impl OpenedCamera {
     ///
     /// # Panics
     /// Panics if the backend advertises neither `CAP_FRAME` nor `CAP_SHUTTER`.
+    #[doc(hidden)]
     #[must_use]
     pub fn from_device(device: Box<dyn AnyDevice>) -> Self {
         let caps = device.capabilities();
@@ -228,6 +229,7 @@ impl StreamCamera {
     ///
     /// # Panics
     /// Panics if the backend does not advertise `CAP_FRAME`.
+    #[doc(hidden)]
     #[must_use]
     pub fn from_device(device: Box<dyn AnyDevice>) -> Self {
         assert!(
@@ -321,6 +323,7 @@ impl ShutterCamera {
     ///
     /// # Panics
     /// Panics if the backend does not advertise `CAP_SHUTTER`.
+    #[doc(hidden)]
     #[must_use]
     pub fn from_device(device: Box<dyn AnyDevice>) -> Self {
         assert!(
@@ -397,6 +400,7 @@ impl HybridCamera {
     ///
     /// # Panics
     /// Panics if the backend does not advertise both `CAP_FRAME` and `CAP_SHUTTER`.
+    #[doc(hidden)]
     #[must_use]
     pub fn from_device(mut device: Box<dyn AnyDevice>) -> Self {
         let caps = device.capabilities();
@@ -406,7 +410,17 @@ impl HybridCamera {
         );
         let event_source = caps & CAP_EVENT != 0;
         let events = if event_source {
-            device.take_events()
+            match device.take_events() {
+                Some(Ok(p)) => Some(Ok(p)),
+                Some(Err(e)) => {
+                    #[cfg(feature = "logging")]
+                    log::warn!("HybridCamera: failed to take event poller: {e}");
+                    #[cfg(not(feature = "logging"))]
+                    let _ = e;
+                    None
+                }
+                None => None,
+            }
         } else {
             None
         };
@@ -488,7 +502,10 @@ impl HybridCamera {
     }
 
     /// Take the event poller, if this backend advertised [`EventSource`](nokhwa_core::traits::EventSource).
-    /// Returns `None` the second time and for non-event backends.
+    ///
+    /// Returns `None` on subsequent calls, for non-event backends, and when
+    /// the backend's initial event-poll construction failed (that error is
+    /// logged via `log::warn!` when the `logging` feature is enabled).
     pub fn take_events(&mut self) -> Option<Result<Box<dyn EventPoll + Send>, NokhwaError>> {
         if !self.event_source {
             return None;
@@ -498,21 +515,6 @@ impl HybridCamera {
 }
 
 // ───────────────────────── nokhwa_backend! macro ──────────────────────
-
-/// Internal: per-capability bit contribution. Used by [`nokhwa_backend!`].
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __nokhwa_cap_bit {
-    (FrameSource) => {
-        $crate::session::CAP_FRAME
-    };
-    (ShutterCapture) => {
-        $crate::session::CAP_SHUTTER
-    };
-    (EventSource) => {
-        $crate::session::CAP_EVENT
-    };
-}
 
 /// Internal: expand to a `into_frame_source` body that casts when possible,
 /// or `unreachable!()` when the backend does not implement `FrameSource`.
