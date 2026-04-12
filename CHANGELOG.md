@@ -1,5 +1,52 @@
 # Changelog
 
+## [0.11.1](https://github.com/DaveDev42/nokhwa/compare/v0.11.0...v0.11.1) (2026-04-12)
+
+
+### Features
+
+* **core:** port OpenCV Mat conversion to Frame&lt;F&gt; API ([#94](https://github.com/DaveDev42/nokhwa/issues/94)) ([8a5dab9](https://github.com/DaveDev42/nokhwa/commit/8a5dab917fbfb94d236b153a85237ecb80ef26e0))
+
+
+### Bug Fixes
+
+* **ci:** prevent release-please from bumping to 1.0.0 on breaking changes ([#91](https://github.com/DaveDev42/nokhwa/issues/91)) ([38b879d](https://github.com/DaveDev42/nokhwa/commit/38b879dfbc17a2690bbe952a98d3461e5cac9731))
+* update release-please last-release-sha to current main, cleanup TODO ([#102](https://github.com/DaveDev42/nokhwa/issues/102)) ([252ccf9](https://github.com/DaveDev42/nokhwa/commit/252ccf905244bfd64451404cbffa15d87f078347))
+
+
+### Performance
+
+* SIMD optimizations for all pixel format converters ([#98](https://github.com/DaveDev42/nokhwa/issues/98)) ([17ac2bb](https://github.com/DaveDev42/nokhwa/commit/17ac2bbc4293c3f19c3e3f3abd25a2af9b67949a))
+
+
+### Refactoring
+
+* **core:** split simd.rs into domain-based module directory ([#101](https://github.com/DaveDev42/nokhwa/issues/101)) ([37bbb7a](https://github.com/DaveDev42/nokhwa/commit/37bbb7a501e37fd3392d06effea8ceec615b99e0))
+* simplify recently changed code — reduce duplication across Frame/Camera/SIMD ([#105](https://github.com/DaveDev42/nokhwa/issues/105)) ([935ffc2](https://github.com/DaveDev42/nokhwa/commit/935ffc248976d20c869f3d0005c83ced14dc6cc8))
+
+
+### Infrastructure
+
+* add Claude Code local files and planning artifacts to .gitignore ([#89](https://github.com/DaveDev42/nokhwa/issues/89)) ([6c7f19e](https://github.com/DaveDev42/nokhwa/commit/6c7f19e89fd5ec1578b870a04aacf9aff6e182c0))
+* **ci:** set release-please baseline to v0.11.0 commit ([#109](https://github.com/DaveDev42/nokhwa/issues/109)) ([f5c9a4f](https://github.com/DaveDev42/nokhwa/commit/f5c9a4f5e81fc70c5aaee34eab33004a325897a2))
+* **examples:** migrate to 0.12.0 Frame&lt;F&gt; / Camera&lt;F&gt; API ([#106](https://github.com/DaveDev42/nokhwa/issues/106)) ([d9bb67f](https://github.com/DaveDev42/nokhwa/commit/d9bb67f2c97037cb5ff522507ee0400b5e01136f))
+
+
+### Documentation
+
+* add 0.13.0 roadmap — separate streaming vs still-image capture ([#99](https://github.com/DaveDev42/nokhwa/issues/99)) ([5f2cd7c](https://github.com/DaveDev42/nokhwa/commit/5f2cd7c944a174ed05ce8c824c0d3c57f2aea3f0))
+* add comprehensive SIMD performance items to TODO.md ([#95](https://github.com/DaveDev42/nokhwa/issues/95)) ([4633cf2](https://github.com/DaveDev42/nokhwa/commit/4633cf269e869e92894aca6fe22fc66edfa07d7a))
+* add simd.rs module split task, mark SIMD items completed ([#100](https://github.com/DaveDev42/nokhwa/issues/100)) ([bd66460](https://github.com/DaveDev42/nokhwa/commit/bd66460b63933020c302c0f996342f3531ce2ae7))
+* add simplify review, docs update, examples update, benchmarks to TODO.md ([#104](https://github.com/DaveDev42/nokhwa/issues/104)) ([10a5509](https://github.com/DaveDev42/nokhwa/commit/10a55090fca3a601c144911283b239bb05080e49))
+* remove completed items from TODO.md ([#96](https://github.com/DaveDev42/nokhwa/issues/96)) ([5aae15f](https://github.com/DaveDev42/nokhwa/commit/5aae15f307004fe1483d3ed3a75d591114e3c4a6))
+* separate MJPEG unit tests from integration tests in TODO.md ([#92](https://github.com/DaveDev42/nokhwa/issues/92)) ([fd7052d](https://github.com/DaveDev42/nokhwa/commit/fd7052d3f6b35c5c1452cb28d85b84dcbf5278d2))
+* update README, lib.rs, and add migration guide for 0.12.0 API ([#108](https://github.com/DaveDev42/nokhwa/issues/108)) ([3ebfe03](https://github.com/DaveDev42/nokhwa/commit/3ebfe03c6b7d16b2968b16d2c911de842d312263))
+
+
+### Testing
+
+* **core:** add MJPEG positive correctness and robustness unit tests ([#93](https://github.com/DaveDev42/nokhwa/issues/93)) ([8e87327](https://github.com/DaveDev42/nokhwa/commit/8e87327cb311a2dd1eeca3524dbf1a21eaea94b6))
+
 ## 0.12.0 (unreleased)
 
 ### Breaking Changes
