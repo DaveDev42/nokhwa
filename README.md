@@ -37,21 +37,23 @@ use nokhwa::utils::{CameraIndex, RequestedFormatType};
 use nokhwa_core::format_types::Yuyv;
 use nokhwa_core::frame::IntoRgb;
 
-// Open the first camera capturing YUYV at the highest available frame rate.
-let mut camera = Camera::open::<Yuyv>(
-    CameraIndex::Index(0),
-    RequestedFormatType::AbsoluteHighestFrameRate,
-)?;
+fn main() -> Result<(), nokhwa::NokhwaError> {
+    // Open the first camera capturing YUYV at the highest available frame rate.
+    let mut camera = Camera::open::<Yuyv>(
+        CameraIndex::Index(0),
+        RequestedFormatType::AbsoluteHighestFrameRate,
+    )?;
 
-// Start the stream and grab a typed frame.
-camera.open_stream()?;
-let frame = camera.frame_typed()?;          // Frame<Yuyv>
-println!("captured {}x{}", frame.resolution().width(), frame.resolution().height());
+    // Start the stream and grab a typed frame.
+    camera.open_stream()?;
+    let frame = camera.frame_typed()?;          // Frame<Yuyv>
+    println!("captured {}x{}", frame.resolution().width(), frame.resolution().height());
 
-// Decode lazily, then materialize into an `image::RgbImage`.
-let rgb = frame.into_rgb().materialize()?;   // ImageBuffer<Rgb<u8>, Vec<u8>>
-println!("decoded {} bytes", rgb.len());
-# Ok::<(), nokhwa::NokhwaError>(())
+    // Decode lazily, then materialize into an `image::RgbImage`.
+    let rgb = frame.into_rgb().materialize()?;  // ImageBuffer<Rgb<u8>, Vec<u8>>
+    println!("decoded {} bytes", rgb.len());
+    Ok(())
+}
 ```
 
 Other common conversions: `frame.into_rgba().materialize()` →
@@ -93,7 +95,7 @@ A command line app made with `nokhwa` can be found in the `examples` folder.
 
 ## Features
 
-The default feature enables only `mjpeg`. You **must** additionally enable at least one `input-*` feature.
+The crate's default features enable only `mjpeg`. You **must** additionally enable at least one `input-*` feature.
 
 **Input backends:**
 - `input-native`: Auto-selects V4L2 (Linux), MSMF (Windows), or AVFoundation (macOS)

@@ -40,10 +40,10 @@
 //! use nokhwa_core::format_types::Yuyv;
 //! use nokhwa_core::frame::IntoRgb;
 //!
-//! // Open the first camera capturing YUYV at the highest available resolution.
+//! // Open the first camera capturing YUYV at the highest available frame rate.
 //! let mut camera = Camera::open::<Yuyv>(
 //!     CameraIndex::Index(0),
-//!     RequestedFormatType::AbsoluteHighestResolution,
+//!     RequestedFormatType::AbsoluteHighestFrameRate,
 //! )?;
 //!
 //! // Start the stream and grab a typed frame.

@@ -18,9 +18,13 @@ instead of erroring at runtime.
 | `buffer.decode_image::<LumaFormat>()`                 | `frame.into_luma().materialize()`                           |
 | `FormatDecoder` trait                                 | `CaptureFormat` marker + `IntoRgb`/`IntoRgba`/`IntoLuma`    |
 | `RgbFormat` / `RgbAFormat` / `LumaFormat` ZSTs        | Produced by `into_rgb()` / `into_rgba()` / `into_luma()`    |
-| `RequestedFormat<F>` (generic over output)            | `RequestedFormatType` + wire format picked by `Camera::open::<F>` (`RequestedFormat` still exists for advanced use) |
+| `RequestedFormat<F>` (generic over output)            | `RequestedFormatType` + `Camera::open::<F>`                 |
 | `decoding` feature flag                               | `mjpeg` feature flag                                        |
-| `image` pulled in via default `decoding` feature      | `image` is an unconditional dependency                      |
+
+> `RequestedFormat` itself still exists in 0.12 for advanced use (e.g.
+> `Camera::with_backend`), but `Camera::open::<F>` is the primary entry point.
+> The `image` dependency, formerly pulled in via the default `decoding`
+> feature, is now unconditional — see *New requirements* below.
 
 ## Before and after
 
