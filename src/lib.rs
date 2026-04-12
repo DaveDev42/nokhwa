@@ -152,7 +152,7 @@ pub use nokhwa_core::format_types;
 pub use nokhwa_core::frame;
 #[cfg(feature = "output-wgpu")]
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "output-wgpu")))]
-pub use nokhwa_core::traits::{raw_texture_layout, RawTextureData};
+pub use nokhwa_core::wgpu::{raw_texture_layout, RawTextureData};
 pub use query::*;
 #[cfg(feature = "output-threaded")]
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "output-threaded")))]

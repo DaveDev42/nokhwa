@@ -86,3 +86,7 @@ pub(crate) mod simd;
 pub use simd::bench_exports;
 pub mod traits;
 pub mod types;
+
+#[cfg(feature = "wgpu-types")]
+#[cfg_attr(feature = "docs-features", doc(cfg(feature = "wgpu-types")))]
+pub mod wgpu;

@@ -16,9 +16,9 @@
 
 use nokhwa_core::format_types::{CaptureFormat, Mjpeg};
 use nokhwa_core::frame::Frame;
-#[cfg(feature = "output-wgpu")]
-use nokhwa_core::traits::RawTextureData;
 use nokhwa_core::types::RequestedFormatType;
+#[cfg(feature = "output-wgpu")]
+use nokhwa_core::wgpu::RawTextureData;
 use nokhwa_core::{
     buffer::Buffer,
     error::NokhwaError,
