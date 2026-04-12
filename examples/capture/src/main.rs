@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-// Some assembly required. For developers 7 and up.
-
 use clap::{Parser, Subcommand};
 use color_eyre::Report;
 use ggez::graphics::ImageFormat;
