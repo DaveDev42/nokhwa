@@ -2,9 +2,53 @@
 
 ## Unreleased (0.13.0)
 
+### ⚠ BREAKING CHANGES
+
+* Replaced `CaptureBackendTrait` with four capability-based traits:
+  `CameraDevice`, `FrameSource`, `ShutterCapture`, `EventSource`.
+* Removed `Camera<F>` and `CallbackCamera<F>`. Replaced by `CameraSession`
+  (returning an `OpenedCamera` enum with `Stream`, `Shutter`, `Hybrid`
+  variants) and `CameraRunner` (threaded helper).
+* Renamed feature `output-threaded` → `runner`; dropped `parking_lot`
+  and `arc-swap` deps that only backed the removed `CallbackCamera`.
+* `input-opencv` backend temporarily disabled pending migration to the
+  new traits (enabling it now triggers a `compile_error!`).
+* Backend trait methods `refresh_camera_format`, `resolution`,
+  `frame_rate`, `frame_format`, `set_resolution`, `set_frame_rate`,
+  `set_frame_format`, and single-control `camera_control(id)` are
+  removed. Use `negotiated_format()` / `set_format(CameraFormat)` and
+  `controls()` instead.
+* See `MIGRATING-0.13.md` for a full step-by-step guide.
+
+### Features
+
+* New `CameraEvent` type and `EventPoll` trait for camera events
+  (disconnect, capture error, will-shut-down).
+* `CameraRunner` channel-based threaded helper behind the `runner`
+  feature, with per-variant loops (stream / shutter / hybrid) and
+  configurable queue sizes.
+* `nokhwa_backend!` macro for custom-backend crates to declare
+  their capability set and obtain the internal `AnyDevice` impl.
+* New `testing` feature on `nokhwa-core` providing `MockFrameSource`,
+  `MockShutter`, and `MockHybrid` backends for integration tests.
+
+### Infrastructure
+
+* `wgpu` helpers (`RawTextureData`, `raw_texture_layout`) moved from
+  `nokhwa_core::traits` to a dedicated `nokhwa_core::wgpu` module.
+* Workspace version bumped to 0.13.0.
+* Pre-commit hook gained a `NOKHWA_SKIP_CLIPPY` escape hatch used
+  during the trait-split transition; the workspace clippy is clean at
+  release time.
+
 ### Documentation
 
-* migrate examples to the 0.13.0 API: rewrite `capture`, `captesting`, `setting`, and `threaded-capture` against `CameraSession`/`OpenedCamera`/`CameraRunner`; add minimal `examples/stream_camera.rs` and `examples/runner.rs` at the workspace root.
+* Added `MIGRATING-0.13.md` covering the 0.12 → 0.13 migration.
+* Rewrote top-level `lib.rs` doc comments and README quick-start.
+* Migrated all examples (`capture`, `captesting`, `setting`,
+  `threaded-capture`) to the new API and added minimal
+  `examples/stream_camera.rs` and `examples/runner.rs` at the
+  workspace root.
 
 ## [0.12.0](https://github.com/DaveDev42/nokhwa/compare/v0.11.0...v0.12.0) (2026-04-12)
 

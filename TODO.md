@@ -15,12 +15,14 @@
 ## Performance
 (None)
 
-## 0.13.0 Roadmap
-- [ ] Separate streaming vs still-image capture models in `CaptureBackendTrait`
-  - Current trait assumes continuous streaming (`open_stream` → `frame` → `stop_stream`). Does not fit cameras with distinct live-view + shutter-capture modes.
-  - Split into `StreamBackend` (live view / continuous frames) and `CaptureBackend` (single-shot still images). Backends can implement one or both.
-  - Enables proper support for DSLR/mirrorless SDKs (Canon EDSDK, Nikon SDK, Sony Remote SDK, gPhoto2), industrial cameras (Basler Pylon, Allied Vision Vimba, FLIR/Teledyne), and mobile camera APIs (Android Camera2, iOS AVCapturePhotoOutput).
-  - Requires new API for high-resolution still capture, possibly RAW `FrameFormat` variants, and event-driven capture (trigger, shutter release).
+## 0.14.0 Roadmap
+- [ ] `AsyncCameraRunner` behind an `async-tokio` feature (tokio-based channels; replaces ad-hoc `spawn_blocking` wrapping of `recv`).
+- [ ] Migrate `input-opencv` backend to the 0.13.0 trait split (currently gated behind a `compile_error!`).
+- [ ] Wire bounded channels + `Overflow` policy in `CameraRunner`. The `RunnerConfig` fields (`frame_queue`, `picture_queue`, `event_queue`, `on_overflow`) currently land but don't affect channel capacity (runner uses `std::sync::mpsc::channel`, which is unbounded). Switch to `sync_channel` with an explicit drop-oldest / drop-newest helper.
+- [ ] Reconsider `CameraSession` as a builder. After T13, the unit struct + static `open()` makes `CameraSession::new` + `self.request` vestigial; fold into a single `open(index, req)` free fn or a real builder.
+- [ ] Port `tests/device_tests.rs` (gated `device-test`) to the new API. It still references the removed `Camera`/`CallbackCamera`.
+- [ ] Fix the `docs-only + docs-nolink + input-msmf` stub export so `cargo doc --features docs-only,docs-nolink` builds on non-Windows hosts (MSMF crate's docs-only branch doesn't re-export `MediaFoundationCaptureDevice`).
+- [ ] External backend crate (e.g. `canon-edsdk-nokhwa`) validating the shutter/hybrid contract.
 
 ## Backlog
 - [ ] Re-implement GStreamer backend (cross-platform, previously 839 lines)

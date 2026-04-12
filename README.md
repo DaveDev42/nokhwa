@@ -26,59 +26,52 @@ features = ["input-msmf"]          # Windows
 
 ## Quick Start
 
-Nokhwa 0.12 uses a **type-safe frame API**: `Camera<F>` is parameterized by a
-`CaptureFormat` marker (e.g. `Yuyv`, `Mjpeg`, `Nv12`, `Gray`, `RawRgb`,
-`RawBgr`), and `Frame<F>` carries that format tag at compile time. Invalid
-conversions (e.g. a grayscale frame into RGB) are caught by the compiler.
+> **Upgrading from 0.12?** See [`MIGRATING-0.13.md`](./MIGRATING-0.13.md).
+
+Nokhwa 0.13 splits camera capabilities into four traits (`CameraDevice`,
+`FrameSource`, `ShutterCapture`, `EventSource`) and dispatches opened devices
+through an `OpenedCamera` enum so webcams, DSLRs, and hybrid cameras share one
+API surface.
 
 ```rust
-use nokhwa::Camera;
-use nokhwa::utils::{CameraIndex, RequestedFormatType};
-use nokhwa_core::format_types::Yuyv;
-use nokhwa_core::frame::IntoRgb;
+use nokhwa::{CameraSession, OpenRequest, OpenedCamera};
+use nokhwa_core::error::NokhwaError;
+use nokhwa_core::types::CameraIndex;
 
-fn main() -> Result<(), nokhwa::NokhwaError> {
-    // Open the first camera capturing YUYV at the highest available frame rate.
-    let mut camera = Camera::open::<Yuyv>(
-        CameraIndex::Index(0),
-        RequestedFormatType::AbsoluteHighestFrameRate,
-    )?;
-
-    // Start the stream and grab a typed frame.
-    camera.open_stream()?;
-    let frame = camera.frame_typed()?;          // Frame<Yuyv>
-    println!("captured {}x{}", frame.resolution().width(), frame.resolution().height());
-
-    // Decode lazily, then materialize into an `image::RgbImage`.
-    let rgb = frame.into_rgb().materialize()?;  // ImageBuffer<Rgb<u8>, Vec<u8>>
-    println!("decoded {} bytes", rgb.len());
-    Ok(())
+fn main() -> Result<(), NokhwaError> {
+    let opened = CameraSession::open(CameraIndex::Index(0), OpenRequest::any())?;
+    match opened {
+        OpenedCamera::Stream(mut cam) => {
+            cam.open()?;
+            let f = cam.frame()?;
+            println!(
+                "captured {}x{}",
+                f.resolution().width(),
+                f.resolution().height()
+            );
+            cam.close()
+        }
+        OpenedCamera::Shutter(mut cam) => {
+            let photo = cam.capture(std::time::Duration::from_secs(5))?;
+            println!("photo: {} bytes", photo.buffer().len());
+            Ok(())
+        }
+        OpenedCamera::Hybrid(mut cam) => {
+            cam.open()?;
+            let _preview = cam.frame()?;
+            let _photo = cam.capture(std::time::Duration::from_secs(5))?;
+            Ok(())
+        }
+    }
 }
 ```
 
-Other common conversions: `frame.into_rgba().materialize()` →
-`ImageBuffer<Rgba<u8>>`, `frame.into_luma().materialize()` →
-`ImageBuffer<Luma<u8>>`.
+For apps consuming live view, pictures, and events concurrently, use
+`CameraRunner` (feature `runner`) which owns the camera on a background
+thread and delivers data through `std::sync::mpsc::Receiver` channels.
 
-### Compile-time format safety
-
-`Frame<Gray>` does **not** implement `IntoRgb` — grayscale carries no color
-information, so converting to RGB is a category error and a compile-time
-failure:
-
-```rust,compile_fail
-use nokhwa_core::format_types::Gray;
-use nokhwa_core::frame::{Frame, IntoRgb};
-
-fn demo(frame: Frame<Gray>) {
-    // error[E0277]: the trait bound `Frame<Gray>: IntoRgb` is not satisfied
-    let _ = frame.into_rgb();
-}
-```
-
-Use `frame.into_luma().materialize()` instead for `Gray` frames.
-
-A command line app made with `nokhwa` can be found in the `examples` folder.
+Runnable examples live in the `examples/` directory
+(`stream_camera.rs`, `runner.rs`, plus sub-crate demos).
 
 ## API Support
 
@@ -102,7 +95,7 @@ The default feature set enables only `mjpeg`. You **must** additionally enable a
 - `input-avfoundation`: macOS/iOS AVFoundation backend
 - `input-v4l`: Linux Video4Linux2 backend
 - `input-msmf`: Windows Media Foundation backend
-- `input-opencv`: Cross-platform OpenCV backend
+- `input-opencv`: Cross-platform OpenCV backend *(pending migration to 0.13 trait split; enabling it currently triggers a `compile_error!`)*
 
 **Output features:**
 - `output-wgpu`: Copy frames directly into a `wgpu` texture
