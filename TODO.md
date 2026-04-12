@@ -4,7 +4,6 @@
 (None)
 
 ## Medium Priority
-- [ ] Update `examples/` to use 0.12.0 API — verify examples compile against new Frame<F> / Camera<F> API, update patterns (decode_image → into_rgb().materialize()).
 - [ ] Add criterion benchmarks for pixel format conversions — measure actual SIMD speedup vs scalar for BGR, YUYV, NV12, RGB→Luma, etc. Gate behind `bench` feature.
 
 ## Low Priority

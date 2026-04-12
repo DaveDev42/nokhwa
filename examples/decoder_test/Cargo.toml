@@ -10,3 +10,5 @@ image = "0.25"
 
 [dependencies.nokhwa-core]
 path = "../../nokhwa-core"
+
+[workspace]

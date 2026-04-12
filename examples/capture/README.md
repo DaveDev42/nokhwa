@@ -2,6 +2,12 @@
 
 A command-line tool for testing nokhwa camera backends. It can list devices, inspect camera properties, capture single frames, and stream live video.
 
+## What it demonstrates (0.12.0 API)
+
+- `Camera::open::<Mjpeg>(index, RequestedFormatType::None)` opens a `Camera<Mjpeg>` for property inspection.
+- `Camera<Mjpeg>::new(index, requested)` + `camera.frame_typed()` captures a `Frame<Mjpeg>` in the `single` subcommand, then `frame.into_rgb().materialize()` decodes to an `RgbImage`.
+- `CallbackCamera<Mjpeg>` drives the `stream` subcommand — the callback's `Buffer` is wrapped into `Frame::<Mjpeg>::new(buffer)` and `.into_rgba().materialize()` produces the RGBA pixels fed to `ggez`.
+
 ## Building
 
 The example depends on `nokhwa` with `input-native` and `output-threaded` features, plus `ggez` for the live display window.

@@ -24,3 +24,5 @@ features = ["input-native", "output-threaded"]
 [dependencies.image]
 version = "0.24.5"
 features = ["png"]
+
+[workspace]
