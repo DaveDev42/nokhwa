@@ -89,6 +89,9 @@ pub mod traits;
 mod traits_tests;
 pub mod types;
 
+#[cfg(feature = "testing")]
+pub mod testing;
+
 #[cfg(feature = "wgpu-types")]
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "wgpu-types")))]
 pub mod wgpu;
