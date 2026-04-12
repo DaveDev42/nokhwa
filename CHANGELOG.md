@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased (0.13.0)
+
+### Documentation
+
+* migrate examples to the 0.13.0 API: rewrite `capture`, `captesting`, `setting`, and `threaded-capture` against `CameraSession`/`OpenedCamera`/`CameraRunner`; add minimal `examples/stream_camera.rs` and `examples/runner.rs` at the workspace root.
+
 ## [0.12.0](https://github.com/DaveDev42/nokhwa/compare/v0.11.0...v0.12.0) (2026-04-12)
 
 

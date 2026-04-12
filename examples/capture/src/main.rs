@@ -16,59 +16,16 @@
 
 use clap::{Parser, Subcommand};
 use color_eyre::Report;
-use ggez::graphics::ImageFormat;
-use ggez::{
-    event::{run, EventHandler},
-    graphics::{Canvas, Image},
-    Context, ContextBuilder, GameError,
-};
+use nokhwa::error::NokhwaError;
 use nokhwa::format_types::Mjpeg;
-use nokhwa::frame::{Frame, IntoRgb, IntoRgba};
+use nokhwa::frame::{Frame, IntoRgb};
+use nokhwa::utils::{frame_formats, CameraFormat, CameraIndex, FrameFormat, Resolution};
 use nokhwa::{
-    native_api_backend, query,
-    utils::{
-        frame_formats, CameraFormat, CameraIndex, FrameFormat, RequestedFormat,
-        RequestedFormatType, Resolution,
-    },
-    Buffer, CallbackCamera, Camera,
+    native_api_backend, nokhwa_initialize, query, CameraRunner, CameraSession, OpenRequest,
+    OpenedCamera, RunnerConfig, StreamCamera,
 };
 use std::str::FromStr;
-use std::sync::mpsc::Receiver;
 use std::time::Duration;
-
-struct CaptureState {
-    receiver: Receiver<Buffer>,
-    buffer: Vec<u8>,
-    format: CameraFormat,
-}
-
-impl EventHandler<GameError> for CaptureState {
-    fn update(&mut self, _ctx: &mut Context) -> Result<(), GameError> {
-        Ok(())
-    }
-
-    fn draw(&mut self, ctx: &mut Context) -> Result<(), GameError> {
-        let buffer = self
-            .receiver
-            .recv()
-            .map_err(|why| GameError::RenderError(why.to_string()))?;
-        let frame: Frame<Mjpeg> = Frame::new(buffer);
-        let image = frame
-            .into_rgba()
-            .materialize()
-            .map_err(|why| GameError::RenderError(why.to_string()))?;
-        self.buffer = image.into_raw();
-        let image = Image::from_pixels(
-            ctx,
-            &self.buffer,
-            ImageFormat::Rgba8Uint,
-            self.format.width(),
-            self.format.height(),
-        );
-        let canvas = Canvas::from_image(ctx, image, None);
-        canvas.finish(ctx)
-    }
-}
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -94,6 +51,15 @@ impl FromStr for IndexKind {
     }
 }
 
+impl From<&IndexKind> for CameraIndex {
+    fn from(k: &IndexKind) -> Self {
+        match k {
+            IndexKind::String(s) => CameraIndex::String(s.clone()),
+            IndexKind::Index(i) => CameraIndex::Index(*i),
+        }
+    }
+}
+
 #[derive(Subcommand)]
 enum Commands {
     ListDevices,
@@ -103,31 +69,12 @@ enum Commands {
     },
     Stream {
         device: Option<IndexKind>,
-        display: Option<bool>,
         requested: Option<RequestedCliFormat>,
     },
     Single {
         device: Option<IndexKind>,
         save: Option<String>,
         requested: Option<RequestedCliFormat>,
-    },
-}
-
-enum CommandsProper {
-    ListDevices,
-    ListProperties {
-        device: Option<IndexKind>,
-        kind: PropertyKind,
-    },
-    Stream {
-        device: Option<IndexKind>,
-        display: bool,
-        requested: Option<RequestedCliFormat>,
-    },
-    Single {
-        device: Option<IndexKind>,
-        requested: Option<RequestedCliFormat>,
-        save: Option<String>,
     },
 }
 
@@ -141,74 +88,38 @@ impl FromStr for RequestedCliFormat {
     type Err = Report;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let splitted = s.split(":").collect::<Vec<&str>>();
-        if splitted.len() == 0 {
+        let splitted = s.split(':').collect::<Vec<&str>>();
+        if splitted.is_empty() {
             return Err(Report::msg("empty string"));
         }
 
         Ok(RequestedCliFormat {
             format_type: splitted[0].to_string(),
-            format_option: splitted.get(1).map(|x| x.to_string()),
+            format_option: splitted.get(1).map(|x| (*x).to_string()),
         })
     }
 }
 
 impl RequestedCliFormat {
-    pub fn make_requested(self) -> Option<RequestedFormat<'static>> {
+    /// Translate the CLI format into an [`OpenRequest`]. Only the `Exact`
+    /// variant is honoured precisely; other variants fall back to
+    /// `OpenRequest::any()` (backend picks highest resolution).
+    fn into_open_request(self) -> Option<OpenRequest> {
         match self.format_type.as_str() {
-            "AbsoluteHighestResolution" => Some(RequestedFormat::new::<Mjpeg>(
-                RequestedFormatType::AbsoluteHighestResolution,
-            )),
-            "AbsoluteHighestFrameRate" => Some(RequestedFormat::new::<Mjpeg>(
-                RequestedFormatType::AbsoluteHighestFrameRate,
-            )),
-            "HighestResolution" => {
-                let fmtv = self.format_option.unwrap();
-                let values = fmtv.split(",").collect::<Vec<&str>>();
-                let x = values[0].parse::<u32>().unwrap();
-                let y = values[1].parse::<u32>().unwrap();
-                let resolution = Resolution::new(x, y);
-
-                Some(RequestedFormat::new::<Mjpeg>(
-                    RequestedFormatType::HighestResolution(resolution),
-                ))
+            "AbsoluteHighestResolution" | "AbsoluteHighestFrameRate" | "None" => {
+                Some(OpenRequest::any())
             }
-            "HighestFrameRate" => {
-                let fps = self.format_option.unwrap().parse::<u32>().unwrap();
-
-                Some(RequestedFormat::new::<Mjpeg>(
-                    RequestedFormatType::HighestFrameRate(fps),
-                ))
+            "HighestResolution" | "HighestFrameRate" => Some(OpenRequest::any()),
+            "Exact" | "Closest" => {
+                let fmtv = self.format_option?;
+                let values = fmtv.split(',').collect::<Vec<&str>>();
+                let x = values[0].parse::<u32>().ok()?;
+                let y = values[1].parse::<u32>().ok()?;
+                let fps = values[2].parse::<u32>().ok()?;
+                let fourcc = values[3].parse::<FrameFormat>().ok()?;
+                let camera_format = CameraFormat::new(Resolution::new(x, y), fourcc, fps);
+                Some(OpenRequest::with_format(camera_format))
             }
-            "Exact" => {
-                let fmtv = self.format_option.unwrap();
-                let values = fmtv.split(",").collect::<Vec<&str>>();
-                let x = values[0].parse::<u32>().unwrap();
-                let y = values[1].parse::<u32>().unwrap();
-                let fps = values[2].parse::<u32>().unwrap();
-                let fourcc = values[3].parse::<FrameFormat>().unwrap();
-
-                let resolution = Resolution::new(x, y);
-                let camera_format = CameraFormat::new(resolution, fourcc, fps);
-                Some(RequestedFormat::new::<Mjpeg>(RequestedFormatType::Exact(
-                    camera_format,
-                )))
-            }
-            "Closest" => {
-                let fmtv = self.format_option.unwrap();
-                let values = fmtv.split(",").collect::<Vec<&str>>();
-                let x = values[0].parse::<u32>().unwrap();
-                let y = values[1].parse::<u32>().unwrap();
-                let fps = values[2].parse::<u32>().unwrap();
-                let fourcc = values[3].parse::<FrameFormat>().unwrap();
-
-                let resolution = Resolution::new(x, y);
-                let camera_format = CameraFormat::new(resolution, fourcc, fps);
-                Some(RequestedFormat::new::<Mjpeg>(RequestedFormatType::Closest(
-                    camera_format,
-                )))
-            }
-            "None" => Some(RequestedFormat::new::<Mjpeg>(RequestedFormatType::None)),
             _ => None,
         }
     }
@@ -236,184 +147,140 @@ impl FromStr for PropertyKind {
 }
 
 fn main() {
-    nokhwa::nokhwa_initialize(|x| {
+    nokhwa_initialize(|x| {
         println!("Nokhwa Initalized: {x}");
-        nokhwa_main()
+        if let Err(e) = nokhwa_main() {
+            eprintln!("error: {e}");
+        }
     });
     std::thread::sleep(Duration::from_millis(2000));
 }
 
-fn nokhwa_main() {
+fn nokhwa_main() -> Result<(), NokhwaError> {
     let cli = Cli::parse();
 
-    let cmd = match &cli.command {
+    let cmd = match cli.command {
         Some(cmd) => cmd,
         None => {
             println!("Unknown command \"\". Do --help for info.");
-            return;
+            return Ok(());
         }
     };
 
-    let cmd = match cmd {
-        Commands::ListDevices => CommandsProper::ListDevices,
-        Commands::ListProperties { device, kind } => CommandsProper::ListProperties {
-            device: device.clone(),
-            kind: match kind {
-                Some(k) => *k,
-                None => {
-                    println!("Expected Positional Argument \"All\", \"Controls\", or \"CompatibleFormats\"");
-                    return;
-                }
-            },
-        },
-        Commands::Stream {
-            device,
-            display,
-            requested,
-        } => CommandsProper::Stream {
-            device: device.clone(),
-            display: display.unwrap_or(false),
-            requested: requested.clone(),
-        },
-        Commands::Single {
-            device,
-            save,
-            requested,
-        } => CommandsProper::Single {
-            device: device.clone(),
-            save: save.clone(),
-            requested: requested.clone(),
-        },
-    };
-
     match cmd {
-        CommandsProper::ListDevices => {
-            let backend = native_api_backend().unwrap();
-            let devices = query(backend).unwrap();
+        Commands::ListDevices => {
+            let backend = native_api_backend()
+                .ok_or_else(|| NokhwaError::general("no native API backend on this platform"))?;
+            let devices = query(backend)?;
             println!("There are {} available cameras.", devices.len());
             for device in devices {
                 println!("{device}");
             }
         }
-        CommandsProper::ListProperties { device, kind } => {
-            let index = match device.as_ref().unwrap_or(&IndexKind::Index(0)) {
-                IndexKind::String(s) => CameraIndex::String(s.clone()),
-                IndexKind::Index(i) => CameraIndex::Index(*i),
+        Commands::ListProperties { device, kind } => {
+            let kind = kind.unwrap_or_else(|| {
+                println!(
+                    "Expected Positional Argument \"All\", \"Controls\", or \"CompatibleFormats\""
+                );
+                PropertyKind::All
+            });
+            let index = CameraIndex::from(device.as_ref().unwrap_or(&IndexKind::Index(0)));
+            let opened = CameraSession::open(index, OpenRequest::any())?;
+            let OpenedCamera::Stream(mut cam) = opened else {
+                return Err(NokhwaError::general("expected stream-capable camera"));
             };
-            let mut camera = Camera::open::<Mjpeg>(index, RequestedFormatType::None).unwrap();
             match kind {
                 PropertyKind::All => {
-                    camera_print_controls(&camera);
-                    camera_compatible_formats(&mut camera);
+                    camera_print_controls(&cam)?;
+                    camera_compatible_formats(&mut cam)?;
                 }
                 PropertyKind::Controls => {
-                    camera_print_controls(&camera);
+                    camera_print_controls(&cam)?;
                 }
                 PropertyKind::CompatibleFormats => {
-                    camera_compatible_formats(&mut camera);
+                    camera_compatible_formats(&mut cam)?;
                 }
             }
         }
-        CommandsProper::Stream {
-            device,
-            display,
-            requested,
-        } => {
-            let requested = requested.as_ref().map(|x| x.clone().make_requested())
-                .flatten()
-                .expect("Expected AbsoluteHighestResolution, AbsoluteHighestFrameRate, HighestResolution, HighestFrameRate, Exact, Closest, or None");
-
-            let index = match device.as_ref().unwrap_or(&IndexKind::Index(0)) {
-                IndexKind::String(s) => CameraIndex::String(s.clone()),
-                IndexKind::Index(i) => CameraIndex::Index(*i),
-            };
-
-            if display {
-                let (sender, receiver) = std::sync::mpsc::channel();
-
-                let mut camera: CallbackCamera<Mjpeg> =
-                    CallbackCamera::new(index, requested, move |buf| {
-                        sender.send(buf).expect("Error sending frame!!!!");
-                    })
-                    .unwrap();
-
-                let camera_info = camera.info().clone();
-                let format = camera.camera_format().unwrap();
-
-                camera.open_stream().unwrap();
-
-                let cb = ContextBuilder::new(&camera_info.human_name(), "Nokhwa");
-                let (ctx, el) = cb.build().unwrap();
-
-                let state = CaptureState {
-                    receiver,
-                    buffer: Vec::with_capacity(3840 * 2160 * 3),
-                    format,
-                };
-
-                run(ctx, el, state)
-            } else {
-                let mut cb: CallbackCamera<Mjpeg> = CallbackCamera::new(index, requested, |buf| {
-                    println!("Captured frame of size {}", buf.buffer().len());
-                })
-                .unwrap();
-
-                cb.open_stream().unwrap();
-                loop {}
+        Commands::Stream { device, requested } => {
+            let req = requested
+                .and_then(RequestedCliFormat::into_open_request)
+                .unwrap_or_else(OpenRequest::any);
+            let index = CameraIndex::from(device.as_ref().unwrap_or(&IndexKind::Index(0)));
+            let opened = CameraSession::open(index, req)?;
+            let runner = CameraRunner::spawn(opened, RunnerConfig::default())?;
+            let frames = runner
+                .frames()
+                .ok_or_else(|| NokhwaError::general("runner exposes no frames channel"))?;
+            loop {
+                match frames.recv_timeout(Duration::from_secs(2)) {
+                    Ok(buf) => println!("Captured frame of size {}", buf.buffer().len()),
+                    Err(e) => {
+                        return Err(NokhwaError::general(e.to_string()));
+                    }
+                }
             }
         }
-        CommandsProper::Single {
+        Commands::Single {
             device,
             save,
             requested,
         } => {
-            let index = match device.as_ref().unwrap_or(&IndexKind::Index(0)) {
-                IndexKind::String(s) => CameraIndex::String(s.clone()),
-                IndexKind::Index(i) => CameraIndex::Index(*i),
+            let req = requested
+                .and_then(RequestedCliFormat::into_open_request)
+                .unwrap_or_else(OpenRequest::any);
+            let index = CameraIndex::from(device.as_ref().unwrap_or(&IndexKind::Index(0)));
+            let opened = CameraSession::open(index, req)?;
+            let OpenedCamera::Stream(mut camera) = opened else {
+                return Err(NokhwaError::general("expected stream-capable camera"));
             };
-
-            let requested = requested.clone().map(|x| x.make_requested())
-                .flatten()
-                .expect("Expected AbsoluteHighestResolution, AbsoluteHighestFrameRate, HighestResolution, HighestFrameRate, Exact, Closest, or None");
-
-            let mut camera: Camera<Mjpeg> = Camera::new(index, requested).unwrap();
-            camera.open_stream().unwrap();
-            let frame: Frame<Mjpeg> = camera.frame_typed().unwrap();
-            camera.stop_stream().unwrap();
-            println!("Captured Single Frame of {}", frame.buffer().len());
-            let decoded = frame.into_rgb().materialize().unwrap();
+            camera.open()?;
+            let buffer = camera.frame()?;
+            camera.close()?;
+            println!("Captured Single Frame of {}", buffer.buffer().len());
+            let frame: Frame<Mjpeg> = Frame::new(buffer);
+            let decoded = frame.into_rgb().materialize()?;
             println!("DecodedFrame of {}", decoded.len());
 
             if let Some(path) = save {
                 println!("Saving to {path}");
-                decoded.save(path).unwrap();
+                decoded
+                    .save(path)
+                    .map_err(|e| NokhwaError::general(e.to_string()))?;
             }
         }
     }
+
+    Ok(())
 }
 
-fn camera_print_controls(cam: &Camera) {
-    let ctrls = cam.camera_controls().unwrap();
-    let index = cam.index();
+fn camera_print_controls(cam: &StreamCamera) -> Result<(), NokhwaError> {
+    let ctrls = cam.controls()?;
+    let index = cam.info().index();
     println!("Controls for camera {index}");
     for ctrl in ctrls {
-        println!("{ctrl}")
+        println!("{ctrl}");
     }
+    Ok(())
 }
 
-fn camera_compatible_formats(cam: &mut Camera) {
+fn camera_compatible_formats(cam: &mut StreamCamera) -> Result<(), NokhwaError> {
+    let formats = cam.compatible_formats()?;
     for ffmt in frame_formats() {
-        if let Ok(compatible) = cam.compatible_list_by_resolution(*ffmt) {
-            println!("{ffmt}:");
-            let mut formats = Vec::new();
-            for (resolution, fps) in compatible {
-                formats.push((resolution, fps));
-            }
-            formats.sort_by(|a, b| a.0.cmp(&b.0));
-            for fmt in formats {
-                let (resolution, res) = fmt;
-                println!(" - {resolution}: {res:?}")
-            }
+        let mut by_format: Vec<&CameraFormat> =
+            formats.iter().filter(|f| f.format() == *ffmt).collect();
+        if by_format.is_empty() {
+            continue;
+        }
+        by_format.sort_by_key(|a| a.resolution());
+        println!("{ffmt}:");
+        for fmt in by_format {
+            println!(
+                " - {}: {}fps",
+                fmt.resolution(),
+                fmt.frame_rate()
+            );
         }
     }
+    Ok(())
 }

@@ -144,3 +144,12 @@ features = [ "testing" ]
 
 [package.metadata.docs.rs]
 features = [ "docs-only", "docs-nolink", "docs-features" ]
+
+[[example]]
+name = "stream_camera"
+path = "examples/stream_camera.rs"
+
+[[example]]
+name = "runner"
+path = "examples/runner.rs"
+required-features = [ "runner" ]

@@ -14,4 +14,7 @@ default-features = false
 [dependencies.nokhwa]
 path = "../.."
 # EDIT THIS!
-features = ["input-v4l"]
+features = ["input-native"]
+
+# Opt out of the root workspace so this example builds standalone.
+[workspace]

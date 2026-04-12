@@ -1,18 +1,22 @@
 use nokhwa::format_types::Mjpeg;
-use nokhwa::frame::IntoRgb;
-use nokhwa::utils::{CameraIndex, RequestedFormatType};
-use nokhwa::Camera;
+use nokhwa::frame::{Frame, IntoRgb};
+use nokhwa::error::NokhwaError;
+use nokhwa::utils::CameraIndex;
+use nokhwa::{CameraSession, OpenRequest, OpenedCamera};
 
-fn main() {
-    let index = CameraIndex::Index(0);
-    let mut camera =
-        Camera::open::<Mjpeg>(index, RequestedFormatType::AbsoluteHighestResolution).unwrap();
-    println!("{}", camera.camera_format());
-    camera.open_stream().unwrap();
-    let frame = camera.frame_typed().unwrap();
-    camera.stop_stream().unwrap();
-    let decoded = frame.into_rgb().materialize().unwrap();
+fn main() -> Result<(), NokhwaError> {
+    let opened = CameraSession::open(CameraIndex::Index(0), OpenRequest::any())?;
+    let OpenedCamera::Stream(mut camera) = opened else {
+        return Err(NokhwaError::general("expected stream-capable camera"));
+    };
+    println!("{}", camera.negotiated_format());
+    camera.open()?;
+    let buffer = camera.frame()?;
+    camera.close()?;
+    let frame: Frame<Mjpeg> = Frame::new(buffer);
+    let decoded = frame.into_rgb().materialize()?;
     decoded
         .save_with_format("turtle.jpeg", image::ImageFormat::Jpeg)
-        .unwrap();
+        .map_err(|e| NokhwaError::general(e.to_string()))?;
+    Ok(())
 }
