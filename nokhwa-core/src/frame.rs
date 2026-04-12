@@ -395,11 +395,8 @@ pub(crate) fn convert_to_rgb(
         }
         FrameFormat::GRAY => {
             let mut rgb = vec![0u8; data.len() * 3];
-            for (idx, &pxv) in data.iter().enumerate() {
-                let i = idx * 3;
-                rgb[i] = pxv;
-                rgb[i + 1] = pxv;
-                rgb[i + 2] = pxv;
+            for (dst, &pxv) in rgb.chunks_exact_mut(3).zip(data.iter()) {
+                dst.copy_from_slice(&[pxv, pxv, pxv]);
             }
             Ok(rgb)
         }
@@ -486,12 +483,8 @@ pub(crate) fn convert_to_rgba(
         }
         FrameFormat::GRAY => {
             let mut rgba = vec![0u8; data.len() * 4];
-            for (idx, &pxv) in data.iter().enumerate() {
-                let i = idx * 4;
-                rgba[i] = pxv;
-                rgba[i + 1] = pxv;
-                rgba[i + 2] = pxv;
-                rgba[i + 3] = 255;
+            for (dst, &pxv) in rgba.chunks_exact_mut(4).zip(data.iter()) {
+                dst.copy_from_slice(&[pxv, pxv, pxv, 255]);
             }
             Ok(rgba)
         }

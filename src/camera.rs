@@ -121,19 +121,6 @@ impl Camera {
     }
 }
 
-fn format_mismatch_error<F: CaptureFormat>(actual: FrameFormat) -> NokhwaError {
-    NokhwaError::SetPropertyError {
-        property: "FrameFormat".to_string(),
-        value: format!("{actual:?}"),
-        error: format!(
-            "camera negotiated {:?} but Camera<{:?}> requires {:?}",
-            actual,
-            F::FRAME_FORMAT,
-            F::FRAME_FORMAT
-        ),
-    }
-}
-
 impl<F: CaptureFormat> Camera<F> {
     /// Create a new camera from an `index` and `format`
     /// # Errors
@@ -161,7 +148,16 @@ impl<F: CaptureFormat> Camera<F> {
     ) -> Result<Self, NokhwaError> {
         let actual_format = device.frame_format();
         if actual_format != F::FRAME_FORMAT {
-            return Err(format_mismatch_error::<F>(actual_format));
+            return Err(NokhwaError::SetPropertyError {
+                property: "FrameFormat".to_string(),
+                value: format!("{actual_format:?}"),
+                error: format!(
+                    "camera negotiated {:?} but Camera<{:?}> requires {:?}",
+                    actual_format,
+                    F::FRAME_FORMAT,
+                    F::FRAME_FORMAT
+                ),
+            });
         }
         Ok(Camera {
             idx: index,
