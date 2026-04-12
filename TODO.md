@@ -12,13 +12,14 @@
   - [ ] Camera control round-trip on real hardware (set → get value verification)
   - [ ] Multi-frame streaming consistency (no corruption across frames)
 
+## Medium Priority
+- [ ] Split `nokhwa-core/src/simd.rs` (1,450+ lines) into a `simd/` module directory by conversion domain
+  - `simd/bgr_to_rgb.rs`, `simd/yuyv_to_rgb.rs`, `simd/nv12_to_rgb.rs`, `simd/rgb_to_rgba.rs`, `simd/yuyv_extract_luma.rs`, `simd/rgb_to_luma.rs`
+  - Each file holds all platform variants (NEON / SSE / AVX / scalar) for its domain
+  - `simd/mod.rs` exposes public API and runtime dispatch
+
 ## Performance
-- [x] Add SIMD NV12→RGB/RGBA decoder — NEON (aarch64) + SSE4.1 (x86_64)
-- [x] Add YUYV→RGB/RGBA SIMD for x86_64 — SSE4.1 path added alongside existing NEON
-- [x] Add AVX2 path for BGR→RGB on x86_64 — 30 bytes/iter with AVX2 → SSSE3 → scalar fallback
-- [x] Add SIMD RAWRGB→RGBA / RAWBGR→RGBA — NEON vld3q/vst4q + SSSE3 pshufb expansion
-- [x] Add SIMD YUYV Y-channel extraction — NEON vld2q deinterleave + SSSE3 pshufb
-- [x] Add SIMD RGB→Luma averaging — NEON + SSE2 with multiply-high division trick
+(None)
 
 ## 0.13.0 Roadmap
 - [ ] Separate streaming vs still-image capture models in `CaptureBackendTrait`
