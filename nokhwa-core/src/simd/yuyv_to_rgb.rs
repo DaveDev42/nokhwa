@@ -77,7 +77,7 @@ pub(crate) fn yuyv_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
 ///   - Dest: each iteration writes `di..di+5` where di = i*6, max di+5 = (N-1)*6+5 = `dst.len()-1` ✓
 #[inline]
 #[allow(clippy::cast_sign_loss)]
-fn yuyv_to_rgb_scalar(src: &[u8], dst: &mut [u8]) {
+pub(crate) fn yuyv_to_rgb_scalar(src: &[u8], dst: &mut [u8]) {
     debug_assert!(src.len().is_multiple_of(4));
     debug_assert_eq!(dst.len(), (src.len() / 4) * 6);
 
@@ -132,7 +132,7 @@ fn yuyv_to_rgb_scalar(src: &[u8], dst: &mut [u8]) {
 ///   - Dest: each iteration writes `di..di+7` where di = i*8, max di+7 = (N-1)*8+7 = `dst.len()-1` ✓
 #[inline]
 #[allow(clippy::cast_sign_loss)]
-fn yuyv_to_rgba_scalar(src: &[u8], dst: &mut [u8]) {
+pub(crate) fn yuyv_to_rgba_scalar(src: &[u8], dst: &mut [u8]) {
     debug_assert!(src.len().is_multiple_of(4));
     debug_assert_eq!(dst.len(), (src.len() / 4) * 8);
 

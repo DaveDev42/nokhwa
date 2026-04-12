@@ -63,7 +63,13 @@ pub(crate) fn nv12_to_rgb_simd(
     clippy::similar_names,
     dead_code
 )]
-fn nv12_to_rgb_scalar(width: usize, height: usize, data: &[u8], out: &mut [u8], rgba: bool) {
+pub(crate) fn nv12_to_rgb_scalar(
+    width: usize,
+    height: usize,
+    data: &[u8],
+    out: &mut [u8],
+    rgba: bool,
+) {
     let pxsize = if rgba { 4 } else { 3 };
     let y_plane = &data[..width * height];
     let uv_plane = &data[width * height..];

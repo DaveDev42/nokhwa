@@ -38,6 +38,10 @@
 
 * **examples**: Updated `examples/` to the 0.12.0 typed API (`Camera::open::<F>`, `Camera<F>::frame_typed`, `Frame<F>` + `IntoRgb`/`IntoRgba`); added READMEs for `captesting`, `decoder_test`, and `threaded-capture`; each example now opts out of the root workspace so it builds standalone.
 
+### Infrastructure
+
+* **Benchmarks**: Added criterion benchmarks for pixel format conversions (BGR→RGB, YUYV→RGB/RGBA, NV12→RGB/RGBA, RGB→Luma, YUYV Y-extraction) at 640×480, 1920×1080, and 3840×2160. Compares SIMD vs scalar with per-benchmark correctness checks. Gated behind the internal `bench` Cargo feature in `nokhwa-core` (not part of the stable API).
+
 ## [0.11.1](https://github.com/DaveDev42/nokhwa/compare/v0.11.0...v0.11.1) (2026-04-11)
 
 
