@@ -100,6 +100,7 @@ declared capabilities.
 - `input-opencv` backend: pending migration. The feature definition is
   preserved but enabling it triggers a `compile_error!` until the
   backend is adapted to the new traits. Track progress in `TODO.md`.
+
 ## `RunnerConfig` fields
 
 `RunnerConfig` has been trimmed in 0.13.0. Only three fields remain:

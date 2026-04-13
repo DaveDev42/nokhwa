@@ -31,6 +31,11 @@
   their capability set and obtain the internal `AnyDevice` impl.
 * New `testing` feature on `nokhwa-core` providing `MockFrameSource`,
   `MockShutter`, and `MockHybrid` backends for integration tests.
+* `CameraSession::open` now dispatches to `V4LCaptureDevice` on Linux
+  alongside the AVFoundation and Media Foundation branches. The
+  `V4LCaptureDevice<'a>` lifetime parameter was removed; the
+  `MmapStream` handle is stored as `'static`. See the struct-level
+  docs on `V4LCaptureDevice` for the soundness argument.
 
 ### Infrastructure
 

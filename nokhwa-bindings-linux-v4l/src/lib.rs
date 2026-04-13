@@ -248,12 +248,11 @@ mod internal {
     /// this struct's own `device: SharedDevice` field. Extending `'a` to
     /// `'static` is therefore sound.
     ///
-    /// The field order below (`stream_handle` before `device`) keeps the
-    /// stream's `Drop` running first — this is *not* required for soundness
-    /// (the `Arc<Handle>` clones make drop order of `device` irrelevant), but
-    /// we keep it as a defensive ordering so the stream's `VIDIOC_STREAMOFF`
-    /// runs before the last `Arc<Mutex<Device>>` clone might be dropped by
-    /// whoever holds another handle to the same device.
+    /// The field order below (`stream_handle` before `device`) is cosmetic.
+    /// Both orderings are sound: the `Arc<Handle>` clones inside the stream
+    /// keep the fd alive, and `VIDIOC_STREAMOFF` is issued against that same
+    /// `Arc<Handle>` on drop, so it runs correctly no matter when `device`
+    /// is dropped.
     pub struct V4LCaptureDevice {
         stream_handle: Option<MmapStream<'static>>,
         device: SharedDevice,
@@ -263,10 +262,11 @@ mod internal {
 
     // Compile-time assertion: `V4LCaptureDevice: 'static`. The `'static` bound
     // is required by `Box<dyn AnyDevice>` in the Layer 2 session machinery
-    // (the `nokhwa_backend!` macro expansion plugs this type in there). A
-    // future `v4l`-crate bump that re-introduces a borrowed field would break
-    // this and we'd rather find out at build time than discover it via a
-    // confusing macro-expansion error.
+    // (the `nokhwa_backend!` macro expansion plugs this type in there). This
+    // guard catches regressions that would re-introduce a non-`'static` field
+    // on our own struct — e.g. someone reverting to `MmapStream<'a>` with a
+    // borrowed `'a` and dropping the transmute. Better a crisp build-time
+    // error than a confusing macro-expansion error downstream.
     const _: fn() = || {
         fn assert_static<T: 'static>() {}
         assert_static::<V4LCaptureDevice>();
@@ -821,6 +821,10 @@ mod internal {
         }
 
         fn open(&mut self) -> Result<(), NokhwaError> {
+            // Calling `open()` when a stream already exists tears the old
+            // stream down (its `Drop` issues `VIDIOC_STREAMOFF` and munmaps
+            // the arena) and replaces it with a fresh one. This is a deliberate
+            // reset, matching what other backends do.
             // Disable mut warning, since mut is only required when not using arena buffers
             #[allow(unused_mut)]
             let mut stream =
