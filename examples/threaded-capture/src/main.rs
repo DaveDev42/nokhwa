@@ -19,7 +19,7 @@ use nokhwa::format_types::Mjpeg;
 use nokhwa::frame::{Frame, IntoRgba};
 use nokhwa::utils::{ApiBackend, CameraIndex};
 use nokhwa::{
-    nokhwa_initialize, query, CameraRunner, CameraSession, OpenRequest, RunnerConfig,
+    nokhwa_initialize, query, CameraRunner, open, OpenRequest, RunnerConfig,
 };
 use std::time::Duration;
 
@@ -39,7 +39,7 @@ fn main() -> Result<(), NokhwaError> {
         .map(|c| c.index().clone())
         .unwrap_or(CameraIndex::Index(0));
 
-    let opened = CameraSession::open(index, OpenRequest::any())?;
+    let opened = open(index, OpenRequest::any())?;
     let runner = CameraRunner::spawn(opened, RunnerConfig::default())?;
     let frames = runner
         .frames()

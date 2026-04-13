@@ -13,7 +13,7 @@ worker fully joined at a specific moment.
 ## Example
 
 ```rust,no_run
-use nokhwa::{CameraSession, OpenRequest, RunnerConfig};
+use nokhwa::{open, OpenRequest, RunnerConfig};
 use nokhwa_core::types::CameraIndex;
 use nokhwa_tokio::TokioCameraRunner;
 use std::time::Duration;
@@ -21,7 +21,7 @@ use tokio::time::timeout;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), nokhwa_core::error::NokhwaError> {
-    let opened = CameraSession::open(CameraIndex::Index(0), OpenRequest::any())?;
+    let opened = open(CameraIndex::Index(0), OpenRequest::any())?;
     let mut runner = TokioCameraRunner::spawn(opened, RunnerConfig::default())?;
     if let Some(rx) = runner.frames_mut() {
         if let Ok(Some(buf)) = timeout(Duration::from_secs(2), rx.recv()).await {

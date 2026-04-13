@@ -14,7 +14,7 @@
 //! Run with (on macOS native backend is selected automatically):
 //!     cargo run -p nokhwa-tokio --example tokio_runner
 
-use nokhwa::{CameraSession, OpenRequest, RunnerConfig};
+use nokhwa::{open, OpenRequest, RunnerConfig};
 use nokhwa_core::error::NokhwaError;
 use nokhwa_core::types::CameraIndex;
 use nokhwa_tokio::TokioCameraRunner;
@@ -26,7 +26,7 @@ fn main() -> Result<(), NokhwaError> {
         .build()
         .map_err(|e| NokhwaError::general(format!("tokio runtime: {e}")))?;
     rt.block_on(async {
-        let opened = CameraSession::open(CameraIndex::Index(0), OpenRequest::any())?;
+        let opened = open(CameraIndex::Index(0), OpenRequest::any())?;
         let mut runner = TokioCameraRunner::spawn(opened, RunnerConfig::default())?;
 
         if let Some(rx) = runner.frames_mut() {

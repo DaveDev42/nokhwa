@@ -2,10 +2,10 @@ use nokhwa::format_types::Mjpeg;
 use nokhwa::frame::{Frame, IntoRgb};
 use nokhwa::error::NokhwaError;
 use nokhwa::utils::CameraIndex;
-use nokhwa::{CameraSession, OpenRequest, OpenedCamera};
+use nokhwa::{open, OpenRequest, OpenedCamera};
 
 fn main() -> Result<(), NokhwaError> {
-    let opened = CameraSession::open(CameraIndex::Index(0), OpenRequest::any())?;
+    let opened = open(CameraIndex::Index(0), OpenRequest::any())?;
     let OpenedCamera::Stream(mut camera) = opened else {
         return Err(NokhwaError::general("expected stream-capable camera"));
     };

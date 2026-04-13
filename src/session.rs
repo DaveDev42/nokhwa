@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-//! Layer 2: [`CameraSession`], [`OpenedCamera`], and the per-capability
+//! Layer 2: [`open`], [`OpenedCamera`], and the per-capability
 //! wrapper types (`StreamCamera`, `ShutterCamera`, `HybridCamera`).
 //!
 //! These types replace the pre-0.13 `Camera` / `CallbackCamera` structs.
@@ -77,7 +77,7 @@ pub trait AnyDevice: Send {
 pub trait HybridBackend: FrameSource + ShutterCapture + Send {}
 impl<T: FrameSource + ShutterCapture + Send> HybridBackend for T {}
 
-/// A request to open a camera. Future tasks wire this into `CameraSession::open`.
+/// A request to open a camera via [`open`].
 ///
 /// The `Copy` derive relies on every field being `Copy`. If a future field is
 /// non-`Copy`, drop the `Copy` derive (keep `Clone`) and pass by reference
@@ -115,66 +115,63 @@ impl Default for OpenRequest {
     }
 }
 
-/// A handle namespace for opening cameras.
+/// Open the camera at `index` using the platform's default native backend.
 ///
-/// Call [`CameraSession::open`] to open a camera by index and produce an
-/// [`OpenedCamera`].
-pub struct CameraSession;
+/// Dispatches at compile time via `cfg` to the V4L2 backend on Linux,
+/// the `AVFoundation` backend on macOS/iOS, or the Media Foundation
+/// backend on Windows (subject to the corresponding `input-*` feature
+/// being enabled). If none of the native `input-*` features are enabled
+/// for the current target, the call returns an error at runtime rather
+/// than failing at compile time.
+///
+/// Note: this function acquires the device. It is unrelated to the
+/// `open()` method on [`StreamCamera`] / [`HybridCamera`], which starts
+/// the frame stream on an already-acquired device.
+///
+/// # Errors
+/// Returns [`NokhwaError`] if no native backend is available for the
+/// current platform/feature configuration, or if the underlying backend
+/// fails to open the device.
+pub fn open(index: CameraIndex, req: OpenRequest) -> Result<OpenedCamera, NokhwaError> {
+    use nokhwa_core::types::{color_frame_formats, RequestedFormat, RequestedFormatType};
 
-impl CameraSession {
-    /// Open the camera at `index` using the platform's default native backend.
-    ///
-    /// Dispatches at compile time via `cfg` to the V4L2 backend on Linux,
-    /// the `AVFoundation` backend on macOS/iOS, or the Media Foundation
-    /// backend on Windows (subject to the corresponding `input-*` feature
-    /// being enabled).
-    ///
-    /// # Errors
-    /// Returns [`NokhwaError`] if no native backend is available for the
-    /// current platform/feature configuration, or if the underlying backend
-    /// fails to open the device.
-    pub fn open(index: CameraIndex, req: OpenRequest) -> Result<OpenedCamera, NokhwaError> {
-        use nokhwa_core::types::{color_frame_formats, RequestedFormat, RequestedFormatType};
+    let requested = match req.format {
+        Some(fmt) => {
+            RequestedFormat::with_formats(RequestedFormatType::Exact(fmt), color_frame_formats())
+        }
+        None => RequestedFormat::with_formats(
+            RequestedFormatType::AbsoluteHighestResolution,
+            color_frame_formats(),
+        ),
+    };
 
-        let requested = match req.format {
-            Some(fmt) => RequestedFormat::with_formats(
-                RequestedFormatType::Exact(fmt),
-                color_frame_formats(),
-            ),
-            None => RequestedFormat::with_formats(
-                RequestedFormatType::AbsoluteHighestResolution,
-                color_frame_formats(),
-            ),
-        };
-
-        #[cfg(all(target_os = "linux", feature = "input-v4l"))]
-        {
-            use nokhwa_bindings_linux_v4l::V4LCaptureDevice;
-            let dev = V4LCaptureDevice::new(&index, requested)?;
-            return Ok(OpenedCamera::from_device(Box::new(dev)));
-        }
-        #[cfg(all(
-            any(target_os = "macos", target_os = "ios"),
-            feature = "input-avfoundation"
-        ))]
-        {
-            use nokhwa_bindings_macos_avfoundation::AVFoundationCaptureDevice;
-            let dev = AVFoundationCaptureDevice::new(&index, requested)?;
-            return Ok(OpenedCamera::from_device(Box::new(dev)));
-        }
-        #[cfg(all(target_os = "windows", feature = "input-msmf"))]
-        {
-            use nokhwa_bindings_windows_msmf::MediaFoundationCaptureDevice;
-            let dev = MediaFoundationCaptureDevice::new(&index, requested)?;
-            return Ok(OpenedCamera::from_device(Box::new(dev)));
-        }
-        #[allow(unreachable_code)]
-        {
-            let _ = (index, requested);
-            Err(NokhwaError::general(
-                "no native backend available for this platform/feature configuration",
-            ))
-        }
+    #[cfg(all(target_os = "linux", feature = "input-v4l"))]
+    {
+        use nokhwa_bindings_linux_v4l::V4LCaptureDevice;
+        let dev = V4LCaptureDevice::new(&index, requested)?;
+        return Ok(OpenedCamera::from_device(Box::new(dev)));
+    }
+    #[cfg(all(
+        any(target_os = "macos", target_os = "ios"),
+        feature = "input-avfoundation"
+    ))]
+    {
+        use nokhwa_bindings_macos_avfoundation::AVFoundationCaptureDevice;
+        let dev = AVFoundationCaptureDevice::new(&index, requested)?;
+        return Ok(OpenedCamera::from_device(Box::new(dev)));
+    }
+    #[cfg(all(target_os = "windows", feature = "input-msmf"))]
+    {
+        use nokhwa_bindings_windows_msmf::MediaFoundationCaptureDevice;
+        let dev = MediaFoundationCaptureDevice::new(&index, requested)?;
+        return Ok(OpenedCamera::from_device(Box::new(dev)));
+    }
+    #[allow(unreachable_code)]
+    {
+        let _ = (index, requested);
+        Err(NokhwaError::general(
+            "no native backend available for this platform/feature configuration",
+        ))
     }
 }
 
@@ -503,7 +500,7 @@ impl HybridCamera {
     /// the backend's initial event-poll construction failed (that error is
     /// logged via `log::warn!` when the `logging` feature is enabled).
     ///
-    /// The inner `Result` is always `Ok(_)` in 0.13.0 — init failures are
+    /// The inner `Result` is always `Ok(_)` in 0.14 — init failures are
     /// normalised to `None` above. The shape is preserved for
     /// forward-compatibility with backends that may produce a poll lazily.
     pub fn take_events(&mut self) -> Option<Result<Box<dyn EventPoll + Send>, NokhwaError>> {

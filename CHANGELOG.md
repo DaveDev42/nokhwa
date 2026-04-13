@@ -2,15 +2,24 @@
 
 ## Unreleased (0.14.0)
 
+### ⚠ BREAKING CHANGES (API)
+
+* **`CameraSession` removed.** The unit-struct namespace is gone; open a
+  camera via the free function `nokhwa::open(index, req)` instead of
+  `CameraSession::open(index, req)`. `OpenRequest`, `OpenedCamera`, and
+  the per-capability wrappers are unchanged. See
+  [MIGRATING-0.14.md#opening-a-camera](MIGRATING-0.14.md#opening-a-camera).
+
 ### ⚠ BREAKING CHANGES (behavior)
 
 * **`RunnerConfig` now defaults to bounded channels.** Capacities are
   `frames_capacity = 4`, `pictures_capacity = 8`, `events_capacity = 32`,
-  with [`Overflow::DropNewest`] as the default policy. In 0.13 the
+  with `Overflow::DropNewest` as the default policy. In 0.13 the
   channels were unbounded, so a slow consumer would queue forever; in
   0.14 the slowest-moving item is silently dropped according to the
   policy. **Mitigation:** set any of the three capacity fields to `0` to
-  restore the 0.13 unbounded behavior.
+  restore the 0.13 unbounded behavior. See
+  [MIGRATING-0.14.md#bounded-runner-channels](MIGRATING-0.14.md#bounded-runner-channels).
 
 ### Features
 
@@ -27,8 +36,16 @@
   `tokio::sync::mpsc::Receiver`s and async-safe `Drop` (dropping inside a
   tokio runtime does not block the caller).
 
+### Infrastructure
+
+* New integration test `tests/session.rs::hybrid_camera_with_events_delivers_poller`
+  exercises the `EventSource` arm of the `nokhwa_backend!` macro from an
+  external-crate-style newtype, validating that the extension point is
+  usable by third-party backends such as a Canon EDSDK binding.
+
 ### Documentation
 
+* New `MIGRATING-0.14.md` covering the `CameraSession` → `open()` change.
 * New "Using nokhwa from async runtimes" section in the crate docs.
 * `nokhwa-tokio/examples/tokio_runner.rs` demonstrates pulling frames
   with `.recv().await`.

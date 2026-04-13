@@ -21,8 +21,8 @@ use nokhwa::format_types::Mjpeg;
 use nokhwa::frame::{Frame, IntoRgb};
 use nokhwa::utils::{frame_formats, CameraFormat, CameraIndex, FrameFormat, Resolution};
 use nokhwa::{
-    native_api_backend, nokhwa_initialize, query, CameraRunner, CameraSession, OpenRequest,
-    OpenedCamera, RunnerConfig, StreamCamera,
+    native_api_backend, nokhwa_initialize, open, query, CameraRunner, OpenRequest, OpenedCamera,
+    RunnerConfig, StreamCamera,
 };
 use std::str::FromStr;
 use std::time::Duration;
@@ -185,7 +185,7 @@ fn nokhwa_main() -> Result<(), NokhwaError> {
                 PropertyKind::All
             });
             let index = CameraIndex::from(device.as_ref().unwrap_or(&IndexKind::Index(0)));
-            let opened = CameraSession::open(index, OpenRequest::any())?;
+            let opened = open(index, OpenRequest::any())?;
             let OpenedCamera::Stream(mut cam) = opened else {
                 return Err(NokhwaError::general("expected stream-capable camera"));
             };
@@ -207,7 +207,7 @@ fn nokhwa_main() -> Result<(), NokhwaError> {
                 .and_then(RequestedCliFormat::into_open_request)
                 .unwrap_or_else(OpenRequest::any);
             let index = CameraIndex::from(device.as_ref().unwrap_or(&IndexKind::Index(0)));
-            let opened = CameraSession::open(index, req)?;
+            let opened = open(index, req)?;
             let runner = CameraRunner::spawn(opened, RunnerConfig::default())?;
             let frames = runner
                 .frames()
@@ -230,7 +230,7 @@ fn nokhwa_main() -> Result<(), NokhwaError> {
                 .and_then(RequestedCliFormat::into_open_request)
                 .unwrap_or_else(OpenRequest::any);
             let index = CameraIndex::from(device.as_ref().unwrap_or(&IndexKind::Index(0)));
-            let opened = CameraSession::open(index, req)?;
+            let opened = open(index, req)?;
             let OpenedCamera::Stream(mut camera) = opened else {
                 return Err(NokhwaError::general("expected stream-capable camera"));
             };

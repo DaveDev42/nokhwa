@@ -8,12 +8,12 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-use nokhwa::{CameraSession, OpenRequest, OpenedCamera};
+use nokhwa::{open, OpenRequest, OpenedCamera};
 use nokhwa_core::error::NokhwaError;
 use nokhwa_core::types::CameraIndex;
 
 fn main() -> Result<(), NokhwaError> {
-    let opened = CameraSession::open(CameraIndex::Index(0), OpenRequest::any())?;
+    let opened = open(CameraIndex::Index(0), OpenRequest::any())?;
     let OpenedCamera::Stream(mut cam) = opened else {
         return Err(NokhwaError::general("expected stream-capable camera"));
     };
