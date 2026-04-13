@@ -8,7 +8,7 @@
 #![cfg(feature = "device-test")]
 
 #[test]
-fn device_tests_pending_migration_to_0_13_api() {
+fn device_tests_pending_migration_to_0_14_api() {
     // TODO: port the original `device_tests.rs` suite to the new
     // `nokhwa::open` / `OpenedCamera` API.
 }
