@@ -83,6 +83,20 @@
 * Replaced stale `tests/device_tests.rs` body with a placeholder
   pending migration to the 0.13 API.
 
+## [0.13.0](https://github.com/DaveDev42/nokhwa/compare/v0.12.0...v0.13.0) (2026-04-13)
+
+
+### Bug Fixes
+
+* **post-0.13.0:** MSMF MTA, runner shutdown, doc fixes ([#118](https://github.com/DaveDev42/nokhwa/issues/118)) ([a243d51](https://github.com/DaveDev42/nokhwa/commit/a243d5106fbb0473a7ae75015fa591c50d65a04a))
+* **v4l:** re-enable V4L dispatch in CameraSession::open ([#119](https://github.com/DaveDev42/nokhwa/issues/119)) ([a5eea5c](https://github.com/DaveDev42/nokhwa/commit/a5eea5c61cbcd4cb1c81c68f00e6c37bcefb872a))
+
+
+### Infrastructure
+
+* **ci:** force release-please to 0.13.0 via release-as override ([#120](https://github.com/DaveDev42/nokhwa/issues/120)) ([1d8b85a](https://github.com/DaveDev42/nokhwa/commit/1d8b85a804aa6b69d9e3f749a7f3e3a24ca84435))
+* **ci:** remove release-as override and last-release-sha after v0.12.0 ([#115](https://github.com/DaveDev42/nokhwa/issues/115)) ([bcaef97](https://github.com/DaveDev42/nokhwa/commit/bcaef9727880fa5a6d42c171f6614c8ec1bc6455))
+
 ## [0.12.0](https://github.com/DaveDev42/nokhwa/compare/v0.11.0...v0.12.0) (2026-04-12)
 
 
