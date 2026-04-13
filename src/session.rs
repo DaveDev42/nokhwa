@@ -147,20 +147,11 @@ impl CameraSession {
             ),
         };
 
-        // V4L: intentionally stubbed for 0.13.0. The `V4LCaptureDevice<'a>`
-        // lifetime parameter cannot be unified with `'static` (required for
-        // `dyn AnyDevice`) without an `unsafe` transmute of the MmapStream
-        // handle; that work is deferred to 0.13.1 after Linux CI validation.
-        // Users needing V4L today can instantiate `V4LCaptureDevice` directly
-        // from the `nokhwa-bindings-linux-v4l` crate.
         #[cfg(all(target_os = "linux", feature = "input-v4l"))]
         {
-            let _ = (&index, &requested);
-            return Err(NokhwaError::general(
-                "V4L backend path via CameraSession::open is pending re-validation in 0.13.1; \
-                 construct `nokhwa::backends::capture::V4LCaptureDevice` directly \
-                 (re-exported from nokhwa-bindings-linux-v4l) for now",
-            ));
+            use nokhwa_bindings_linux_v4l::V4LCaptureDevice;
+            let dev = V4LCaptureDevice::new(&index, requested)?;
+            return Ok(OpenedCamera::from_device(Box::new(dev)));
         }
         #[cfg(all(
             any(target_os = "macos", target_os = "ios"),

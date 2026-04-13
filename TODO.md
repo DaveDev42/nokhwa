@@ -11,12 +11,10 @@
   - [ ] End-to-end capture pipeline: format negotiation → stream open → frame capture → decode
   - [ ] Camera control round-trip on real hardware (set → get value verification)
   - [ ] Multi-frame streaming consistency (no corruption across frames)
+  - [ ] V4L `CameraSession::open` dispatch regression test (hardware-gated) — guards against the 0.13.0 stub recurring silently
 
 ## Performance
 (None)
-
-## 0.13.1 Roadmap
-- [ ] Re-enable V4L dispatch in `CameraSession::open`. 0.13.0 intentionally stubs the V4L branch: `V4LCaptureDevice<'a>` carries a lifetime parameter tied to a `MutexGuard<Device>` inside `open()`, which cannot be unified with `'static` (required for `dyn AnyDevice`) without an `unsafe` transmute of the MmapStream handle. Fix in 0.13.1 after Linux CI validation.
 
 ## 0.14.0 Roadmap
 - [ ] `AsyncCameraRunner` behind an `async-tokio` feature (tokio-based channels; replaces ad-hoc `spawn_blocking` wrapping of `recv`).

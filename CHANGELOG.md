@@ -31,6 +31,11 @@
   their capability set and obtain the internal `AnyDevice` impl.
 * New `testing` feature on `nokhwa-core` providing `MockFrameSource`,
   `MockShutter`, and `MockHybrid` backends for integration tests.
+* `CameraSession::open` now dispatches to `V4LCaptureDevice` on Linux
+  alongside the AVFoundation and Media Foundation branches. The
+  `V4LCaptureDevice<'a>` lifetime parameter was removed; the
+  `MmapStream` handle is stored as `'static`. See the struct-level
+  docs on `V4LCaptureDevice` for the soundness argument.
 
 ### Infrastructure
 
@@ -49,16 +54,6 @@
   `threaded-capture`) to the new API and added minimal
   `examples/stream_camera.rs` and `examples/runner.rs` at the
   workspace root.
-
-### Known limitations
-
-* **V4L dispatch via `CameraSession::open` is intentionally stubbed** and
-  returns a `NokhwaError::general` on Linux. The `V4LCaptureDevice<'a>`
-  lifetime parameter cannot be unified with `'static` (required for
-  `dyn AnyDevice`) without an `unsafe` transmute of the `MmapStream`
-  handle. Re-enabling the Linux path is deferred to **0.13.1** after
-  Linux CI validation; users can still construct `V4LCaptureDevice`
-  directly via the `nokhwa-bindings-linux-v4l` crate.
 
 ### Additional breaking changes
 

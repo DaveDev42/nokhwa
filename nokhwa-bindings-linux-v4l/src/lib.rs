@@ -234,14 +234,45 @@ mod internal {
 
     /// The backend struct that interfaces with V4L2.
     /// Implements [`CameraDevice`] and [`FrameSource`].
-    pub struct V4LCaptureDevice<'a> {
+    ///
+    /// # Static-lifetime invariant
+    ///
+    /// `stream_handle` stores `MmapStream<'static>`, but `v4l::io::mmap::
+    /// Stream<'a>`'s `'a` parameter really marks the lifetime of the kernel-
+    /// mapped buffer slices (`Arena<'a>.bufs: Vec<&'a mut [u8]>`).
+    ///
+    /// Soundness: both `Stream` and its internal `Arena` each carry their own
+    /// `Arc<Handle>` clone of the V4L2 file descriptor. The mmap'd buffers
+    /// remain valid for as long as any `Arc<Handle>` clone is alive, so the
+    /// slices in `Arena.bufs` cannot outlive the fd no matter what happens to
+    /// this struct's own `device: SharedDevice` field. Extending `'a` to
+    /// `'static` is therefore sound.
+    ///
+    /// The field order below (`stream_handle` before `device`) is cosmetic.
+    /// Both orderings are sound: the `Arc<Handle>` clones inside the stream
+    /// keep the fd alive, and `VIDIOC_STREAMOFF` is issued against that same
+    /// `Arc<Handle>` on drop, so it runs correctly no matter when `device`
+    /// is dropped.
+    pub struct V4LCaptureDevice {
+        stream_handle: Option<MmapStream<'static>>,
+        device: SharedDevice,
         camera_format: CameraFormat,
         camera_info: CameraInfo,
-        device: SharedDevice,
-        stream_handle: Option<MmapStream<'a>>,
     }
 
-    impl<'a> V4LCaptureDevice<'a> {
+    // Compile-time assertion: `V4LCaptureDevice: 'static`. The `'static` bound
+    // is required by `Box<dyn AnyDevice>` in the Layer 2 session machinery
+    // (the `nokhwa_backend!` macro expansion plugs this type in there). This
+    // guard catches regressions that would re-introduce a non-`'static` field
+    // on our own struct — e.g. someone reverting to `MmapStream<'a>` with a
+    // borrowed `'a` and dropping the transmute. Better a crisp build-time
+    // error than a confusing macro-expansion error downstream.
+    const _: () = {
+        fn assert_static<T: 'static>() {}
+        let _ = assert_static::<V4LCaptureDevice>;
+    };
+
+    impl V4LCaptureDevice {
         /// Creates a new capture device using the `V4L2` backend. Indexes are gives to devices by the OS, and usually numbered by order of discovery.
         /// # Errors
         /// This function will error if the camera is currently busy or if `V4L2` can't read device information.
@@ -475,7 +506,7 @@ mod internal {
         }
     }
 
-    impl<'a> CameraDevice for V4LCaptureDevice<'a> {
+    impl CameraDevice for V4LCaptureDevice {
         fn backend(&self) -> ApiBackend {
             ApiBackend::Video4Linux
         }
@@ -625,7 +656,7 @@ mod internal {
         }
     }
 
-    impl<'a> FrameSource for V4LCaptureDevice<'a> {
+    impl FrameSource for V4LCaptureDevice {
         fn negotiated_format(&self) -> CameraFormat {
             self.camera_format
         }
@@ -790,6 +821,10 @@ mod internal {
         }
 
         fn open(&mut self) -> Result<(), NokhwaError> {
+            // Calling `open()` when a stream already exists tears the old
+            // stream down (its `Drop` issues `VIDIOC_STREAMOFF` and munmaps
+            // the arena) and replaces it with a fresh one. This reset is
+            // intentional — the `FrameSource` contract permits it.
             // Disable mut warning, since mut is only required when not using arena buffers
             #[allow(unused_mut)]
             let mut stream =
@@ -815,6 +850,14 @@ mod internal {
                     })
                 }
             }
+
+            // SAFETY: See the `'static` invariant doc on `V4LCaptureDevice`.
+            // Briefly: `MmapStream` and its `Arena` each hold an `Arc<Handle>`
+            // clone of the V4L2 fd, so the mmap'd slices in `Arena<'a>.bufs`
+            // live as long as the stream itself. No `&'static` slice ever
+            // leaks out: `MmapStream::next` reborrows through `&mut self`.
+            let stream =
+                unsafe { std::mem::transmute::<MmapStream<'_>, MmapStream<'static>>(stream) };
             self.stream_handle = Some(stream);
             Ok(())
         }
@@ -867,7 +910,7 @@ mod internal {
         }
     }
 
-    impl<'a> V4LCaptureDevice<'a> {
+    impl V4LCaptureDevice {
         /// Look up a single control by its [`KnownCameraControl`] identifier.
         /// Kept as an inherent helper after the trait split; used internally by
         /// `set_control` to verify writes.
@@ -941,7 +984,6 @@ mod internal {
         FrameFormat, KnownCameraControl, RequestedFormat,
     };
     use std::borrow::Cow;
-    use std::marker::PhantomData;
 
     /// Attempts to convert a [`KnownCameraControl`] into a V4L2 Control ID.
     /// If the associated control is not found, this will return `None` (`ColorEnable`, `Roll`)
@@ -957,14 +999,16 @@ mod internal {
         KnownCameraControl::Other(id as u128)
     }
 
-    /// The backend struct that interfaces with V4L2.
-    /// Implements [`CameraDevice`] and [`FrameSource`].
-    pub struct V4LCaptureDevice<'a> {
-        __holder: PhantomData<&'a str>,
-    }
+    /// Non-Linux stub for `V4LCaptureDevice`.
+    ///
+    /// Every constructor and method returns
+    /// [`NokhwaError::NotImplementedError`]. Exists purely so cross-platform
+    /// downstream code referencing the type compiles on macOS / Windows; do
+    /// not expect any of its trait methods to do useful work.
+    pub struct V4LCaptureDevice;
 
     #[allow(unused_variables)]
-    impl<'a> V4LCaptureDevice<'a> {
+    impl V4LCaptureDevice {
         /// Creates a new capture device using the `V4L2` backend. Indexes are gives to devices by the OS, and usually numbered by order of discovery.
         /// # Errors
         /// This function will error if the camera is currently busy or if `V4L2` can't read device information.
@@ -1002,7 +1046,7 @@ mod internal {
     }
 
     #[allow(unused_variables)]
-    impl<'a> CameraDevice for V4LCaptureDevice<'a> {
+    impl CameraDevice for V4LCaptureDevice {
         fn backend(&self) -> ApiBackend {
             ApiBackend::Video4Linux
         }
@@ -1025,7 +1069,7 @@ mod internal {
     }
 
     #[allow(unused_variables)]
-    impl<'a> FrameSource for V4LCaptureDevice<'a> {
+    impl FrameSource for V4LCaptureDevice {
         fn negotiated_format(&self) -> CameraFormat {
             todo!()
         }

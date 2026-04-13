@@ -100,13 +100,6 @@ declared capabilities.
 - `input-opencv` backend: pending migration. The feature definition is
   preserved but enabling it triggers a `compile_error!` until the
   backend is adapted to the new traits. Track progress in `TODO.md`.
-- **V4L via `CameraSession::open`**: on Linux, `CameraSession::open`
-  returns a `NokhwaError::general` in 0.13.0. The `V4LCaptureDevice<'a>`
-  lifetime parameter cannot be unified with `'static` (required for
-  `dyn AnyDevice`) without an `unsafe` transmute of the `MmapStream`
-  handle; the reworked dispatch path will ship in **0.13.1** after Linux
-  CI validation. Users can still construct `V4LCaptureDevice` directly
-  via the `nokhwa-bindings-linux-v4l` crate in the meantime.
 
 ## `RunnerConfig` fields
 
