@@ -41,14 +41,13 @@
 //! This crate depends on tokio with only `sync` and `rt` — the minimal set
 //! needed for `mpsc` and `spawn_blocking` / `Handle::try_current`.
 
-use nokhwa::{CameraRunner, RunnerConfig};
+use std::fmt;
+
+use nokhwa::{CameraRunner, OpenedCamera, RunnerConfig};
 use nokhwa_core::buffer::Buffer;
 use nokhwa_core::error::NokhwaError;
 use nokhwa_core::traits::CameraEvent;
 use nokhwa_core::types::{ControlValueSetter, KnownCameraControl};
-
-use nokhwa::OpenedCamera;
-use std::fmt;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 

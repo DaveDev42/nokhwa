@@ -205,6 +205,13 @@ fn make_channel<T: Send + 'static>(
                         Err(RecvTimeoutError::Timeout) => {}
                         Err(RecvTimeoutError::Disconnected) => {
                             // Producer gone; still try to flush buffered items.
+                            // The blocking `user_tx.send` here is safe only
+                            // because `CameraRunner::shutdown` drops the
+                            // user-facing `Receiver` *before* joining the
+                            // relay — so if no one is draining, `send`
+                            // fails with `SendError` and we exit. Future
+                            // refactors of `shutdown` must preserve that
+                            // ordering or this loop can deadlock.
                             while let Some(front) = buf.pop_front() {
                                 if user_tx.send(front).is_err() {
                                     return;
@@ -643,10 +650,10 @@ mod tests {
             !received.is_empty(),
             "expected at least one item through the relay"
         );
-        // At minimum, the items we received should be in monotonically
-        // non-decreasing order — drop-oldest never re-orders.
+        // Items must be strictly increasing — the producer emits unique
+        // `0..50` values and drop-oldest never re-orders.
         for w in received.windows(2) {
-            assert!(w[0] <= w[1], "drop-oldest must not reorder: {received:?}");
+            assert!(w[0] < w[1], "drop-oldest must not reorder: {received:?}");
         }
         drop(rx);
         relay.unwrap().join().unwrap();

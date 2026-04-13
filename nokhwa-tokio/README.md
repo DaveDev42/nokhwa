@@ -6,7 +6,9 @@ Wraps the sync `CameraRunner` with `TokioCameraRunner`, which exposes
 `tokio::sync::mpsc::Receiver`s you can `.recv().await`. Drop is
 async-safe: the underlying worker is joined on a `spawn_blocking` task
 when dropped inside a tokio runtime, so the async executor is not
-blocked.
+blocked. On a `current_thread` runtime the drop-queued task only runs
+after the next yield point — prefer `stop().await` when you need the
+worker fully joined at a specific moment.
 
 ## Example
 
@@ -15,13 +17,14 @@ use nokhwa::{CameraSession, OpenRequest, RunnerConfig};
 use nokhwa_core::types::CameraIndex;
 use nokhwa_tokio::TokioCameraRunner;
 use std::time::Duration;
+use tokio::time::timeout;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), nokhwa_core::error::NokhwaError> {
     let opened = CameraSession::open(CameraIndex::Index(0), OpenRequest::any())?;
     let mut runner = TokioCameraRunner::spawn(opened, RunnerConfig::default())?;
     if let Some(rx) = runner.frames_mut() {
-        if let Some(buf) = rx.recv().await {
+        if let Ok(Some(buf)) = timeout(Duration::from_secs(2), rx.recv()).await {
             println!("frame: {} bytes", buf.buffer().len());
         }
     }
