@@ -33,6 +33,18 @@
 * `nokhwa-tokio/examples/tokio_runner.rs` demonstrates pulling frames
   with `.recv().await`.
 
+## [0.13.1](https://github.com/DaveDev42/nokhwa/compare/v0.13.0...v0.13.1) (2026-04-13)
+
+
+### Features
+
+* **runner:** bounded channels + nokhwa-tokio crate (0.14.0 group A) ([#123](https://github.com/DaveDev42/nokhwa/issues/123)) ([af21d3c](https://github.com/DaveDev42/nokhwa/commit/af21d3c7e8d6323dbadae48f72c62509fe82e134))
+
+
+### Infrastructure
+
+* **ci:** remove release-as override after v0.13.0 ([#121](https://github.com/DaveDev42/nokhwa/issues/121)) ([a5d7aa4](https://github.com/DaveDev42/nokhwa/commit/a5d7aa4a521ca07644635392c9c8e551603ce266))
+
 ## [0.13.0](https://github.com/DaveDev42/nokhwa/compare/v0.12.0...v0.13.0) (2026-04-13)
 
 ### ⚠ BREAKING CHANGES
