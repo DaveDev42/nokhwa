@@ -84,7 +84,7 @@ pub mod wmf {
         LazyLock::new(|| Arc::new(AtomicUsize::new(0)));
 
     // See: https://stackoverflow.com/questions/80160/what-does-coinit-speed-over-memory-do
-    const CO_INIT_APARTMENT_THREADED: COINIT = COINIT(0x2);
+    const CO_INIT_MULTITHREADED: COINIT = COINIT(0x0);
     const CO_INIT_DISABLE_OLE1DDE: COINIT = COINIT(0x4);
 
     // See: https://gix.github.io/media-types/#major-types
@@ -256,7 +256,7 @@ pub mod wmf {
     pub fn initialize_mf() -> Result<(), NokhwaError> {
         if !(INITIALIZED.load(Ordering::SeqCst)) {
             if let Err(why) = unsafe {
-                CoInitializeEx(None, CO_INIT_APARTMENT_THREADED | CO_INIT_DISABLE_OLE1DDE).ok()
+                CoInitializeEx(None, CO_INIT_MULTITHREADED | CO_INIT_DISABLE_OLE1DDE).ok()
             } {
                 return Err(NokhwaError::InitializeError {
                     backend: ApiBackend::MediaFoundation,

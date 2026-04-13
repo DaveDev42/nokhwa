@@ -20,9 +20,9 @@
 //! These types replace the pre-0.13 `Camera` / `CallbackCamera` structs.
 //! Each wrapper delegates to a boxed backend implementing the appropriate
 //! capability traits from [`nokhwa_core::traits`]. Backends are registered
-//! via the [`nokhwa_backend!`](crate::nokhwa_backend) macro, which implements the (private)
-//! [`AnyDevice`] trait for the backend and exposes its capability bits so
-//! [`OpenedCamera::from_device`] can dispatch to the right variant.
+//! via the [`nokhwa_backend!`](crate::nokhwa_backend) macro, which implements the
+//! `#[doc(hidden)]` [`AnyDevice`] trait for the backend and exposes its capability
+//! bits so [`OpenedCamera::from_device`] can dispatch to the right variant.
 
 use std::borrow::Cow;
 use std::time::Duration;
@@ -78,6 +78,9 @@ pub trait HybridBackend: FrameSource + ShutterCapture + Send {}
 impl<T: FrameSource + ShutterCapture + Send> HybridBackend for T {}
 
 /// A request to open a camera. Future tasks wire this into `CameraSession::open`.
+///
+/// The `Copy` derive relies on every field being `Copy`. If a future field is
+/// non-`Copy`, drop the derive and pass by reference instead.
 #[derive(Debug, Clone, Copy)]
 pub struct OpenRequest {
     format: Option<CameraFormat>,
@@ -515,6 +518,9 @@ impl HybridCamera {
         if !self.event_source {
             return None;
         }
+        // Invariant: `from_device` normalises `Some(Err(_))` to `None`, so the
+        // only variants reachable here are `None` and `Some(Ok(_))`.
+        debug_assert!(matches!(self.events, None | Some(Ok(_))));
         self.events.take()
     }
 }
@@ -718,6 +724,8 @@ macro_rules! __nokhwa_take_events_pick {
 }
 
 // NOTE: the `nokhwa_backend!` macros reference `::nokhwa_core` directly by
-// absolute crate name. The integration tests and downstream crates must
-// therefore have `nokhwa-core` as a dependency (or dev-dependency) for the
-// macro to work. This crate re-exports nothing for macro use.
+// absolute crate name AND use `$crate::session::{AnyDevice, HybridBackend,
+// CAP_*}` from this crate on expansion. Downstream users of the macro therefore
+// need **both** `nokhwa` and `nokhwa-core` as dependencies. The hidden items
+// are `#[doc(hidden)] pub` so the expansion can see them; do not rely on them
+// directly in application code.

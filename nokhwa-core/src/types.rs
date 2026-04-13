@@ -774,7 +774,9 @@ impl Display for CameraInfo {
 
 /// The list of known camera controls to the library. <br>
 /// These can control the picture brightness, etc. <br>
-/// Note that not all backends/devices support all these. Run [`supported_camera_controls()`](crate::traits::CaptureBackendTrait::camera_controls) to see which ones can be set.
+/// Note that not all backends/devices support all these. Call
+/// [`CameraDevice::controls()`](crate::traits::CameraDevice::controls) to see which
+/// ones are reported by a given backend.
 #[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
 pub enum KnownCameraControl {

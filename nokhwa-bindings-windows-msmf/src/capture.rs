@@ -46,8 +46,11 @@ pub struct MediaFoundationCaptureDevice {
 // - All access goes through &mut self, so after a move the new thread has exclusive
 //   ownership — no aliasing across threads occurs. We do NOT implement Sync.
 // - The inner IMFSourceReader (COM interface) wraps NonNull<c_void> which is !Send by
-//   default, but Media Foundation is initialized with MTA (multi-threaded apartment)
-//   mode, making COM objects safe to move between threads.
+//   default. nokhwa's MSMF backend initializes COM in the **multi-threaded apartment**
+//   (MTA) — see `nokhwa-bindings-windows-msmf::wmf::initialize_mf`, which calls
+//   `CoInitializeEx(None, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE)`. MTA objects
+//   are not tied to a specific thread and may be accessed from any thread holding a
+//   reference, so moving exclusive ownership to another thread is sound.
 // - CameraInfo and CameraFormat are plain data types that are already Send.
 unsafe impl Send for MediaFoundationCaptureDevice {}
 

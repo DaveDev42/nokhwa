@@ -46,7 +46,8 @@ pub struct RawTextureData {
 /// # Errors
 /// Returns `Err` for [`FrameFormat::MJPEG`] because compressed MJPEG data
 /// cannot be uploaded as a raw texture — use
-/// [`CaptureBackendTrait::frame_texture()`] instead.
+/// [`FrameSource::frame_texture()`](crate::traits::FrameSource::frame_texture)
+/// instead, which decodes to RGBA first.
 pub fn raw_texture_layout(
     format: FrameFormat,
     resolution: Resolution,

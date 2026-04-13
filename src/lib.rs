@@ -103,7 +103,8 @@ mod init;
 mod query;
 
 // Layer 2: CameraSession / OpenedCamera and the per-capability wrappers.
-// Layer 3 (CameraRunner) arrives in later tasks (T14-T15).
+// Layer 3 (CameraRunner) lives in the `runner` module below, gated on the
+// `runner` feature.
 pub mod session;
 pub use session::{
     CameraSession, HybridCamera, OpenRequest, OpenedCamera, ShutterCamera, StreamCamera,

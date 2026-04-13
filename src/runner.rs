@@ -73,6 +73,19 @@ enum Command {
 }
 
 /// Background-thread capture helper.
+///
+/// `CameraRunner` owns an [`OpenedCamera`](crate::OpenedCamera) on a worker
+/// thread and delivers frames / pictures / events through
+/// [`std::sync::mpsc`] channels.
+///
+/// ## Channel semantics
+///
+/// In 0.13.0 the channels are unbounded ([`std::sync::mpsc::channel`]). Bounded
+/// channels with a drop-oldest / drop-newest policy are on the 0.14 roadmap.
+/// Until then, if a consumer stops draining the `frames()` receiver while
+/// keeping the runner alive, memory grows without bound. The worker does,
+/// however, treat a **disconnected receiver** (i.e. the caller dropped the
+/// channel end) as a shutdown signal and exits cleanly.
 #[derive(Debug)]
 pub struct CameraRunner {
     frames: Option<Receiver<Buffer>>,
@@ -111,7 +124,11 @@ impl CameraRunner {
             }
             match cam.frame() {
                 Ok(buf) => {
-                    let _ = frame_tx.send(buf);
+                    // If the consumer dropped the receiver, treat it as a
+                    // shutdown signal rather than spinning forever.
+                    if frame_tx.send(buf).is_err() {
+                        break;
+                    }
                 }
                 Err(_) => {
                     thread::sleep(poll_interval);
@@ -214,7 +231,10 @@ impl CameraRunner {
                 }
                 match cam.frame() {
                     Ok(buf) => {
-                        let _ = frame_tx.send(buf);
+                        // Exit if the consumer dropped the frames receiver.
+                        if frame_tx.send(buf).is_err() {
+                            break;
+                        }
                     }
                     Err(_) => {
                         thread::sleep(poll_interval);
