@@ -69,8 +69,9 @@
 //!
 //! ## Traits and error types
 //!
-//! - [`traits::CaptureBackendTrait`] — the platform-backend contract used by
-//!   `nokhwa::Camera`.
+//! - [`traits::CameraDevice`] — base capabilities every camera exposes.
+//! - [`traits::FrameSource`] / [`traits::ShutterCapture`] / [`traits::EventSource`]
+//!   — capability-specific extensions backends opt into.
 //! - [`error::NokhwaError`] — unified error type for the whole workspace.
 pub mod buffer;
 pub mod error;
