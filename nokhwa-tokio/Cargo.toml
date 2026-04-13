@@ -33,6 +33,13 @@ path             = ".."
 default-features = false
 features         = [ "runner", "input-msmf" ]
 
+# Fallback for any target without a native backend (e.g. FreeBSD, iOS,
+# wasm32). The `nokhwa` crate refuses to compile without an input-* feature
+# so we intentionally omit this dep — downstream users on such targets
+# must enable a suitable backend on `nokhwa` themselves and will then pick
+# up `nokhwa-tokio` transitively. A clear compile error from `nokhwa`'s
+# own `compile_error!()` is preferable to a silent non-functional build.
+
 [dependencies.tokio]
 version          = "1"
 default-features = false

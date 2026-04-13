@@ -53,6 +53,13 @@ pub enum Overflow {
     /// Good when consumers want the freshest frame. Implemented via a
     /// per-channel relay thread — only paid when this policy is selected.
     DropOldest,
+    /// Block the producer until the consumer drains. Old-school back-
+    /// pressure; the camera worker stalls if the consumer is slow, which
+    /// for a stream backend means real-time frames will be missed by the
+    /// underlying device rather than dropped in software. Use when you
+    /// want every queued frame delivered in order and you're OK with the
+    /// worker pausing.
+    Block,
 }
 
 /// Configuration for [`CameraRunner::spawn`].
@@ -103,6 +110,8 @@ enum Tx<T: Send + 'static> {
     /// `DropOldest`: feeds into a relay thread that drop-oldest's into the
     /// user-facing bounded channel.
     BoundedDropOldest(SyncSender<T>),
+    /// `Block`: producer stalls until the consumer drains.
+    BoundedBlock(SyncSender<T>),
 }
 
 impl<T: Send + 'static> Tx<T> {
@@ -116,7 +125,7 @@ impl<T: Send + 'static> Tx<T> {
                 Ok(()) | Err(TrySendError::Full(_)) => Ok(()),
                 Err(TrySendError::Disconnected(_)) => Err(()),
             },
-            Tx::BoundedDropOldest(tx) => tx.send(item).map_err(|_| ()),
+            Tx::BoundedDropOldest(tx) | Tx::BoundedBlock(tx) => tx.send(item).map_err(|_| ()),
         }
     }
 }
@@ -145,6 +154,10 @@ fn make_channel<T: Send + 'static>(
             let (tx, rx) = sync_channel::<T>(capacity);
             (Tx::BoundedDropNewest(tx), rx, None)
         }
+        Overflow::Block => {
+            let (tx, rx) = sync_channel::<T>(capacity);
+            (Tx::BoundedBlock(tx), rx, None)
+        }
         Overflow::DropOldest => {
             // Two chained `sync_channel(capacity)` joined by a relay thread
             // that owns an in-memory `VecDeque<T>` of at most `capacity`
@@ -155,7 +168,6 @@ fn make_channel<T: Send + 'static>(
             let (user_tx, user_rx) = sync_channel::<T>(capacity);
             let handle = thread::spawn(move || {
                 use std::collections::VecDeque;
-                use std::sync::mpsc::RecvTimeoutError;
                 let mut buf: VecDeque<T> = VecDeque::with_capacity(capacity);
                 let poll = Duration::from_millis(5);
                 loop {
@@ -218,17 +230,24 @@ enum Command {
 ///
 /// ## Channel semantics
 ///
-/// In 0.13.0 the channels are unbounded ([`std::sync::mpsc::channel`]). Bounded
-/// channels with a drop-oldest / drop-newest policy are on the 0.14 roadmap.
-/// Until then, if a consumer stops draining the `frames()` receiver while
-/// keeping the runner alive, memory grows without bound.
+/// Channels are **bounded by default** (since 0.14). Capacities and the
+/// [`Overflow`] policy live on [`RunnerConfig`]; the defaults are 4 frames,
+/// 8 pictures, 32 events, and [`Overflow::DropNewest`]. Setting a capacity
+/// to `0` restores the 0.13-era unbounded [`std::sync::mpsc::channel`]
+/// behavior.
 ///
-/// The accessor methods (`frames()`, `pictures()`, `events()`) return borrowed
-/// receivers, so in the current API a caller cannot detach and drop a receiver
-/// independently of the runner — the runner's [`Drop`] signals `Die` and joins
-/// the worker first, then drops the receivers. The worker does defensively
-/// exit on `SendError` so that a future API surface exposing owned receivers
-/// would not be able to leak the worker thread.
+/// Each accessor pair has two flavors: borrowed ([`frames`](Self::frames),
+/// [`pictures`](Self::pictures), [`events`](Self::events)) for in-place
+/// draining, and owned ([`take_frames`](Self::take_frames),
+/// [`take_pictures`](Self::take_pictures), [`take_events`](Self::take_events))
+/// for handing a receiver to another task or wrapper (e.g. the
+/// `nokhwa-tokio` forwarder). The worker thread stays alive after a
+/// `take_*` call; you can still [`trigger`](Self::trigger) and
+/// [`set_control`](Self::set_control).
+///
+/// The worker defensively exits on `SendError` — so if a caller drops a
+/// taken receiver without invoking [`stop`](Self::stop) or dropping the
+/// runner, the worker still shuts down cleanly on its next send attempt.
 #[derive(Debug)]
 pub struct CameraRunner {
     frames: Option<Receiver<Buffer>>,
@@ -394,6 +413,11 @@ impl CameraRunner {
                     Ok(Command::Trigger) => {
                         if cam.trigger().is_ok() {
                             if let Ok(pic) = cam.take_picture(shutter_timeout) {
+                                // Policy: hybrid workers treat a dropped
+                                // pictures receiver as "caller isn't
+                                // interested in photos right now" — keep
+                                // streaming frames. Only a dropped *frames*
+                                // receiver shuts the worker down (below).
                                 let _ = pic_tx.send(pic);
                             }
                         }
@@ -613,6 +637,28 @@ mod tests {
         }
         drop(rx);
         relay.unwrap().join().unwrap();
+    }
+
+    #[test]
+    fn drop_oldest_relay_exits_when_rx_dropped() {
+        // When the user drops the receiver, the relay must eventually
+        // observe `Disconnected` and exit, and further producer sends
+        // must fail. Guards against future refactors of the relay loop.
+        use std::time::Instant;
+        let (tx, rx, relay) = make_channel::<u32>(2, Overflow::DropOldest);
+        let relay = relay.unwrap();
+        drop(rx);
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while Instant::now() < deadline {
+            if tx.send(0).is_err() {
+                break;
+            }
+        }
+        assert!(
+            tx.send(0).is_err(),
+            "producer send should fail after the relay exits"
+        );
+        relay.join().unwrap();
     }
 
     #[test]

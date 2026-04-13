@@ -17,6 +17,19 @@
 //! runtime, drop joins synchronously. For explicit shutdown, use
 //! [`TokioCameraRunner::stop`]`.await`.
 //!
+//! # Why `forwarders.abort()` is advisory
+//!
+//! Forwarder tasks are created via [`tokio::task::spawn_blocking`], which
+//! runs on a dedicated blocking-thread pool. `spawn_blocking` tasks are
+//! **not cancellable** — `JoinHandle::abort` marks them as aborted but
+//! the OS thread keeps running until the current call (e.g.
+//! `sync_rx.recv()`) returns. In practice that happens almost
+//! immediately: [`TokioCameraRunner`] drops the sync `Receiver`s before
+//! tearing down the inner runner, which causes the runner's senders to
+//! disconnect, which unblocks the forwarder's `sync_rx.recv()` with
+//! `Err`, and the forwarder exits. The `abort()` call is kept as a
+//! belt-and-suspenders signal to the tokio scheduler.
+//!
 //! # Tokio features
 //!
 //! This crate depends on tokio with only `sync` and `rt` — the minimal set
@@ -29,12 +42,21 @@ use nokhwa_core::traits::CameraEvent;
 use nokhwa_core::types::{ControlValueSetter, KnownCameraControl};
 
 use nokhwa::OpenedCamera;
+use std::fmt;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-/// How many items each forwarder's tokio channel can buffer. Chosen
-/// generously so the blocking forwarder can hand items off without
-/// back-pressure on the sync side.
+/// Capacity of each forwarder's tokio-side channel.
+///
+/// This is separate from the sync-side [`RunnerConfig`] capacities: the
+/// forwarder bridges a `std::sync::mpsc::Receiver` to a
+/// `tokio::sync::mpsc::Sender`, and the tokio channel acts as a small
+/// buffer to decouple the blocking-thread from the async consumer.
+///
+/// `32` is large enough to absorb brief async scheduling jitter without
+/// starving the forwarder, small enough that back-pressure still reaches
+/// the sync-side bounded channel. Not currently configurable; file an
+/// issue if you need to tune it.
 const FORWARDER_CAPACITY: usize = 32;
 
 /// Async wrapper around [`CameraRunner`].
@@ -49,6 +71,35 @@ pub struct TokioCameraRunner {
     forwarders: Vec<JoinHandle<()>>,
 }
 
+impl fmt::Debug for TokioCameraRunner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TokioCameraRunner")
+            .field("frames", &self.frames.is_some())
+            .field("pictures", &self.pictures.is_some())
+            .field("events", &self.events.is_some())
+            .field("inner", &self.inner)
+            .field("forwarders", &self.forwarders.len())
+            .finish()
+    }
+}
+
+/// Build a tokio channel and spawn a blocking forwarder that bridges
+/// items from a `std::sync::mpsc::Receiver` to the tokio side.
+fn spawn_forwarder<T: Send + 'static>(
+    sync_rx: std::sync::mpsc::Receiver<T>,
+    forwarders: &mut Vec<JoinHandle<()>>,
+) -> mpsc::Receiver<T> {
+    let (tx, rx) = mpsc::channel::<T>(FORWARDER_CAPACITY);
+    forwarders.push(tokio::task::spawn_blocking(move || {
+        while let Ok(item) = sync_rx.recv() {
+            if tx.blocking_send(item).is_err() {
+                break;
+            }
+        }
+    }));
+    rx
+}
+
 impl TokioCameraRunner {
     /// Build a sync [`CameraRunner`] and wire forwarder tasks for each
     /// available channel.
@@ -58,44 +109,17 @@ impl TokioCameraRunner {
     /// fails.
     pub fn spawn(camera: OpenedCamera, cfg: RunnerConfig) -> Result<Self, NokhwaError> {
         let mut runner = CameraRunner::spawn(camera, cfg)?;
-
         let mut forwarders: Vec<JoinHandle<()>> = Vec::new();
 
-        let frames = runner.take_frames().map(|sync_rx| {
-            let (tx, rx) = mpsc::channel::<Buffer>(FORWARDER_CAPACITY);
-            forwarders.push(tokio::task::spawn_blocking(move || {
-                while let Ok(item) = sync_rx.recv() {
-                    if tx.blocking_send(item).is_err() {
-                        break;
-                    }
-                }
-            }));
-            rx
-        });
-
-        let pictures = runner.take_pictures().map(|sync_rx| {
-            let (tx, rx) = mpsc::channel::<Buffer>(FORWARDER_CAPACITY);
-            forwarders.push(tokio::task::spawn_blocking(move || {
-                while let Ok(item) = sync_rx.recv() {
-                    if tx.blocking_send(item).is_err() {
-                        break;
-                    }
-                }
-            }));
-            rx
-        });
-
-        let events = runner.take_events().map(|sync_rx| {
-            let (tx, rx) = mpsc::channel::<CameraEvent>(FORWARDER_CAPACITY);
-            forwarders.push(tokio::task::spawn_blocking(move || {
-                while let Ok(item) = sync_rx.recv() {
-                    if tx.blocking_send(item).is_err() {
-                        break;
-                    }
-                }
-            }));
-            rx
-        });
+        let frames = runner
+            .take_frames()
+            .map(|sync_rx| spawn_forwarder(sync_rx, &mut forwarders));
+        let pictures = runner
+            .take_pictures()
+            .map(|sync_rx| spawn_forwarder(sync_rx, &mut forwarders));
+        let events = runner
+            .take_events()
+            .map(|sync_rx| spawn_forwarder(sync_rx, &mut forwarders));
 
         Ok(Self {
             frames,
@@ -153,6 +177,10 @@ impl TokioCameraRunner {
     /// # Errors
     /// Returns [`NokhwaError`] only if the `spawn_blocking` task panics.
     pub async fn stop(mut self) -> Result<(), NokhwaError> {
+        // `abort()` on spawn_blocking tasks is advisory — see the
+        // crate-level note. Forwarders actually exit when their
+        // `sync_rx.recv()` returns Err, which happens as soon as the
+        // sync runner's `Drop` closes its senders below.
         for f in self.forwarders.drain(..) {
             f.abort();
         }
@@ -172,6 +200,7 @@ impl TokioCameraRunner {
 
 impl Drop for TokioCameraRunner {
     fn drop(&mut self) {
+        // See note on `stop()`: `abort()` is advisory for spawn_blocking.
         for f in self.forwarders.drain(..) {
             f.abort();
         }
