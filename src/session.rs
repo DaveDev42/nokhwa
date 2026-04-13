@@ -1,0 +1,723 @@
+/*
+ * Copyright 2022 l1npengtul <l1npengtul@protonmail.com> / The Nokhwa Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+//! Layer 2: [`CameraSession`], [`OpenedCamera`], and the per-capability
+//! wrapper types (`StreamCamera`, `ShutterCamera`, `HybridCamera`).
+//!
+//! These types replace the pre-0.13 `Camera` / `CallbackCamera` structs.
+//! Each wrapper delegates to a boxed backend implementing the appropriate
+//! capability traits from [`nokhwa_core::traits`]. Backends are registered
+//! via the [`nokhwa_backend!`](crate::nokhwa_backend) macro, which implements the (private)
+//! [`AnyDevice`] trait for the backend and exposes its capability bits so
+//! [`OpenedCamera::from_device`] can dispatch to the right variant.
+
+use std::borrow::Cow;
+use std::time::Duration;
+
+use nokhwa_core::buffer::Buffer;
+use nokhwa_core::error::NokhwaError;
+use nokhwa_core::traits::{CameraDevice, EventPoll, FrameSource, ShutterCapture};
+use nokhwa_core::types::{
+    ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo, ControlValueSetter,
+    FrameFormat, KnownCameraControl,
+};
+
+/// Capability bit: backend implements [`FrameSource`].
+#[doc(hidden)]
+pub const CAP_FRAME: u32 = 1 << 0;
+/// Capability bit: backend implements [`ShutterCapture`].
+#[doc(hidden)]
+pub const CAP_SHUTTER: u32 = 1 << 1;
+/// Capability bit: backend implements [`EventSource`].
+#[doc(hidden)]
+pub const CAP_EVENT: u32 = 1 << 2;
+
+/// Erased-backend trait with capability bits and owned downcasts.
+///
+/// Implemented via the [`nokhwa_backend!`] macro. Not intended to be used
+/// or implemented directly; it is `pub` only so the macro expansion
+/// (which may be in downstream crates) can see it.
+#[doc(hidden)]
+pub trait AnyDevice: Send {
+    /// Bitwise-OR of `CAP_*` bits for capabilities this backend implements.
+    fn capabilities(&self) -> u32;
+
+    /// Consume self and produce a boxed [`FrameSource`]. Only called when
+    /// `capabilities() & CAP_FRAME != 0`.
+    fn into_frame_source(self: Box<Self>) -> Box<dyn FrameSource + Send>;
+
+    /// Consume self and produce a boxed [`ShutterCapture`]. Only called when
+    /// `capabilities() & CAP_SHUTTER != 0`.
+    fn into_shutter(self: Box<Self>) -> Box<dyn ShutterCapture + Send>;
+
+    /// Consume self and produce a boxed hybrid (both frame + shutter).
+    /// Only called when both bits are present.
+    fn into_hybrid(self: Box<Self>) -> Box<dyn HybridBackend + Send>;
+
+    /// Take the event poller, if this backend is an [`EventSource`].
+    fn take_events(&mut self) -> Option<Result<Box<dyn EventPoll + Send>, NokhwaError>>;
+}
+
+/// Trait object combining [`FrameSource`] and [`ShutterCapture`] for
+/// [`HybridCamera`].
+#[doc(hidden)]
+pub trait HybridBackend: FrameSource + ShutterCapture + Send {}
+impl<T: FrameSource + ShutterCapture + Send> HybridBackend for T {}
+
+/// A request to open a camera. Future tasks wire this into `CameraSession::open`.
+#[derive(Debug, Clone, Copy)]
+pub struct OpenRequest {
+    format: Option<CameraFormat>,
+}
+
+impl OpenRequest {
+    /// Open with the backend's default format negotiation.
+    #[must_use]
+    pub fn any() -> Self {
+        Self { format: None }
+    }
+
+    /// Open and request a specific [`CameraFormat`].
+    #[must_use]
+    pub fn with_format(format: CameraFormat) -> Self {
+        Self {
+            format: Some(format),
+        }
+    }
+
+    /// The requested format, if any.
+    #[must_use]
+    pub fn format(&self) -> Option<CameraFormat> {
+        self.format
+    }
+}
+
+impl Default for OpenRequest {
+    fn default() -> Self {
+        Self::any()
+    }
+}
+
+/// A handle namespace for opening cameras.
+///
+/// Call [`CameraSession::open`] to open a camera by index and produce an
+/// [`OpenedCamera`].
+pub struct CameraSession;
+
+impl CameraSession {
+    /// Open the camera at `index` using the platform's default native backend.
+    ///
+    /// Dispatches at compile time via `cfg` to the V4L2 backend on Linux,
+    /// the `AVFoundation` backend on macOS/iOS, or the Media Foundation
+    /// backend on Windows (subject to the corresponding `input-*` feature
+    /// being enabled).
+    ///
+    /// # Errors
+    /// Returns [`NokhwaError`] if no native backend is available for the
+    /// current platform/feature configuration, or if the underlying backend
+    /// fails to open the device.
+    pub fn open(index: CameraIndex, req: OpenRequest) -> Result<OpenedCamera, NokhwaError> {
+        use nokhwa_core::types::{color_frame_formats, RequestedFormat, RequestedFormatType};
+
+        let requested = match req.format {
+            Some(fmt) => RequestedFormat::with_formats(
+                RequestedFormatType::Exact(fmt),
+                color_frame_formats(),
+            ),
+            None => RequestedFormat::with_formats(
+                RequestedFormatType::AbsoluteHighestResolution,
+                color_frame_formats(),
+            ),
+        };
+
+        // V4L: intentionally stubbed for 0.13.0. The `V4LCaptureDevice<'a>`
+        // lifetime parameter cannot be unified with `'static` (required for
+        // `dyn AnyDevice`) without an `unsafe` transmute of the MmapStream
+        // handle; that work is deferred to 0.13.1 after Linux CI validation.
+        // Users needing V4L today can instantiate `V4LCaptureDevice` directly
+        // from the `nokhwa-bindings-linux-v4l` crate.
+        #[cfg(all(target_os = "linux", feature = "input-v4l"))]
+        {
+            let _ = (&index, &requested);
+            return Err(NokhwaError::general(
+                "V4L backend path via CameraSession::open is pending re-validation in 0.13.1; \
+                 construct `nokhwa::backends::capture::V4LCaptureDevice` directly \
+                 (re-exported from nokhwa-bindings-linux-v4l) for now",
+            ));
+        }
+        #[cfg(all(
+            any(target_os = "macos", target_os = "ios"),
+            feature = "input-avfoundation"
+        ))]
+        {
+            use nokhwa_bindings_macos_avfoundation::AVFoundationCaptureDevice;
+            let dev = AVFoundationCaptureDevice::new(&index, requested)?;
+            return Ok(OpenedCamera::from_device(Box::new(dev)));
+        }
+        #[cfg(all(target_os = "windows", feature = "input-msmf"))]
+        {
+            use nokhwa_bindings_windows_msmf::MediaFoundationCaptureDevice;
+            let dev = MediaFoundationCaptureDevice::new(&index, requested)?;
+            return Ok(OpenedCamera::from_device(Box::new(dev)));
+        }
+        #[allow(unreachable_code)]
+        {
+            let _ = (index, requested);
+            Err(NokhwaError::general(
+                "no native backend available for this platform/feature configuration",
+            ))
+        }
+    }
+}
+
+/// An opened camera, dispatched by backend capability.
+pub enum OpenedCamera {
+    /// Stream-only backend (e.g. a webcam).
+    Stream(StreamCamera),
+    /// Shutter-only backend (e.g. a tethered DSLR without live view).
+    Shutter(ShutterCamera),
+    /// Hybrid backend providing both streaming and still-capture surfaces.
+    Hybrid(HybridCamera),
+}
+
+impl OpenedCamera {
+    /// Wrap a backend into the appropriate variant based on its capability
+    /// bits.
+    ///
+    /// # Panics
+    /// Panics if the backend advertises neither `CAP_FRAME` nor `CAP_SHUTTER`.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn from_device(device: Box<dyn AnyDevice>) -> Self {
+        let caps = device.capabilities();
+        let has_frame = caps & CAP_FRAME != 0;
+        let has_shutter = caps & CAP_SHUTTER != 0;
+        match (has_frame, has_shutter) {
+            (true, true) => OpenedCamera::Hybrid(HybridCamera::from_device(device)),
+            (true, false) => OpenedCamera::Stream(StreamCamera::from_device(device)),
+            (false, true) => OpenedCamera::Shutter(ShutterCamera::from_device(device)),
+            (false, false) => panic!(
+                "nokhwa_backend!: device advertises no capabilities (neither FrameSource \
+                 nor ShutterCapture)"
+            ),
+        }
+    }
+}
+
+// ─────────────────────────── StreamCamera ─────────────────────────────
+
+/// Wrapper for streaming-capable backends.
+pub struct StreamCamera {
+    inner: Box<dyn FrameSource + Send>,
+}
+
+impl StreamCamera {
+    /// Build from a raw [`AnyDevice`] box. Used by [`OpenedCamera::from_device`]
+    /// and directly by tests.
+    ///
+    /// # Panics
+    /// Panics if the backend does not advertise `CAP_FRAME`.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn from_device(device: Box<dyn AnyDevice>) -> Self {
+        assert!(
+            device.capabilities() & CAP_FRAME != 0,
+            "StreamCamera requires a FrameSource-capable backend"
+        );
+        Self {
+            inner: device.into_frame_source(),
+        }
+    }
+
+    // ── CameraDevice pass-through ────────────────────────────────
+    #[must_use]
+    pub fn backend(&self) -> ApiBackend {
+        self.inner.backend()
+    }
+    #[must_use]
+    pub fn info(&self) -> &CameraInfo {
+        self.inner.info()
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        self.inner.controls()
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn set_control(
+        &mut self,
+        id: KnownCameraControl,
+        value: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        self.inner.set_control(id, value)
+    }
+
+    // ── FrameSource pass-through ─────────────────────────────────
+    #[must_use]
+    pub fn negotiated_format(&self) -> CameraFormat {
+        self.inner.negotiated_format()
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
+        self.inner.set_format(f)
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+        self.inner.compatible_formats()
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
+        self.inner.compatible_fourcc()
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn open(&mut self) -> Result<(), NokhwaError> {
+        self.inner.open()
+    }
+    #[must_use]
+    pub fn is_open(&self) -> bool {
+        self.inner.is_open()
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn frame(&mut self) -> Result<Buffer, NokhwaError> {
+        self.inner.frame()
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
+        self.inner.frame_raw()
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn close(&mut self) -> Result<(), NokhwaError> {
+        self.inner.close()
+    }
+}
+
+// ─────────────────────────── ShutterCamera ────────────────────────────
+
+/// Wrapper for shutter-capture-only backends.
+pub struct ShutterCamera {
+    inner: Box<dyn ShutterCapture + Send>,
+}
+
+impl ShutterCamera {
+    /// Build from a raw [`AnyDevice`] box.
+    ///
+    /// # Panics
+    /// Panics if the backend does not advertise `CAP_SHUTTER`.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn from_device(device: Box<dyn AnyDevice>) -> Self {
+        assert!(
+            device.capabilities() & CAP_SHUTTER != 0,
+            "ShutterCamera requires a ShutterCapture-capable backend"
+        );
+        Self {
+            inner: device.into_shutter(),
+        }
+    }
+
+    #[must_use]
+    pub fn backend(&self) -> ApiBackend {
+        self.inner.backend()
+    }
+    #[must_use]
+    pub fn info(&self) -> &CameraInfo {
+        self.inner.info()
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        self.inner.controls()
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn set_control(
+        &mut self,
+        id: KnownCameraControl,
+        value: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        self.inner.set_control(id, value)
+    }
+
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn trigger(&mut self) -> Result<(), NokhwaError> {
+        self.inner.trigger()
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn take_picture(&mut self, timeout: Duration) -> Result<Buffer, NokhwaError> {
+        self.inner.take_picture(timeout)
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn lock(&mut self) -> Result<(), NokhwaError> {
+        self.inner.lock()
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn unlock(&mut self) -> Result<(), NokhwaError> {
+        self.inner.unlock()
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn capture(&mut self, timeout: Duration) -> Result<Buffer, NokhwaError> {
+        self.inner.capture(timeout)
+    }
+}
+
+// ─────────────────────────── HybridCamera ─────────────────────────────
+
+/// Wrapper for backends that implement both [`FrameSource`] and
+/// [`ShutterCapture`].
+pub struct HybridCamera {
+    inner: Box<dyn HybridBackend + Send>,
+    events: Option<Result<Box<dyn EventPoll + Send>, NokhwaError>>,
+    event_source: bool,
+}
+
+impl HybridCamera {
+    /// Build from a raw [`AnyDevice`] box.
+    ///
+    /// # Panics
+    /// Panics if the backend does not advertise both `CAP_FRAME` and `CAP_SHUTTER`.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn from_device(mut device: Box<dyn AnyDevice>) -> Self {
+        let caps = device.capabilities();
+        assert!(
+            caps & CAP_FRAME != 0 && caps & CAP_SHUTTER != 0,
+            "HybridCamera requires both FrameSource and ShutterCapture"
+        );
+        let event_source = caps & CAP_EVENT != 0;
+        let events = if event_source {
+            match device.take_events() {
+                Some(Ok(p)) => Some(Ok(p)),
+                Some(Err(e)) => {
+                    #[cfg(feature = "logging")]
+                    log::warn!("HybridCamera: failed to take event poller: {e}");
+                    #[cfg(not(feature = "logging"))]
+                    let _ = e;
+                    None
+                }
+                None => None,
+            }
+        } else {
+            None
+        };
+        Self {
+            inner: device.into_hybrid(),
+            events,
+            event_source,
+        }
+    }
+
+    #[must_use]
+    pub fn backend(&self) -> ApiBackend {
+        CameraDevice::backend(&*self.inner)
+    }
+    #[must_use]
+    pub fn info(&self) -> &CameraInfo {
+        CameraDevice::info(&*self.inner)
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        CameraDevice::controls(&*self.inner)
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn set_control(
+        &mut self,
+        id: KnownCameraControl,
+        value: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        CameraDevice::set_control(&mut *self.inner, id, value)
+    }
+
+    // FrameSource surface.
+    #[must_use]
+    pub fn negotiated_format(&self) -> CameraFormat {
+        FrameSource::negotiated_format(&*self.inner)
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
+        FrameSource::set_format(&mut *self.inner, f)
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn open(&mut self) -> Result<(), NokhwaError> {
+        FrameSource::open(&mut *self.inner)
+    }
+    #[must_use]
+    pub fn is_open(&self) -> bool {
+        FrameSource::is_open(&*self.inner)
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn frame(&mut self) -> Result<Buffer, NokhwaError> {
+        FrameSource::frame(&mut *self.inner)
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn close(&mut self) -> Result<(), NokhwaError> {
+        FrameSource::close(&mut *self.inner)
+    }
+
+    // ShutterCapture surface.
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn trigger(&mut self) -> Result<(), NokhwaError> {
+        ShutterCapture::trigger(&mut *self.inner)
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn take_picture(&mut self, timeout: Duration) -> Result<Buffer, NokhwaError> {
+        ShutterCapture::take_picture(&mut *self.inner, timeout)
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn capture(&mut self, timeout: Duration) -> Result<Buffer, NokhwaError> {
+        ShutterCapture::capture(&mut *self.inner, timeout)
+    }
+
+    /// Take the event poller, if this backend advertised [`EventSource`](nokhwa_core::traits::EventSource).
+    ///
+    /// Returns `None` on subsequent calls, for non-event backends, and when
+    /// the backend's initial event-poll construction failed (that error is
+    /// logged via `log::warn!` when the `logging` feature is enabled).
+    ///
+    /// The inner `Result` is always `Ok(_)` in 0.13.0 — init failures are
+    /// normalised to `None` above. The shape is preserved for
+    /// forward-compatibility with backends that may produce a poll lazily.
+    pub fn take_events(&mut self) -> Option<Result<Box<dyn EventPoll + Send>, NokhwaError>> {
+        if !self.event_source {
+            return None;
+        }
+        self.events.take()
+    }
+}
+
+// ───────────────────────── nokhwa_backend! macro ──────────────────────
+
+/// Internal: expand to a `into_frame_source` body that casts when possible,
+/// or `unreachable!()` when the backend does not implement `FrameSource`.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __nokhwa_into_frame {
+    ($ty:ty; has_frame) => {
+        fn into_frame_source(
+            self: ::std::boxed::Box<Self>,
+        ) -> ::std::boxed::Box<dyn ::nokhwa_core::traits::FrameSource + ::std::marker::Send> {
+            self
+        }
+    };
+    ($ty:ty; no_frame) => {
+        fn into_frame_source(
+            self: ::std::boxed::Box<Self>,
+        ) -> ::std::boxed::Box<dyn ::nokhwa_core::traits::FrameSource + ::std::marker::Send> {
+            unreachable!(
+                "nokhwa_backend!: {} does not implement FrameSource",
+                ::std::stringify!($ty)
+            )
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __nokhwa_into_shutter {
+    ($ty:ty; has_shutter) => {
+        fn into_shutter(
+            self: ::std::boxed::Box<Self>,
+        ) -> ::std::boxed::Box<dyn ::nokhwa_core::traits::ShutterCapture + ::std::marker::Send> {
+            self
+        }
+    };
+    ($ty:ty; no_shutter) => {
+        fn into_shutter(
+            self: ::std::boxed::Box<Self>,
+        ) -> ::std::boxed::Box<dyn ::nokhwa_core::traits::ShutterCapture + ::std::marker::Send> {
+            unreachable!(
+                "nokhwa_backend!: {} does not implement ShutterCapture",
+                ::std::stringify!($ty)
+            )
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __nokhwa_into_hybrid {
+    ($ty:ty; has_both) => {
+        fn into_hybrid(
+            self: ::std::boxed::Box<Self>,
+        ) -> ::std::boxed::Box<dyn $crate::session::HybridBackend + ::std::marker::Send> {
+            self
+        }
+    };
+    ($ty:ty; no_both) => {
+        fn into_hybrid(
+            self: ::std::boxed::Box<Self>,
+        ) -> ::std::boxed::Box<dyn $crate::session::HybridBackend + ::std::marker::Send> {
+            unreachable!(
+                "nokhwa_backend!: {} is not a hybrid backend",
+                ::std::stringify!($ty)
+            )
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __nokhwa_take_events {
+    ($ty:ty; has_event) => {
+        fn take_events(
+            &mut self,
+        ) -> ::std::option::Option<
+            ::std::result::Result<
+                ::std::boxed::Box<dyn ::nokhwa_core::traits::EventPoll + ::std::marker::Send>,
+                ::nokhwa_core::error::NokhwaError,
+            >,
+        > {
+            ::std::option::Option::Some(<Self as ::nokhwa_core::traits::EventSource>::take_events(
+                self,
+            ))
+        }
+    };
+    ($ty:ty; no_event) => {
+        fn take_events(
+            &mut self,
+        ) -> ::std::option::Option<
+            ::std::result::Result<
+                ::std::boxed::Box<dyn ::nokhwa_core::traits::EventPoll + ::std::marker::Send>,
+                ::nokhwa_core::error::NokhwaError,
+            >,
+        > {
+            ::std::option::Option::None
+        }
+    };
+}
+
+/// Register a backend type with the `nokhwa` Layer 2 session machinery.
+///
+/// The macro implements the (private) [`AnyDevice`] trait, which lets
+/// [`OpenedCamera::from_device`] and the per-capability wrapper types
+/// pick up the backend without requiring compile-time knowledge of its
+/// concrete type.
+///
+/// ```ignore
+/// use nokhwa::nokhwa_backend;
+/// nokhwa_backend!(MyBackend: FrameSource);
+/// nokhwa_backend!(MyDslr: ShutterCapture);
+/// nokhwa_backend!(MyHybrid: FrameSource, ShutterCapture, EventSource);
+/// ```
+#[macro_export]
+macro_rules! nokhwa_backend {
+    ($ty:ty : $($cap:ident),+ $(,)?) => {
+        $crate::__nokhwa_backend_scan!(
+            @scan
+            ty=($ty)
+            f=no s=no e=no
+            rest=( $($cap)+ )
+        );
+    };
+}
+
+/// Token-muncher: consume capability tokens one at a time, flip flags,
+/// then emit the trait impl once the list is empty.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __nokhwa_backend_scan {
+    // Recognise FrameSource.
+    (@scan ty=($ty:ty) f=$_f:ident s=$s:ident e=$e:ident rest=( FrameSource $($rest:ident)* )) => {
+        $crate::__nokhwa_backend_scan!(@scan ty=($ty) f=yes s=$s e=$e rest=( $($rest)* ));
+    };
+    // Recognise ShutterCapture.
+    (@scan ty=($ty:ty) f=$f:ident s=$_s:ident e=$e:ident rest=( ShutterCapture $($rest:ident)* )) => {
+        $crate::__nokhwa_backend_scan!(@scan ty=($ty) f=$f s=yes e=$e rest=( $($rest)* ));
+    };
+    // Recognise EventSource.
+    (@scan ty=($ty:ty) f=$f:ident s=$s:ident e=$_e:ident rest=( EventSource $($rest:ident)* )) => {
+        $crate::__nokhwa_backend_scan!(@scan ty=($ty) f=$f s=$s e=yes rest=( $($rest)* ));
+    };
+    // Done — emit the impl.
+    (@scan ty=($ty:ty) f=$f:ident s=$s:ident e=$e:ident rest=( )) => {
+        impl $crate::session::AnyDevice for $ty {
+            fn capabilities(&self) -> u32 {
+                let mut caps: u32 = 0;
+                $crate::__nokhwa_add_bit!(caps, $f, $crate::session::CAP_FRAME);
+                $crate::__nokhwa_add_bit!(caps, $s, $crate::session::CAP_SHUTTER);
+                $crate::__nokhwa_add_bit!(caps, $e, $crate::session::CAP_EVENT);
+                caps
+            }
+            $crate::__nokhwa_into_frame_pick!($ty, $f);
+            $crate::__nokhwa_into_shutter_pick!($ty, $s);
+            $crate::__nokhwa_into_hybrid_pick!($ty, $f, $s);
+            $crate::__nokhwa_take_events_pick!($ty, $e);
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __nokhwa_add_bit {
+    ($caps:ident, yes, $bit:expr) => {
+        $caps |= $bit;
+    };
+    ($caps:ident, no, $bit:expr) => {};
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __nokhwa_into_frame_pick {
+    ($ty:ty, yes) => { $crate::__nokhwa_into_frame!($ty; has_frame); };
+    ($ty:ty, no)  => { $crate::__nokhwa_into_frame!($ty; no_frame); };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __nokhwa_into_shutter_pick {
+    ($ty:ty, yes) => { $crate::__nokhwa_into_shutter!($ty; has_shutter); };
+    ($ty:ty, no)  => { $crate::__nokhwa_into_shutter!($ty; no_shutter); };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __nokhwa_into_hybrid_pick {
+    ($ty:ty, yes, yes) => { $crate::__nokhwa_into_hybrid!($ty; has_both); };
+    ($ty:ty, $f:ident, $s:ident) => { $crate::__nokhwa_into_hybrid!($ty; no_both); };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __nokhwa_take_events_pick {
+    ($ty:ty, yes) => { $crate::__nokhwa_take_events!($ty; has_event); };
+    ($ty:ty, no)  => { $crate::__nokhwa_take_events!($ty; no_event); };
+}
+
+// NOTE: the `nokhwa_backend!` macros reference `::nokhwa_core` directly by
+// absolute crate name. The integration tests and downstream crates must
+// therefore have `nokhwa-core` as a dependency (or dev-dependency) for the
+// macro to work. This crate re-exports nothing for macro use.

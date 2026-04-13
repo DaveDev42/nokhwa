@@ -17,17 +17,17 @@ use crate::wmf::MediaFoundationDevice;
 use nokhwa_core::{
     buffer::{Buffer, TimestampKind},
     error::NokhwaError,
-    traits::CaptureBackendTrait,
+    traits::{CameraDevice, FrameSource},
     types::{
         all_known_camera_controls, color_frame_formats, ApiBackend, CameraControl, CameraFormat,
         CameraIndex, CameraInfo, ControlValueSetter, FrameFormat, KnownCameraControl,
-        RequestedFormat, RequestedFormatType, Resolution,
+        RequestedFormat, RequestedFormatType,
     },
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::borrow::Cow;
 
 /// The backend that deals with Media Foundation on Windows.
-/// To see what this does, please see [`CaptureBackendTrait`].
+/// Implements [`CameraDevice`] and [`FrameSource`].
 ///
 /// Note: This requires Windows 7 or newer to work.
 /// # Quirks
@@ -117,56 +117,67 @@ impl MediaFoundationCaptureDevice {
     }
 }
 
-impl CaptureBackendTrait for MediaFoundationCaptureDevice {
-    fn backend(&self) -> ApiBackend {
-        ApiBackend::MediaFoundation
-    }
-
-    fn camera_info(&self) -> &CameraInfo {
-        &self.info
-    }
-
+impl MediaFoundationCaptureDevice {
+    /// Refreshes the cached camera format by querying the Media Foundation device.
+    /// Kept as an inherent helper after the trait split; used internally by `frame()`.
     fn refresh_camera_format(&mut self) -> Result<(), NokhwaError> {
         let _ = self.inner.format_refreshed()?;
         Ok(())
     }
 
-    fn camera_format(&self) -> CameraFormat {
+    /// Look up a single control by its [`KnownCameraControl`] identifier.
+    /// Kept as an inherent helper after the trait split; used internally by `controls()`.
+    pub fn camera_control(
+        &self,
+        control: KnownCameraControl,
+    ) -> Result<CameraControl, NokhwaError> {
+        self.inner.control(control)
+    }
+}
+
+impl CameraDevice for MediaFoundationCaptureDevice {
+    fn backend(&self) -> ApiBackend {
+        ApiBackend::MediaFoundation
+    }
+
+    fn info(&self) -> &CameraInfo {
+        &self.info
+    }
+
+    fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        let mut camera_ctrls = Vec::with_capacity(15);
+        for ctrl_id in all_known_camera_controls() {
+            let ctrl = match self.camera_control(ctrl_id) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            camera_ctrls.push(ctrl);
+        }
+        camera_ctrls.shrink_to_fit();
+        Ok(camera_ctrls)
+    }
+
+    fn set_control(
+        &mut self,
+        id: KnownCameraControl,
+        value: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        self.inner.set_control(id, value)
+    }
+}
+
+impl FrameSource for MediaFoundationCaptureDevice {
+    fn negotiated_format(&self) -> CameraFormat {
         self.inner.format()
     }
 
-    fn set_camera_format(&mut self, new_fmt: CameraFormat) -> Result<(), NokhwaError> {
+    fn set_format(&mut self, new_fmt: CameraFormat) -> Result<(), NokhwaError> {
         self.inner.set_format(new_fmt)
     }
 
-    fn compatible_list_by_resolution(
-        &mut self,
-        fourcc: FrameFormat,
-    ) -> Result<HashMap<Resolution, Vec<u32>>, NokhwaError> {
-        let mf_camera_format_list = self.inner.compatible_format_list()?;
-        let mut resolution_map: HashMap<Resolution, Vec<u32>> = HashMap::new();
-
-        for camera_format in mf_camera_format_list {
-            // check fcc
-            if camera_format.format() != fourcc {
-                continue;
-            }
-
-            match resolution_map.get_mut(&camera_format.resolution()) {
-                Some(fps_list) => {
-                    fps_list.push(camera_format.frame_rate());
-                }
-                None => {
-                    if let Some(mut wtf_why_we_here_list) = resolution_map
-                        .insert(camera_format.resolution(), vec![camera_format.frame_rate()])
-                    {
-                        wtf_why_we_here_list.push(camera_format.frame_rate());
-                        resolution_map.insert(camera_format.resolution(), wtf_why_we_here_list);
-                    }
-                }
-            }
-        }
-        Ok(resolution_map)
+    fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+        self.inner.compatible_format_list()
     }
 
     fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
@@ -186,73 +197,17 @@ impl CaptureBackendTrait for MediaFoundationCaptureDevice {
         Ok(frame_format_list)
     }
 
-    fn resolution(&self) -> Resolution {
-        self.camera_format().resolution()
-    }
-
-    fn set_resolution(&mut self, new_res: Resolution) -> Result<(), NokhwaError> {
-        let mut new_format = self.camera_format();
-        new_format.set_resolution(new_res);
-        self.set_camera_format(new_format)
-    }
-
-    fn frame_rate(&self) -> u32 {
-        self.camera_format().frame_rate()
-    }
-
-    fn set_frame_rate(&mut self, new_fps: u32) -> Result<(), NokhwaError> {
-        let mut new_format = self.camera_format();
-        new_format.set_frame_rate(new_fps);
-        self.set_camera_format(new_format)
-    }
-
-    fn frame_format(&self) -> FrameFormat {
-        self.camera_format().format()
-    }
-
-    fn set_frame_format(&mut self, fourcc: FrameFormat) -> Result<(), NokhwaError> {
-        let mut new_format = self.camera_format();
-        new_format.set_format(fourcc);
-        self.set_camera_format(new_format)
-    }
-
-    fn camera_control(&self, control: KnownCameraControl) -> Result<CameraControl, NokhwaError> {
-        self.inner.control(control)
-    }
-
-    fn camera_controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
-        let mut camera_ctrls = Vec::with_capacity(15);
-        for ctrl_id in all_known_camera_controls() {
-            let ctrl = match self.camera_control(ctrl_id) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-
-            camera_ctrls.push(ctrl);
-        }
-        camera_ctrls.shrink_to_fit();
-        Ok(camera_ctrls)
-    }
-
-    fn set_camera_control(
-        &mut self,
-        id: KnownCameraControl,
-        value: ControlValueSetter,
-    ) -> Result<(), NokhwaError> {
-        self.inner.set_control(id, value)
-    }
-
-    fn open_stream(&mut self) -> Result<(), NokhwaError> {
+    fn open(&mut self) -> Result<(), NokhwaError> {
         self.inner.start_stream()
     }
 
-    fn is_stream_open(&self) -> bool {
+    fn is_open(&self) -> bool {
         self.inner.is_stream_open()
     }
 
     fn frame(&mut self) -> Result<Buffer, NokhwaError> {
         self.refresh_camera_format()?;
-        let self_ctrl = self.camera_format();
+        let self_ctrl = self.negotiated_format();
         let (bytes, capture_ts) = self.inner.raw_bytes()?;
         let ts = capture_ts.map(|ts| (ts, TimestampKind::MonotonicClock));
         Ok(match bytes {
@@ -270,7 +225,7 @@ impl CaptureBackendTrait for MediaFoundationCaptureDevice {
         Ok(bytes)
     }
 
-    fn stop_stream(&mut self) -> Result<(), NokhwaError> {
+    fn close(&mut self) -> Result<(), NokhwaError> {
         self.inner.stop_stream();
         Ok(())
     }

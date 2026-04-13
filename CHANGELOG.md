@@ -1,5 +1,93 @@
 # Changelog
 
+## Unreleased (0.13.0)
+
+### ⚠ BREAKING CHANGES
+
+* Replaced `CaptureBackendTrait` with four capability-based traits:
+  `CameraDevice`, `FrameSource`, `ShutterCapture`, `EventSource`.
+* Removed `Camera<F>` and `CallbackCamera<F>`. Replaced by `CameraSession`
+  (returning an `OpenedCamera` enum with `Stream`, `Shutter`, `Hybrid`
+  variants) and `CameraRunner` (threaded helper).
+* Renamed feature `output-threaded` → `runner`; dropped `parking_lot`
+  and `arc-swap` deps that only backed the removed `CallbackCamera`.
+* `input-opencv` backend temporarily disabled pending migration to the
+  new traits (enabling it now triggers a `compile_error!`).
+* Backend trait methods `refresh_camera_format`, `resolution`,
+  `frame_rate`, `frame_format`, `set_resolution`, `set_frame_rate`,
+  `set_frame_format`, and single-control `camera_control(id)` are
+  removed. Use `negotiated_format()` / `set_format(CameraFormat)` and
+  `controls()` instead.
+* See `MIGRATING-0.13.md` for a full step-by-step guide.
+
+### Features
+
+* New `CameraEvent` type and `EventPoll` trait for camera events
+  (disconnect, capture error, will-shut-down).
+* `CameraRunner` channel-based threaded helper behind the `runner`
+  feature, with per-variant loops (stream / shutter / hybrid) and
+  configurable queue sizes.
+* `nokhwa_backend!` macro for custom-backend crates to declare
+  their capability set and obtain the internal `AnyDevice` impl.
+* New `testing` feature on `nokhwa-core` providing `MockFrameSource`,
+  `MockShutter`, and `MockHybrid` backends for integration tests.
+
+### Infrastructure
+
+* `wgpu` helpers (`RawTextureData`, `raw_texture_layout`) moved from
+  `nokhwa_core::traits` to a dedicated `nokhwa_core::wgpu` module.
+* Workspace version bumped to 0.13.0.
+* Pre-commit hook gained a `NOKHWA_SKIP_CLIPPY` escape hatch used
+  during the trait-split transition; the workspace clippy is clean at
+  release time.
+
+### Documentation
+
+* Added `MIGRATING-0.13.md` covering the 0.12 → 0.13 migration.
+* Rewrote top-level `lib.rs` doc comments and README quick-start.
+* Migrated all examples (`capture`, `captesting`, `setting`,
+  `threaded-capture`) to the new API and added minimal
+  `examples/stream_camera.rs` and `examples/runner.rs` at the
+  workspace root.
+
+### Known limitations
+
+* **V4L dispatch via `CameraSession::open` is intentionally stubbed** and
+  returns a `NokhwaError::general` on Linux. The `V4LCaptureDevice<'a>`
+  lifetime parameter cannot be unified with `'static` (required for
+  `dyn AnyDevice`) without an `unsafe` transmute of the `MmapStream`
+  handle. Re-enabling the Linux path is deferred to **0.13.1** after
+  Linux CI validation; users can still construct `V4LCaptureDevice`
+  directly via the `nokhwa-bindings-linux-v4l` crate.
+
+### Additional breaking changes
+
+* `RunnerConfig` has been trimmed to three fields (`poll_interval` —
+  renamed from `tick`, `event_tick`, and the new `shutter_timeout`
+  defaulting to 5 s, replacing the previously hard-coded 200 ms).
+  The vestigial `frames_capacity` / `pictures_capacity` /
+  `events_capacity` / `overflow` fields and the `Overflow` enum were
+  removed because `std::sync::mpsc::channel` is unbounded. Bounded
+  channels with an overflow policy are tracked for 0.14.
+* `CameraSession` is now a unit struct; the no-op `CameraSession::new`
+  constructor was removed. `CameraSession::open(index, req)` is
+  unchanged.
+
+### Diagnostics
+
+* `HybridCamera::from_device` / `CameraRunner::spawn_hybrid` and the
+  `CameraRunner` worker thread joins now log event-poller init
+  failures and worker panics via `log::warn!` (gated on the `logging`
+  feature) instead of swallowing or burying them in an `Option`.
+
+### Internal
+
+* Hidden macro-internal items (`from_device`, `AnyDevice`,
+  `HybridBackend`, `CAP_*`) are now `#[doc(hidden)]` throughout.
+* Deleted the unused `__nokhwa_cap_bit!` helper macro.
+* Replaced stale `tests/device_tests.rs` body with a placeholder
+  pending migration to the 0.13 API.
+
 ## [0.12.0](https://github.com/DaveDev42/nokhwa/compare/v0.11.0...v0.12.0) (2026-04-12)
 
 

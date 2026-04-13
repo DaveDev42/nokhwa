@@ -19,7 +19,7 @@ mod internal {
     use nokhwa_core::{
         buffer::{Buffer, TimestampKind},
         error::NokhwaError,
-        traits::CaptureBackendTrait,
+        traits::{CameraDevice, FrameSource},
         types::{
             ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo,
             ControlValueDescription, ControlValueSetter, FrameFormat, KnownCameraControl,
@@ -28,7 +28,6 @@ mod internal {
     };
     use std::{
         borrow::Cow,
-        collections::HashMap,
         io::{self, ErrorKind},
     };
     use v4l::v4l_sys::{
@@ -234,9 +233,7 @@ mod internal {
     }
 
     /// The backend struct that interfaces with V4L2.
-    /// To see what this does, please see [`CaptureBackendTrait`].
-    /// # Quirks
-    /// - Calling [`set_resolution()`](CaptureBackendTrait::set_resolution), [`set_frame_rate()`](CaptureBackendTrait::set_frame_rate), or [`set_frame_format()`](CaptureBackendTrait::set_frame_format) each internally calls [`set_camera_format()`](CaptureBackendTrait::set_camera_format).
+    /// Implements [`CameraDevice`] and [`FrameSource`].
     pub struct V4LCaptureDevice<'a> {
         camera_format: CameraFormat,
         camera_info: CameraInfo,
@@ -401,7 +398,7 @@ mod internal {
             };
 
             v4l2.force_refresh_camera_format()?;
-            if v4l2.camera_format() != format {
+            if v4l2.negotiated_format() != format {
                 return Err(NokhwaError::SetPropertyError {
                     property: "CameraFormat".to_string(),
                     value: String::new(),
@@ -478,224 +475,17 @@ mod internal {
         }
     }
 
-    impl<'a> CaptureBackendTrait for V4LCaptureDevice<'a> {
+    impl<'a> CameraDevice for V4LCaptureDevice<'a> {
         fn backend(&self) -> ApiBackend {
             ApiBackend::Video4Linux
         }
 
-        fn camera_info(&self) -> &CameraInfo {
+        fn info(&self) -> &CameraInfo {
             &self.camera_info
         }
 
-        fn refresh_camera_format(&mut self) -> Result<(), NokhwaError> {
-            self.force_refresh_camera_format()
-        }
-
-        fn camera_format(&self) -> CameraFormat {
-            self.camera_format
-        }
-
-        fn set_camera_format(&mut self, new_fmt: CameraFormat) -> Result<(), NokhwaError> {
-            let device = self.lock_device()?;
-            let prev_format = match Capture::format(&*device) {
-                Ok(fmt) => fmt,
-                Err(why) => {
-                    return Err(NokhwaError::GetPropertyError {
-                        property: "Resolution, FrameFormat".to_string(),
-                        error: why.to_string(),
-                    })
-                }
-            };
-            let prev_fps = match Capture::params(&*device) {
-                Ok(fps) => fps,
-                Err(why) => {
-                    return Err(NokhwaError::GetPropertyError {
-                        property: "Frame rate".to_string(),
-                        error: why.to_string(),
-                    })
-                }
-            };
-
-            let v4l_fcc = match new_fmt.format() {
-                FrameFormat::MJPEG => FourCC::new(b"MJPG"),
-                FrameFormat::YUYV => FourCC::new(b"YUYV"),
-                FrameFormat::GRAY => FourCC::new(b"GRAY"),
-                FrameFormat::RAWRGB => FourCC::new(b"RGB3"),
-                FrameFormat::RAWBGR => FourCC::new(b"BGR3"),
-                FrameFormat::NV12 => FourCC::new(b"NV12"),
-            };
-
-            let format = Format::new(new_fmt.width(), new_fmt.height(), v4l_fcc);
-            let frame_rate = Parameters::with_fps(new_fmt.frame_rate());
-
-            if let Err(why) = Capture::set_format(&*device, &format) {
-                return Err(NokhwaError::SetPropertyError {
-                    property: "Resolution, FrameFormat".to_string(),
-                    value: format.to_string(),
-                    error: why.to_string(),
-                });
-            }
-            if let Err(why) = Capture::set_params(&*device, &frame_rate) {
-                return Err(NokhwaError::SetPropertyError {
-                    property: "Frame rate".to_string(),
-                    value: frame_rate.to_string(),
-                    error: why.to_string(),
-                });
-            }
-
-            drop(device);
-
-            if self.stream_handle.is_some() {
-                return match self.open_stream() {
-                    Ok(_) => Ok(()),
-                    Err(why) => {
-                        // undo
-                        let device = self.lock_device()?;
-                        if let Err(why) = Capture::set_format(&*device, &prev_format) {
-                            return Err(NokhwaError::SetPropertyError {
-                                property: format!("Attempt undo due to stream acquisition failure with error {}. Resolution, FrameFormat", why),
-                                value: prev_format.to_string(),
-                                error: why.to_string(),
-                            });
-                        }
-                        if let Err(why) = Capture::set_params(&*device, &prev_fps) {
-                            return Err(NokhwaError::SetPropertyError {
-                                property:
-                                format!("Attempt undo due to stream acquisition failure with error {}. Frame rate", why),
-                                value: prev_fps.to_string(),
-                                error: why.to_string(),
-                            });
-                        }
-                        Err(why)
-                    }
-                };
-            }
-            self.camera_format = new_fmt;
-
-            self.force_refresh_camera_format()?;
-            if self.camera_format != new_fmt {
-                return Err(NokhwaError::SetPropertyError {
-                    property: "CameraFormat".to_string(),
-                    value: new_fmt.to_string(),
-                    error: "Rejected".to_string(),
-                });
-            }
-
-            Ok(())
-        }
-
-        fn compatible_list_by_resolution(
-            &mut self,
-            fourcc: FrameFormat,
-        ) -> Result<HashMap<Resolution, Vec<u32>>, NokhwaError> {
-            let resolutions = self.get_resolution_list(fourcc)?;
-            let format = frameformat_to_fourcc(fourcc);
-            let mut res_map = HashMap::new();
-            for res in resolutions {
-                let mut compatible_fps = vec![];
-                match self
-                    .lock_device()?
-                    .enum_frameintervals(format, res.width(), res.height())
-                {
-                    Ok(intervals) => {
-                        for interval in intervals {
-                            match interval.interval {
-                                FrameIntervalEnum::Discrete(dis) => {
-                                    compatible_fps.push(dis.denominator);
-                                }
-                                FrameIntervalEnum::Stepwise(step) => {
-                                    for fstep in (step.min.numerator..step.max.numerator)
-                                        .step_by(step.step.numerator as usize)
-                                    {
-                                        if step.max.denominator != 1 || step.min.denominator != 1 {
-                                            compatible_fps.push(fstep);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Err(why) => {
-                        return Err(NokhwaError::GetPropertyError {
-                            property: "Frame rate".to_string(),
-                            error: why.to_string(),
-                        })
-                    }
-                }
-                res_map.insert(res, compatible_fps);
-            }
-            Ok(res_map)
-        }
-
-        fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
-            match self.lock_device()?.enum_formats() {
-                Ok(formats) => {
-                    let mut frame_format_vec = vec![];
-                    for format in formats {
-                        match fourcc_to_frameformat(format.fourcc) {
-                            Some(ff) => frame_format_vec.push(ff),
-                            None => continue,
-                        }
-                    }
-                    frame_format_vec.sort();
-                    frame_format_vec.dedup();
-                    Ok(frame_format_vec)
-                }
-                Err(why) => Err(NokhwaError::GetPropertyError {
-                    property: "FrameFormat".to_string(),
-                    error: why.to_string(),
-                }),
-            }
-        }
-
-        fn resolution(&self) -> Resolution {
-            self.camera_format.resolution()
-        }
-
-        fn set_resolution(&mut self, new_res: Resolution) -> Result<(), NokhwaError> {
-            let mut new_fmt = self.camera_format;
-            new_fmt.set_resolution(new_res);
-            self.set_camera_format(new_fmt)
-        }
-
-        fn frame_rate(&self) -> u32 {
-            self.camera_format.frame_rate()
-        }
-
-        fn set_frame_rate(&mut self, new_fps: u32) -> Result<(), NokhwaError> {
-            let mut new_fmt = self.camera_format;
-            new_fmt.set_frame_rate(new_fps);
-            self.set_camera_format(new_fmt)
-        }
-
-        fn frame_format(&self) -> FrameFormat {
-            self.camera_format.format()
-        }
-
-        fn set_frame_format(&mut self, fourcc: FrameFormat) -> Result<(), NokhwaError> {
-            let mut new_fmt = self.camera_format;
-            new_fmt.set_format(fourcc);
-            self.set_camera_format(new_fmt)
-        }
-
-        fn camera_control(
-            &self,
-            control: KnownCameraControl,
-        ) -> Result<CameraControl, NokhwaError> {
-            let controls = self.camera_controls()?;
-            for supported_control in controls {
-                if supported_control.control() == control {
-                    return Ok(supported_control);
-                }
-            }
-            Err(NokhwaError::GetPropertyError {
-                property: control.to_string(),
-                error: "not found/not supported".to_string(),
-            })
-        }
-
         #[allow(clippy::cast_possible_wrap)]
-        fn camera_controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
             let device = self.lock_device()?;
             device
                 .query_controls()
@@ -792,7 +582,7 @@ mod internal {
                 })
         }
 
-        fn set_camera_control(
+        fn set_control(
             &mut self,
             id: KnownCameraControl,
             value: ControlValueSetter,
@@ -833,8 +623,173 @@ mod internal {
             }
             Ok(())
         }
+    }
 
-        fn open_stream(&mut self) -> Result<(), NokhwaError> {
+    impl<'a> FrameSource for V4LCaptureDevice<'a> {
+        fn negotiated_format(&self) -> CameraFormat {
+            self.camera_format
+        }
+
+        fn set_format(&mut self, new_fmt: CameraFormat) -> Result<(), NokhwaError> {
+            let device = self.lock_device()?;
+            let prev_format = match Capture::format(&*device) {
+                Ok(fmt) => fmt,
+                Err(why) => {
+                    return Err(NokhwaError::GetPropertyError {
+                        property: "Resolution, FrameFormat".to_string(),
+                        error: why.to_string(),
+                    })
+                }
+            };
+            let prev_fps = match Capture::params(&*device) {
+                Ok(fps) => fps,
+                Err(why) => {
+                    return Err(NokhwaError::GetPropertyError {
+                        property: "Frame rate".to_string(),
+                        error: why.to_string(),
+                    })
+                }
+            };
+
+            let v4l_fcc = match new_fmt.format() {
+                FrameFormat::MJPEG => FourCC::new(b"MJPG"),
+                FrameFormat::YUYV => FourCC::new(b"YUYV"),
+                FrameFormat::GRAY => FourCC::new(b"GRAY"),
+                FrameFormat::RAWRGB => FourCC::new(b"RGB3"),
+                FrameFormat::RAWBGR => FourCC::new(b"BGR3"),
+                FrameFormat::NV12 => FourCC::new(b"NV12"),
+            };
+
+            let format = Format::new(new_fmt.width(), new_fmt.height(), v4l_fcc);
+            let frame_rate = Parameters::with_fps(new_fmt.frame_rate());
+
+            if let Err(why) = Capture::set_format(&*device, &format) {
+                return Err(NokhwaError::SetPropertyError {
+                    property: "Resolution, FrameFormat".to_string(),
+                    value: format.to_string(),
+                    error: why.to_string(),
+                });
+            }
+            if let Err(why) = Capture::set_params(&*device, &frame_rate) {
+                return Err(NokhwaError::SetPropertyError {
+                    property: "Frame rate".to_string(),
+                    value: frame_rate.to_string(),
+                    error: why.to_string(),
+                });
+            }
+
+            drop(device);
+
+            if self.stream_handle.is_some() {
+                return match self.open() {
+                    Ok(_) => Ok(()),
+                    Err(why) => {
+                        // undo
+                        let device = self.lock_device()?;
+                        if let Err(why) = Capture::set_format(&*device, &prev_format) {
+                            return Err(NokhwaError::SetPropertyError {
+                                property: format!("Attempt undo due to stream acquisition failure with error {}. Resolution, FrameFormat", why),
+                                value: prev_format.to_string(),
+                                error: why.to_string(),
+                            });
+                        }
+                        if let Err(why) = Capture::set_params(&*device, &prev_fps) {
+                            return Err(NokhwaError::SetPropertyError {
+                                property:
+                                format!("Attempt undo due to stream acquisition failure with error {}. Frame rate", why),
+                                value: prev_fps.to_string(),
+                                error: why.to_string(),
+                            });
+                        }
+                        Err(why)
+                    }
+                };
+            }
+            self.camera_format = new_fmt;
+
+            self.force_refresh_camera_format()?;
+            if self.camera_format != new_fmt {
+                return Err(NokhwaError::SetPropertyError {
+                    property: "CameraFormat".to_string(),
+                    value: new_fmt.to_string(),
+                    error: "Rejected".to_string(),
+                });
+            }
+
+            Ok(())
+        }
+
+        fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+            let fourccs = self.compatible_fourcc()?;
+            let mut out: Vec<CameraFormat> = Vec::new();
+            for fourcc in fourccs {
+                let format = frameformat_to_fourcc(fourcc);
+                let resolutions = self.get_resolution_list(fourcc)?;
+                for res in resolutions {
+                    match self
+                        .lock_device()?
+                        .enum_frameintervals(format, res.width(), res.height())
+                    {
+                        Ok(intervals) => {
+                            for interval in intervals {
+                                match interval.interval {
+                                    FrameIntervalEnum::Discrete(dis) => {
+                                        if dis.numerator == 1 {
+                                            out.push(CameraFormat::new(
+                                                res,
+                                                fourcc,
+                                                dis.denominator,
+                                            ));
+                                        }
+                                    }
+                                    FrameIntervalEnum::Stepwise(step) => {
+                                        for fstep in (step.min.numerator..step.max.numerator)
+                                            .step_by(step.step.numerator as usize)
+                                        {
+                                            if step.max.denominator != 1
+                                                || step.min.denominator != 1
+                                            {
+                                                out.push(CameraFormat::new(res, fourcc, fstep));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Err(why) => {
+                            return Err(NokhwaError::GetPropertyError {
+                                property: "Frame rate".to_string(),
+                                error: why.to_string(),
+                            })
+                        }
+                    }
+                }
+            }
+            Ok(out)
+        }
+
+        fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
+            match self.lock_device()?.enum_formats() {
+                Ok(formats) => {
+                    let mut frame_format_vec = vec![];
+                    for format in formats {
+                        match fourcc_to_frameformat(format.fourcc) {
+                            Some(ff) => frame_format_vec.push(ff),
+                            None => continue,
+                        }
+                    }
+                    frame_format_vec.sort();
+                    frame_format_vec.dedup();
+                    Ok(frame_format_vec)
+                }
+                Err(why) => Err(NokhwaError::GetPropertyError {
+                    property: "FrameFormat".to_string(),
+                    error: why.to_string(),
+                }),
+            }
+        }
+
+        fn open(&mut self) -> Result<(), NokhwaError> {
             // Disable mut warning, since mut is only required when not using arena buffers
             #[allow(unused_mut)]
             let mut stream =
@@ -864,7 +819,7 @@ mod internal {
             Ok(())
         }
 
-        fn is_stream_open(&self) -> bool {
+        fn is_open(&self) -> bool {
             self.stream_handle.is_some()
         }
 
@@ -904,11 +859,32 @@ mod internal {
             }
         }
 
-        fn stop_stream(&mut self) -> Result<(), NokhwaError> {
+        fn close(&mut self) -> Result<(), NokhwaError> {
             if self.stream_handle.is_some() {
                 self.stream_handle = None;
             }
             Ok(())
+        }
+    }
+
+    impl<'a> V4LCaptureDevice<'a> {
+        /// Look up a single control by its [`KnownCameraControl`] identifier.
+        /// Kept as an inherent helper after the trait split; used internally by
+        /// `set_control` to verify writes.
+        pub fn camera_control(
+            &self,
+            control: KnownCameraControl,
+        ) -> Result<CameraControl, NokhwaError> {
+            let controls = self.controls()?;
+            for supported_control in controls {
+                if supported_control.control() == control {
+                    return Ok(supported_control);
+                }
+            }
+            Err(NokhwaError::GetPropertyError {
+                property: control.to_string(),
+                error: "not found/not supported".to_string(),
+            })
         }
     }
 
@@ -959,13 +935,12 @@ mod internal {
 mod internal {
     use nokhwa_core::buffer::Buffer;
     use nokhwa_core::error::NokhwaError;
-    use nokhwa_core::traits::CaptureBackendTrait;
+    use nokhwa_core::traits::{CameraDevice, FrameSource};
     use nokhwa_core::types::{
         ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo, ControlValueSetter,
-        FrameFormat, KnownCameraControl, RequestedFormat, Resolution,
+        FrameFormat, KnownCameraControl, RequestedFormat,
     };
     use std::borrow::Cow;
-    use std::collections::HashMap;
     use std::marker::PhantomData;
 
     /// Attempts to convert a [`KnownCameraControl`] into a V4L2 Control ID.
@@ -983,9 +958,7 @@ mod internal {
     }
 
     /// The backend struct that interfaces with V4L2.
-    /// To see what this does, please see [`CaptureBackendTrait`].
-    /// # Quirks
-    /// - Calling [`set_resolution()`](CaptureBackendTrait::set_resolution), [`set_frame_rate()`](CaptureBackendTrait::set_frame_rate), or [`set_frame_format()`](CaptureBackendTrait::set_frame_format) each internally calls [`set_camera_format()`](CaptureBackendTrait::set_camera_format).
+    /// Implements [`CameraDevice`] and [`FrameSource`].
     pub struct V4LCaptureDevice<'a> {
         __holder: PhantomData<&'a str>,
     }
@@ -1029,31 +1002,39 @@ mod internal {
     }
 
     #[allow(unused_variables)]
-    impl<'a> CaptureBackendTrait for V4LCaptureDevice<'a> {
+    impl<'a> CameraDevice for V4LCaptureDevice<'a> {
         fn backend(&self) -> ApiBackend {
             ApiBackend::Video4Linux
         }
 
-        fn camera_info(&self) -> &CameraInfo {
+        fn info(&self) -> &CameraInfo {
             todo!()
         }
 
-        fn refresh_camera_format(&mut self) -> Result<(), NokhwaError> {
+        fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
             todo!()
         }
 
-        fn camera_format(&self) -> CameraFormat {
-            todo!()
-        }
-
-        fn set_camera_format(&mut self, new_fmt: CameraFormat) -> Result<(), NokhwaError> {
-            todo!()
-        }
-
-        fn compatible_list_by_resolution(
+        fn set_control(
             &mut self,
-            fourcc: FrameFormat,
-        ) -> Result<HashMap<Resolution, Vec<u32>>, NokhwaError> {
+            id: KnownCameraControl,
+            value: ControlValueSetter,
+        ) -> Result<(), NokhwaError> {
+            todo!()
+        }
+    }
+
+    #[allow(unused_variables)]
+    impl<'a> FrameSource for V4LCaptureDevice<'a> {
+        fn negotiated_format(&self) -> CameraFormat {
+            todo!()
+        }
+
+        fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
+            todo!()
+        }
+
+        fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
             todo!()
         }
 
@@ -1061,54 +1042,11 @@ mod internal {
             todo!()
         }
 
-        fn resolution(&self) -> Resolution {
+        fn open(&mut self) -> Result<(), NokhwaError> {
             todo!()
         }
 
-        fn set_resolution(&mut self, new_res: Resolution) -> Result<(), NokhwaError> {
-            todo!()
-        }
-
-        fn frame_rate(&self) -> u32 {
-            todo!()
-        }
-
-        fn set_frame_rate(&mut self, new_fps: u32) -> Result<(), NokhwaError> {
-            todo!()
-        }
-
-        fn frame_format(&self) -> FrameFormat {
-            todo!()
-        }
-
-        fn set_frame_format(&mut self, fourcc: FrameFormat) -> Result<(), NokhwaError> {
-            todo!()
-        }
-
-        fn camera_control(
-            &self,
-            control: KnownCameraControl,
-        ) -> Result<CameraControl, NokhwaError> {
-            todo!()
-        }
-
-        fn camera_controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
-            todo!()
-        }
-
-        fn set_camera_control(
-            &mut self,
-            id: KnownCameraControl,
-            value: ControlValueSetter,
-        ) -> Result<(), NokhwaError> {
-            todo!()
-        }
-
-        fn open_stream(&mut self) -> Result<(), NokhwaError> {
-            todo!()
-        }
-
-        fn is_stream_open(&self) -> bool {
+        fn is_open(&self) -> bool {
             todo!()
         }
 
@@ -1120,7 +1058,7 @@ mod internal {
             todo!()
         }
 
-        fn stop_stream(&mut self) -> Result<(), NokhwaError> {
+        fn close(&mut self) -> Result<(), NokhwaError> {
             todo!()
         }
     }

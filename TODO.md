@@ -15,12 +15,18 @@
 ## Performance
 (None)
 
-## 0.13.0 Roadmap
-- [ ] Separate streaming vs still-image capture models in `CaptureBackendTrait`
-  - Current trait assumes continuous streaming (`open_stream` → `frame` → `stop_stream`). Does not fit cameras with distinct live-view + shutter-capture modes.
-  - Split into `StreamBackend` (live view / continuous frames) and `CaptureBackend` (single-shot still images). Backends can implement one or both.
-  - Enables proper support for DSLR/mirrorless SDKs (Canon EDSDK, Nikon SDK, Sony Remote SDK, gPhoto2), industrial cameras (Basler Pylon, Allied Vision Vimba, FLIR/Teledyne), and mobile camera APIs (Android Camera2, iOS AVCapturePhotoOutput).
-  - Requires new API for high-resolution still capture, possibly RAW `FrameFormat` variants, and event-driven capture (trigger, shutter release).
+## 0.13.1 Roadmap
+- [ ] Re-enable V4L dispatch in `CameraSession::open`. 0.13.0 intentionally stubs the V4L branch: `V4LCaptureDevice<'a>` carries a lifetime parameter tied to a `MutexGuard<Device>` inside `open()`, which cannot be unified with `'static` (required for `dyn AnyDevice`) without an `unsafe` transmute of the MmapStream handle. Fix in 0.13.1 after Linux CI validation.
+
+## 0.14.0 Roadmap
+- [ ] `AsyncCameraRunner` behind an `async-tokio` feature (tokio-based channels; replaces ad-hoc `spawn_blocking` wrapping of `recv`).
+- [ ] Migrate `input-opencv` backend to the 0.13.0 trait split (currently gated behind a `compile_error!`).
+- [ ] Add bounded channels + overflow policy (`DropNewest` / `DropOldest`) to `CameraRunner`. 0.13.0 uses unbounded `std::sync::mpsc::channel`; switch to `sync_channel` with an explicit overflow helper and re-introduce the `RunnerConfig` capacity fields / `Overflow` enum that were removed for 0.13.0.
+- [ ] Reconsider `CameraSession` as a real builder or free `open()` function. 0.13.0 leaves it as a unit-struct namespace around `open()`.
+- [ ] Port `tests/device_tests.rs` (gated `device-test`) to the new API. It still references the removed `Camera`/`CallbackCamera`.
+- [ ] Restore a ggez-based live-view demo in `examples/capture` (lost in the 0.13.0 refactor).
+- [ ] Fix the `docs-only + docs-nolink + input-msmf` stub export so `cargo doc --features docs-only,docs-nolink` builds on non-Windows hosts (MSMF crate's docs-only branch doesn't re-export `MediaFoundationCaptureDevice`).
+- [ ] External backend crate (e.g. `canon-edsdk-nokhwa`) validating the shutter/hybrid contract.
 
 ## Backlog
 - [ ] Re-implement GStreamer backend (cross-platform, previously 839 lines)

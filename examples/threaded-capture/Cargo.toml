@@ -14,7 +14,7 @@ default-features = false
 [dependencies.nokhwa]
 path = "../.."
 # EDIT THIS!
-features = ["input-native", "output-threaded"]
+features = ["input-native", "runner"]
 
 # Opt out of the root workspace so this example builds standalone.
 [workspace]
