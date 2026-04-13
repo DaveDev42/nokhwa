@@ -50,6 +50,17 @@
 * `nokhwa-tokio/examples/tokio_runner.rs` demonstrates pulling frames
   with `.recv().await`.
 
+## [1.0.0](https://github.com/DaveDev42/nokhwa/compare/v0.13.1...v1.0.0) (2026-04-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* replace CameraSession with free nokhwa::open (0.14.0 group C) ([#124](https://github.com/DaveDev42/nokhwa/issues/124))
+
+### Features
+
+* replace CameraSession with free nokhwa::open (0.14.0 group C) ([#124](https://github.com/DaveDev42/nokhwa/issues/124)) ([ea8b65a](https://github.com/DaveDev42/nokhwa/commit/ea8b65a24a0e58a4a961afa2e89f7485e2e86fab))
+
 ## [0.13.1](https://github.com/DaveDev42/nokhwa/compare/v0.13.0...v0.13.1) (2026-04-13)
 
 
