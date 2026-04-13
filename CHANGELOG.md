@@ -36,7 +36,7 @@
   `tokio::sync::mpsc::Receiver`s and async-safe `Drop` (dropping inside a
   tokio runtime does not block the caller).
 
-### Tests
+### Infrastructure
 
 * New integration test `tests/session.rs::hybrid_camera_with_events_delivers_poller`
   exercises the `EventSource` arm of the `nokhwa_backend!` macro from an

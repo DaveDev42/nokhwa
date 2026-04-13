@@ -42,7 +42,7 @@ let opened = open(index, OpenRequest::any())?;   // acquire
 if let OpenedCamera::Stream(mut cam) = opened {
     cam.open()?;                                  // start stream
     let _ = cam.frame()?;
-    cam.close()?;                                 // stop stream (also runs on drop)
+    cam.close()?;                                 // stop stream (in-tree backends also close on drop)
 }
 ```
 
