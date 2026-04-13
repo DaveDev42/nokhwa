@@ -261,10 +261,12 @@ mod internal {
         camera_info: CameraInfo,
     }
 
-    // Compile-time assertion: the lifetime elision on `V4LCaptureDevice` is
-    // load-bearing for `nokhwa_backend!(V4LCaptureDevice: FrameSource)`, which
-    // requires `'static`. A future `v4l`-crate bump that re-introduces a
-    // borrowed field would break this and we'd rather find out at build time.
+    // Compile-time assertion: `V4LCaptureDevice: 'static`. The `'static` bound
+    // is required by `Box<dyn AnyDevice>` in the Layer 2 session machinery
+    // (the `nokhwa_backend!` macro expansion plugs this type in there). A
+    // future `v4l`-crate bump that re-introduces a borrowed field would break
+    // this and we'd rather find out at build time than discover it via a
+    // confusing macro-expansion error.
     const _: fn() = || {
         fn assert_static<T: 'static>() {}
         assert_static::<V4LCaptureDevice>();
@@ -844,19 +846,14 @@ mod internal {
                     })
                 }
             }
-            // SAFETY: `MmapStream<'a>`'s `'a` marks the lifetime of the kernel-
-            // mapped buffer slices in `Arena<'a>.bufs: Vec<&'a mut [u8]>`. Both
-            // the `Stream` and its `Arena` own `Arc<Handle>` clones of the V4L2
-            // fd, so the mmap'd buffers live as long as the stream does —
-            // regardless of the `&Device` borrow originally used to construct
-            // the stream. The only load-bearing constraint is that we never
-            // hand out a `&'static [u8]` derived from those buffers: callers
-            // only observe frame bytes through `MmapStream::next`, which ties
-            // the returned `&[u8]` to `&mut self` on the stream, so the kernel
-            // buffers cannot be aliased past the stream's lifetime. Extending
-            // `'a` to `'static` for storage is therefore sound. See the
-            // struct-level doc on `V4LCaptureDevice` for the full argument.
-            let stream: MmapStream<'static> = unsafe { std::mem::transmute(stream) };
+
+            // SAFETY: See the `'static` invariant doc on `V4LCaptureDevice`.
+            // Briefly: `MmapStream` and its `Arena` each hold an `Arc<Handle>`
+            // clone of the V4L2 fd, so the mmap'd slices in `Arena<'a>.bufs`
+            // live as long as the stream itself. No `&'static` slice ever
+            // leaks out: `MmapStream::next` reborrows through `&mut self`.
+            let stream =
+                unsafe { std::mem::transmute::<MmapStream<'_>, MmapStream<'static>>(stream) };
             self.stream_handle = Some(stream);
             Ok(())
         }
@@ -998,12 +995,12 @@ mod internal {
         KnownCameraControl::Other(id as u128)
     }
 
-    /// The backend struct that interfaces with V4L2.
-    /// Implements [`CameraDevice`] and [`FrameSource`].
+    /// Non-Linux stub for `V4LCaptureDevice`.
     ///
-    /// This is the non-Linux stub: every method returns
-    /// [`NokhwaError::NotImplementedError`]. It exists so downstream code
-    /// referencing the type compiles on macOS/Windows.
+    /// Every constructor and method returns
+    /// [`NokhwaError::NotImplementedError`]. Exists purely so cross-platform
+    /// downstream code referencing the type compiles on macOS / Windows; do
+    /// not expect any of its trait methods to do useful work.
     pub struct V4LCaptureDevice;
 
     #[allow(unused_variables)]
