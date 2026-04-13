@@ -26,12 +26,12 @@
 //! ## Quick start
 //!
 //! ```no_run
-//! use nokhwa::{CameraSession, OpenRequest, OpenedCamera};
+//! use nokhwa::{open, OpenRequest, OpenedCamera};
 //! use nokhwa_core::types::CameraIndex;
 //!
 //! # fn main() -> Result<(), nokhwa_core::error::NokhwaError> {
 //! let req = OpenRequest::any();
-//! match CameraSession::open(CameraIndex::Index(0), req)? {
+//! match open(CameraIndex::Index(0), req)? {
 //!     OpenedCamera::Stream(mut cam) => {
 //!         cam.open()?;
 //!         let frame = cam.frame()?;
@@ -123,13 +123,11 @@ pub mod backends;
 mod init;
 mod query;
 
-// Layer 2: CameraSession / OpenedCamera and the per-capability wrappers.
+// Layer 2: `open()` / `OpenedCamera` and the per-capability wrappers.
 // Layer 3 (CameraRunner) lives in the `runner` module below, gated on the
 // `runner` feature.
 pub mod session;
-pub use session::{
-    CameraSession, HybridCamera, OpenRequest, OpenedCamera, ShutterCamera, StreamCamera,
-};
+pub use session::{open, HybridCamera, OpenRequest, OpenedCamera, ShutterCamera, StreamCamera};
 
 #[cfg(feature = "runner")]
 pub mod runner;

@@ -27,8 +27,10 @@ use nokhwa::nokhwa_backend;
 use nokhwa::{HybridCamera, OpenedCamera, ShutterCamera, StreamCamera};
 use nokhwa_core::buffer::Buffer;
 use nokhwa_core::error::NokhwaError;
-use nokhwa_core::testing::{mock_frame, MockFrameSource, MockHybrid, MockShutter};
-use nokhwa_core::traits::{CameraDevice, FrameSource, ShutterCapture};
+use nokhwa_core::testing::{mock_frame, MockFrameSource, MockHybrid, MockShutter, MpscEventPoll};
+use nokhwa_core::traits::{
+    CameraDevice, CameraEvent, EventPoll, EventSource, FrameSource, ShutterCapture,
+};
 use nokhwa_core::types::{
     ApiBackend, CameraControl, CameraFormat, CameraInfo, ControlValueSetter, FrameFormat,
     KnownCameraControl,
@@ -239,4 +241,110 @@ fn hybrid_camera_exposes_both_surfaces() {
 fn hybrid_camera_without_events_returns_none() {
     let mut cam = HybridCamera::from_device(Box::new(make_hybrid()));
     assert!(cam.take_events().is_none());
+}
+
+// ─────────────────── External FrameSource+ShutterCapture+EventSource ──────
+//
+// Proves that a downstream crate can declare all three capabilities on the
+// same type via `nokhwa_backend!` and have `HybridCamera::from_device` wire
+// the event poller through. Exercises the `EventSource` arm of the macro,
+// which the other newtype tests do not.
+
+struct EventfulHybrid {
+    inner: MockHybrid,
+    poll: Option<Box<dyn EventPoll + Send>>,
+}
+
+impl CameraDevice for EventfulHybrid {
+    fn backend(&self) -> ApiBackend {
+        self.inner.backend()
+    }
+    fn info(&self) -> &CameraInfo {
+        self.inner.info()
+    }
+    fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        self.inner.controls()
+    }
+    fn set_control(
+        &mut self,
+        id: KnownCameraControl,
+        value: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        self.inner.set_control(id, value)
+    }
+}
+impl FrameSource for EventfulHybrid {
+    fn negotiated_format(&self) -> CameraFormat {
+        self.inner.negotiated_format()
+    }
+    fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
+        self.inner.set_format(f)
+    }
+    fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+        self.inner.compatible_formats()
+    }
+    fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
+        self.inner.compatible_fourcc()
+    }
+    fn open(&mut self) -> Result<(), NokhwaError> {
+        self.inner.open()
+    }
+    fn is_open(&self) -> bool {
+        self.inner.is_open()
+    }
+    fn frame(&mut self) -> Result<Buffer, NokhwaError> {
+        self.inner.frame()
+    }
+    fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
+        self.inner.frame_raw()
+    }
+    fn close(&mut self) -> Result<(), NokhwaError> {
+        self.inner.close()
+    }
+}
+impl ShutterCapture for EventfulHybrid {
+    fn trigger(&mut self) -> Result<(), NokhwaError> {
+        self.inner.trigger()
+    }
+    fn take_picture(&mut self, t: Duration) -> Result<Buffer, NokhwaError> {
+        self.inner.take_picture(t)
+    }
+}
+impl EventSource for EventfulHybrid {
+    fn take_events(&mut self) -> Result<Box<dyn EventPoll + Send>, NokhwaError> {
+        self.poll
+            .take()
+            .ok_or(NokhwaError::UnsupportedOperationError(ApiBackend::Browser))
+    }
+}
+
+nokhwa_backend!(EventfulHybrid: FrameSource, ShutterCapture, EventSource);
+
+#[test]
+fn hybrid_camera_with_events_delivers_poller() {
+    let (tx, rx) = std::sync::mpsc::channel();
+    tx.send(CameraEvent::WillShutDown).unwrap();
+
+    let hybrid = MockHybrid::new(0, vec![mock_frame(4, 4, FrameFormat::MJPEG)]);
+    let dev = EventfulHybrid {
+        inner: hybrid,
+        poll: Some(Box::new(MpscEventPoll::new(rx))),
+    };
+
+    let opened = OpenedCamera::from_device(Box::new(dev));
+    let OpenedCamera::Hybrid(mut cam) = opened else {
+        panic!("expected hybrid variant");
+    };
+
+    let mut poll = cam
+        .take_events()
+        .expect("events present")
+        .expect("poll constructed");
+    assert!(matches!(
+        poll.next_timeout(Duration::from_millis(50)),
+        Some(CameraEvent::WillShutDown)
+    ));
+    // Subsequent take_events call returns None (poller already taken).
+    assert!(cam.take_events().is_none());
+    drop(tx);
 }

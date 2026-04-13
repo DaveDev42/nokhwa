@@ -34,12 +34,12 @@ through an `OpenedCamera` enum so webcams, DSLRs, and hybrid cameras share one
 API surface.
 
 ```rust
-use nokhwa::{CameraSession, OpenRequest, OpenedCamera};
+use nokhwa::{open, OpenRequest, OpenedCamera};
 use nokhwa_core::error::NokhwaError;
 use nokhwa_core::types::CameraIndex;
 
 fn main() -> Result<(), NokhwaError> {
-    let opened = CameraSession::open(CameraIndex::Index(0), OpenRequest::any())?;
+    let opened = open(CameraIndex::Index(0), OpenRequest::any())?;
     match opened {
         OpenedCamera::Stream(mut cam) => {
             cam.open()?;

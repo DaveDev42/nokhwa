@@ -1,9 +1,9 @@
 use nokhwa::utils::{CameraIndex, ControlValueSetter, KnownCameraControl};
 use nokhwa::error::NokhwaError;
-use nokhwa::{CameraSession, OpenRequest, OpenedCamera};
+use nokhwa::{open, OpenRequest, OpenedCamera};
 
 fn main() -> Result<(), NokhwaError> {
-    let opened = CameraSession::open(CameraIndex::Index(0), OpenRequest::any())?;
+    let opened = open(CameraIndex::Index(0), OpenRequest::any())?;
     let OpenedCamera::Stream(mut camera) = opened else {
         return Err(NokhwaError::general("expected stream-capable camera"));
     };
