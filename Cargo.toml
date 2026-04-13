@@ -15,6 +15,7 @@ members = [
     "nokhwa-bindings-windows-msmf",
     "nokhwa-bindings-linux-v4l",
     "nokhwa-core",
+    "nokhwa-tokio",
 ]
 
 [workspace.package]
