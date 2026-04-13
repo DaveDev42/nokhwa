@@ -13,7 +13,7 @@
 
 * **`RunnerConfig` now defaults to bounded channels.** Capacities are
   `frames_capacity = 4`, `pictures_capacity = 8`, `events_capacity = 32`,
-  with [`Overflow::DropNewest`] as the default policy. In 0.13 the
+  with `Overflow::DropNewest` as the default policy. In 0.13 the
   channels were unbounded, so a slow consumer would queue forever; in
   0.14 the slowest-moving item is silently dropped according to the
   policy. **Mitigation:** set any of the three capacity fields to `0` to

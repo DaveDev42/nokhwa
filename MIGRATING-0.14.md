@@ -31,6 +31,19 @@ That is the entire migration. `OpenRequest`, `OpenedCamera`, and every
 per-capability wrapper (`StreamCamera`, `ShutterCamera`,
 `HybridCamera`) are unchanged.
 
+The free `nokhwa::open` function acquires the device. It is distinct
+from the `open()` method on `StreamCamera` / `HybridCamera`, which
+starts the frame stream on an already-acquired device. Typical usage:
+
+```rust
+let opened = nokhwa::open(index, OpenRequest::any())?;   // acquire
+if let OpenedCamera::Stream(mut cam) = opened {
+    cam.open()?;                                          // start stream
+    let _ = cam.frame()?;
+    cam.close()?;                                         // stop stream
+}
+```
+
 If you import items individually, drop `CameraSession` from the import
 list and add `open`:
 
@@ -41,6 +54,22 @@ use nokhwa::{CameraRunner, CameraSession, OpenRequest, RunnerConfig};
 // 0.14
 use nokhwa::{open, CameraRunner, OpenRequest, RunnerConfig};
 ```
+
+### Bounded runner channels
+
+0.14 also changes `CameraRunner`'s default channel behaviour (shipped
+in 0.14.0 group A, PR #123). `RunnerConfig` now defaults to bounded
+channels — `frames_capacity = 4`, `pictures_capacity = 8`,
+`events_capacity = 32`, with `Overflow::DropNewest` as the default
+policy. In 0.13 the underlying `std::sync::mpsc::channel` was
+unbounded, so a slow consumer would queue without limit. In 0.14 the
+slowest-moving item is silently dropped according to the configured
+policy.
+
+If you relied on the unbounded behaviour (e.g. a batch pipeline that
+tolerates unbounded memory growth in exchange for never losing a
+frame), set any of the three capacity fields to `0` to restore the
+0.13 semantics.
 
 ### External backend crates
 

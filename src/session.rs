@@ -120,7 +120,13 @@ impl Default for OpenRequest {
 /// Dispatches at compile time via `cfg` to the V4L2 backend on Linux,
 /// the `AVFoundation` backend on macOS/iOS, or the Media Foundation
 /// backend on Windows (subject to the corresponding `input-*` feature
-/// being enabled).
+/// being enabled). If none of the native `input-*` features are enabled
+/// for the current target, the call returns an error at runtime rather
+/// than failing at compile time.
+///
+/// Note: this function acquires the device. It is unrelated to the
+/// `open()` method on [`StreamCamera`] / [`HybridCamera`], which starts
+/// the frame stream on an already-acquired device.
 ///
 /// # Errors
 /// Returns [`NokhwaError`] if no native backend is available for the
@@ -494,7 +500,7 @@ impl HybridCamera {
     /// the backend's initial event-poll construction failed (that error is
     /// logged via `log::warn!` when the `logging` feature is enabled).
     ///
-    /// The inner `Result` is always `Ok(_)` in 0.13.0 — init failures are
+    /// The inner `Result` is always `Ok(_)` in 0.14 — init failures are
     /// normalised to `None` above. The shape is preserved for
     /// forward-compatibility with backends that may produce a poll lazily.
     pub fn take_events(&mut self) -> Option<Result<Box<dyn EventPoll + Send>, NokhwaError>> {
