@@ -32,8 +32,8 @@
 * New `testing` feature on `nokhwa-core` providing `MockFrameSource`,
   `MockShutter`, and `MockHybrid` backends for integration tests.
 * `CameraSession::open` now dispatches to `V4LCaptureDevice` on Linux
-  alongside the AVFoundation and Media Foundation branches. The
-  `V4LCaptureDevice<'a>` lifetime parameter was removed; the
+  alongside the AVFoundation and Media Foundation branches ([#119](https://github.com/DaveDev42/nokhwa/issues/119)) ([a5eea5c](https://github.com/DaveDev42/nokhwa/commit/a5eea5c61cbcd4cb1c81c68f00e6c37bcefb872a)).
+  The `V4LCaptureDevice<'a>` lifetime parameter was removed; the
   `MmapStream` handle is stored as `'static`. See the struct-level
   docs on `V4LCaptureDevice` for the soundness argument.
 
