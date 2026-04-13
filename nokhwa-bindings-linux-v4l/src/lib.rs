@@ -235,7 +235,7 @@ mod internal {
     /// The backend struct that interfaces with V4L2.
     /// Implements [`CameraDevice`] and [`FrameSource`].
     ///
-    /// # `'static` lifetime invariant
+    /// # Static-lifetime invariant
     ///
     /// `stream_handle` stores `MmapStream<'static>`, but `v4l::io::mmap::
     /// Stream<'a>`'s `'a` parameter really marks the lifetime of the kernel-
@@ -267,9 +267,9 @@ mod internal {
     // on our own struct — e.g. someone reverting to `MmapStream<'a>` with a
     // borrowed `'a` and dropping the transmute. Better a crisp build-time
     // error than a confusing macro-expansion error downstream.
-    const _: fn() = || {
+    const _: () = {
         fn assert_static<T: 'static>() {}
-        assert_static::<V4LCaptureDevice>();
+        let _ = assert_static::<V4LCaptureDevice>;
     };
 
     impl V4LCaptureDevice {
@@ -823,8 +823,8 @@ mod internal {
         fn open(&mut self) -> Result<(), NokhwaError> {
             // Calling `open()` when a stream already exists tears the old
             // stream down (its `Drop` issues `VIDIOC_STREAMOFF` and munmaps
-            // the arena) and replaces it with a fresh one. This is a deliberate
-            // reset, matching what other backends do.
+            // the arena) and replaces it with a fresh one. This reset is
+            // intentional — the `FrameSource` contract permits it.
             // Disable mut warning, since mut is only required when not using arena buffers
             #[allow(unused_mut)]
             let mut stream =

@@ -11,6 +11,7 @@
   - [ ] End-to-end capture pipeline: format negotiation → stream open → frame capture → decode
   - [ ] Camera control round-trip on real hardware (set → get value verification)
   - [ ] Multi-frame streaming consistency (no corruption across frames)
+  - [ ] V4L `CameraSession::open` dispatch regression test (hardware-gated) — guards against the 0.13.0 stub recurring silently
 
 ## Performance
 (None)
