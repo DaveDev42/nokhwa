@@ -237,32 +237,38 @@ mod internal {
     ///
     /// # `'static` lifetime invariant
     ///
-    /// `stream_handle` stores an `MmapStream<'static>`, but the underlying
-    /// `v4l::io::mmap::Stream<'a>`'s `'a` parameter really marks the lifetime
-    /// of the kernel-mapped buffer slices (`Arena<'a>.bufs: Vec<&'a mut [u8]>`).
-    /// Those slices remain valid as long as the V4L2 file descriptor is open,
-    /// and `Stream` owns an `Arc<Handle>` (the fd) internally — so the slices
-    /// cannot outlive the fd.
+    /// `stream_handle` stores `MmapStream<'static>`, but `v4l::io::mmap::
+    /// Stream<'a>`'s `'a` parameter really marks the lifetime of the kernel-
+    /// mapped buffer slices (`Arena<'a>.bufs: Vec<&'a mut [u8]>`).
     ///
-    /// We therefore transmute the stream's lifetime to `'static` in
-    /// [`Self::open`]. The invariant is:
+    /// Soundness: both `Stream` and its internal `Arena` each carry their own
+    /// `Arc<Handle>` clone of the V4L2 file descriptor. The mmap'd buffers
+    /// remain valid for as long as any `Arc<Handle>` clone is alive, so the
+    /// slices in `Arena.bufs` cannot outlive the fd no matter what happens to
+    /// this struct's own `device: SharedDevice` field. Extending `'a` to
+    /// `'static` is therefore sound.
     ///
-    /// - `stream_handle` is dropped **before** `device`: Rust drops struct
-    ///   fields in declaration order, so `stream_handle` (declared first below)
-    ///   runs its `Drop` impl before `device`. The field order **must not
-    ///   change**.
-    /// - `device` is an `Arc<Mutex<Device>>`; even after `stream_handle` is
-    ///   dropped the fd survives until the last `Arc` clone goes away, and
-    ///   `Stream` carries its own `Arc<Handle>` clone, so the fd outlives the
-    ///   stream regardless of `device` drop order.
+    /// The field order below (`stream_handle` before `device`) keeps the
+    /// stream's `Drop` running first — this is *not* required for soundness
+    /// (the `Arc<Handle>` clones make drop order of `device` irrelevant), but
+    /// we keep it as a defensive ordering so the stream's `VIDIOC_STREAMOFF`
+    /// runs before the last `Arc<Mutex<Device>>` clone might be dropped by
+    /// whoever holds another handle to the same device.
     pub struct V4LCaptureDevice {
-        // DROP ORDER: stream_handle MUST be dropped before device.
-        // See the `'static` invariant note on the struct above.
         stream_handle: Option<MmapStream<'static>>,
         device: SharedDevice,
         camera_format: CameraFormat,
         camera_info: CameraInfo,
     }
+
+    // Compile-time assertion: the lifetime elision on `V4LCaptureDevice` is
+    // load-bearing for `nokhwa_backend!(V4LCaptureDevice: FrameSource)`, which
+    // requires `'static`. A future `v4l`-crate bump that re-introduces a
+    // borrowed field would break this and we'd rather find out at build time.
+    const _: fn() = || {
+        fn assert_static<T: 'static>() {}
+        assert_static::<V4LCaptureDevice>();
+    };
 
     impl V4LCaptureDevice {
         /// Creates a new capture device using the `V4L2` backend. Indexes are gives to devices by the OS, and usually numbered by order of discovery.
@@ -839,17 +845,17 @@ mod internal {
                 }
             }
             // SAFETY: `MmapStream<'a>`'s `'a` marks the lifetime of the kernel-
-            // mapped buffer slices inside `Arena<'a>.bufs: Vec<&'a mut [u8]>`.
-            // Those buffers are mmapped from the V4L2 file descriptor and remain
-            // valid for as long as the fd is open. `Stream` carries its own
-            // `Arc<Handle>` clone (the fd), so the fd — and thus the buffers —
-            // outlive the stream regardless of whether the `Device` borrow used
-            // to construct the stream is still held. Extending `'a` to `'static`
-            // is therefore sound provided the stream does not escape
-            // `V4LCaptureDevice`; the field is private and only ever accessed
-            // through `&mut self`. The struct's declared field order also drops
-            // `stream_handle` before `device`, which is redundant but matches
-            // the invariant documented on the struct.
+            // mapped buffer slices in `Arena<'a>.bufs: Vec<&'a mut [u8]>`. Both
+            // the `Stream` and its `Arena` own `Arc<Handle>` clones of the V4L2
+            // fd, so the mmap'd buffers live as long as the stream does —
+            // regardless of the `&Device` borrow originally used to construct
+            // the stream. The only load-bearing constraint is that we never
+            // hand out a `&'static [u8]` derived from those buffers: callers
+            // only observe frame bytes through `MmapStream::next`, which ties
+            // the returned `&[u8]` to `&mut self` on the stream, so the kernel
+            // buffers cannot be aliased past the stream's lifetime. Extending
+            // `'a` to `'static` for storage is therefore sound. See the
+            // struct-level doc on `V4LCaptureDevice` for the full argument.
             let stream: MmapStream<'static> = unsafe { std::mem::transmute(stream) };
             self.stream_handle = Some(stream);
             Ok(())
@@ -977,7 +983,6 @@ mod internal {
         FrameFormat, KnownCameraControl, RequestedFormat,
     };
     use std::borrow::Cow;
-    use std::marker::PhantomData;
 
     /// Attempts to convert a [`KnownCameraControl`] into a V4L2 Control ID.
     /// If the associated control is not found, this will return `None` (`ColorEnable`, `Roll`)
@@ -995,9 +1000,11 @@ mod internal {
 
     /// The backend struct that interfaces with V4L2.
     /// Implements [`CameraDevice`] and [`FrameSource`].
-    pub struct V4LCaptureDevice {
-        __holder: PhantomData<()>,
-    }
+    ///
+    /// This is the non-Linux stub: every method returns
+    /// [`NokhwaError::NotImplementedError`]. It exists so downstream code
+    /// referencing the type compiles on macOS/Windows.
+    pub struct V4LCaptureDevice;
 
     #[allow(unused_variables)]
     impl V4LCaptureDevice {

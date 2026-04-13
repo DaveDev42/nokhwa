@@ -4,15 +4,10 @@
 
 ### Bug Fixes
 
-* Re-enabled V4L dispatch in `CameraSession::open` on Linux. The 0.13.0
-  release stubbed the V4L branch because `V4LCaptureDevice<'a>` carried
-  a lifetime parameter tied to the `MmapStream<'a>` handle. The lifetime
-  is now removed: the stream is stored as `MmapStream<'static>` via a
-  localised `unsafe { std::mem::transmute }` in `FrameSource::open`,
-  with the soundness argument documented on the struct and at the call
-  site. Field order (`stream_handle` before `device`) pins the drop
-  order, and `v4l::io::mmap::Stream` owns its own `Arc<Handle>` clone
-  of the fd, so the mmap'd buffers cannot dangle.
+* Re-enabled V4L dispatch in `CameraSession::open` on Linux (stubbed in
+  0.13.0). `V4LCaptureDevice` no longer carries a lifetime parameter;
+  the `MmapStream` handle is stored as `'static`. See the struct-level
+  docs on `V4LCaptureDevice` for the soundness argument.
 
 ## Unreleased (0.13.0)
 

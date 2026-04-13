@@ -15,9 +15,6 @@
 ## Performance
 (None)
 
-## 0.13.1 Roadmap
-(None)
-
 ## 0.14.0 Roadmap
 - [ ] `AsyncCameraRunner` behind an `async-tokio` feature (tokio-based channels; replaces ad-hoc `spawn_blocking` wrapping of `recv`).
 - [ ] Migrate `input-opencv` backend to the 0.13.0 trait split (currently gated behind a `compile_error!`).
