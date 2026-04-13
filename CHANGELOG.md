@@ -7,7 +7,8 @@
 * **`CameraSession` removed.** The unit-struct namespace is gone; open a
   camera via the free function `nokhwa::open(index, req)` instead of
   `CameraSession::open(index, req)`. `OpenRequest`, `OpenedCamera`, and
-  the per-capability wrappers are unchanged. See `MIGRATING-0.14.md`.
+  the per-capability wrappers are unchanged. See
+  [MIGRATING-0.14.md#opening-a-camera](MIGRATING-0.14.md#opening-a-camera).
 
 ### ⚠ BREAKING CHANGES (behavior)
 
@@ -17,7 +18,8 @@
   channels were unbounded, so a slow consumer would queue forever; in
   0.14 the slowest-moving item is silently dropped according to the
   policy. **Mitigation:** set any of the three capacity fields to `0` to
-  restore the 0.13 unbounded behavior.
+  restore the 0.13 unbounded behavior. See
+  [MIGRATING-0.14.md#bounded-runner-channels](MIGRATING-0.14.md#bounded-runner-channels).
 
 ### Features
 

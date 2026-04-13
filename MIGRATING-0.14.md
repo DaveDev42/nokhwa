@@ -36,11 +36,13 @@ from the `open()` method on `StreamCamera` / `HybridCamera`, which
 starts the frame stream on an already-acquired device. Typical usage:
 
 ```rust
-let opened = nokhwa::open(index, OpenRequest::any())?;   // acquire
+use nokhwa::{open, OpenRequest, OpenedCamera};
+
+let opened = open(index, OpenRequest::any())?;   // acquire
 if let OpenedCamera::Stream(mut cam) = opened {
-    cam.open()?;                                          // start stream
+    cam.open()?;                                  // start stream
     let _ = cam.frame()?;
-    cam.close()?;                                         // stop stream
+    cam.close()?;                                 // stop stream (also runs on drop)
 }
 ```
 

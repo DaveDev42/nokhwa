@@ -312,13 +312,13 @@ impl ShutterCapture for EventfulHybrid {
 }
 impl EventSource for EventfulHybrid {
     fn take_events(&mut self) -> Result<Box<dyn EventPoll + Send>, NokhwaError> {
-        // Invariant: `HybridCamera::from_device` calls this exactly once and
-        // memoises the result, so the `None` branch should never be reached
-        // by these tests.
+        // `OpenedCamera::from_device` calls this exactly once while building
+        // the `HybridCamera`, which then memoises the poller — so the test
+        // never re-enters this method.
         Ok(self
             .poll
             .take()
-            .unwrap_or_else(|| unreachable!("take_events called twice; HybridCamera should cache")))
+            .expect("take_events called twice; HybridCamera should cache"))
     }
 }
 
