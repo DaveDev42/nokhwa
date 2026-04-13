@@ -8,6 +8,7 @@ repository.workspace = true
 description = "Tokio integration for `nokhwa` — async wrapper around CameraRunner"
 keywords    = [ "camera", "tokio", "async", "webcam" ]
 categories  = [ "api-bindings", "multimedia", "asynchronous" ]
+readme      = "README.md"
 
 [dependencies]
 

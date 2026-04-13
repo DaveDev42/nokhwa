@@ -17,6 +17,12 @@
 //! runtime, drop joins synchronously. For explicit shutdown, use
 //! [`TokioCameraRunner::stop`]`.await`.
 //!
+//! On a **`current_thread`** runtime, the drop-queued `spawn_blocking`
+//! task only runs after the next yield point. The drop itself still
+//! returns immediately, but the physical sync worker thread keeps
+//! running until the scheduler gets control back. If you need the worker
+//! fully joined at a specific point, prefer `stop().await`.
+//!
 //! # Why `forwarders.abort()` is advisory
 //!
 //! Forwarder tasks are created via [`tokio::task::spawn_blocking`], which

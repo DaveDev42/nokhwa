@@ -169,6 +169,11 @@ fn make_channel<T: Send + 'static>(
             let handle = thread::spawn(move || {
                 use std::collections::VecDeque;
                 let mut buf: VecDeque<T> = VecDeque::with_capacity(capacity);
+                // 5 ms ≈ 200 Hz: drives the drain-while-waiting fallback
+                // when the producer is idle but `user_tx` was previously
+                // full. Small enough that the user sees freshly-buffered
+                // items without perceptible delay; large enough that an
+                // idle relay costs negligible CPU.
                 let poll = Duration::from_millis(5);
                 loop {
                     // Try to drain buffer into user_tx first (non-blocking).
@@ -411,6 +416,10 @@ impl CameraRunner {
                 match cmd_rx.try_recv() {
                     Ok(Command::Die) | Err(TryRecvError::Disconnected) => break,
                     Ok(Command::Trigger) => {
+                        // Trigger / take-picture errors are intentionally
+                        // swallowed here; a backend that wants to surface
+                        // them should emit a `CameraEvent` via the events
+                        // channel instead.
                         if cam.trigger().is_ok() {
                             if let Ok(pic) = cam.take_picture(shutter_timeout) {
                                 // Policy: hybrid workers treat a dropped
@@ -516,7 +525,11 @@ impl CameraRunner {
     fn shutdown(&mut self) {
         let _ = self.cmd.send(Command::Die);
         // Drop receivers first so any blocked relay `try_send` wakes up and
-        // the relay threads can exit cleanly.
+        // the relay threads can exit cleanly. For `Overflow::Block` the
+        // worker may be parked inside `SyncSender::send` with `Die`
+        // sitting unread in the command queue; the receiver-drop below is
+        // what unblocks that send (via `SendError`), after which the
+        // worker loop exits.
         self.frames = None;
         self.pictures = None;
         self.events = None;
@@ -653,6 +666,9 @@ mod tests {
             if tx.send(0).is_err() {
                 break;
             }
+            // Yield so the relay thread has a fair chance to observe
+            // the dropped user_rx and exit.
+            std::thread::yield_now();
         }
         assert!(
             tx.send(0).is_err(),
