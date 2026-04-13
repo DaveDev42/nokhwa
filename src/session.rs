@@ -80,7 +80,8 @@ impl<T: FrameSource + ShutterCapture + Send> HybridBackend for T {}
 /// A request to open a camera. Future tasks wire this into `CameraSession::open`.
 ///
 /// The `Copy` derive relies on every field being `Copy`. If a future field is
-/// non-`Copy`, drop the derive and pass by reference instead.
+/// non-`Copy`, drop the `Copy` derive (keep `Clone`) and pass by reference
+/// at the API boundary instead.
 #[derive(Debug, Clone, Copy)]
 pub struct OpenRequest {
     format: Option<CameraFormat>,

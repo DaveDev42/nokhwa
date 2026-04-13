@@ -47,7 +47,7 @@ pub struct MediaFoundationCaptureDevice {
 //   ownership — no aliasing across threads occurs. We do NOT implement Sync.
 // - The inner IMFSourceReader (COM interface) wraps NonNull<c_void> which is !Send by
 //   default. nokhwa's MSMF backend initializes COM in the **multi-threaded apartment**
-//   (MTA) — see `nokhwa-bindings-windows-msmf::wmf::initialize_mf`, which calls
+//   (MTA) — see `nokhwa_bindings_windows_msmf::wmf::initialize_mf`, which calls
 //   `CoInitializeEx(None, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE)`. MTA objects
 //   are not tied to a specific thread and may be accessed from any thread holding a
 //   reference, so moving exclusive ownership to another thread is sound.

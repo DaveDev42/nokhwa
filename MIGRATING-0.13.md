@@ -131,3 +131,14 @@ fields.
 `CameraSession` is now a unit struct; the no-op `CameraSession::new(req)`
 constructor was removed. Open a camera directly via
 `CameraSession::open(index, req)`.
+
+## Windows / MSMF COM apartment change
+
+0.13 initialises COM with `COINIT_MULTITHREADED` (MTA) instead of the
+previous `COINIT_APARTMENT_THREADED` (STA). This matches the `unsafe impl
+Send for MediaFoundationCaptureDevice` assertion that `CameraRunner` now
+actually exercises. If your host application (typical Windows GUI main
+threads) has already called `CoInitializeEx(.., COINIT_APARTMENT_THREADED)`
+on the same thread before touching nokhwa, `initialize_mf` will return
+`RPC_E_CHANGED_MODE`. Workaround: call nokhwa from a thread that has not
+been initialised, or from a fresh worker thread.

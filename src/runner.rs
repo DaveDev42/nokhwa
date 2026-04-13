@@ -83,9 +83,14 @@ enum Command {
 /// In 0.13.0 the channels are unbounded ([`std::sync::mpsc::channel`]). Bounded
 /// channels with a drop-oldest / drop-newest policy are on the 0.14 roadmap.
 /// Until then, if a consumer stops draining the `frames()` receiver while
-/// keeping the runner alive, memory grows without bound. The worker does,
-/// however, treat a **disconnected receiver** (i.e. the caller dropped the
-/// channel end) as a shutdown signal and exits cleanly.
+/// keeping the runner alive, memory grows without bound.
+///
+/// The accessor methods (`frames()`, `pictures()`, `events()`) return borrowed
+/// receivers, so in the current API a caller cannot detach and drop a receiver
+/// independently of the runner — the runner's [`Drop`] signals `Die` and joins
+/// the worker first, then drops the receivers. The worker does defensively
+/// exit on `SendError` so that a future API surface exposing owned receivers
+/// would not be able to leak the worker thread.
 #[derive(Debug)]
 pub struct CameraRunner {
     frames: Option<Receiver<Buffer>>,
