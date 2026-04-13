@@ -28,7 +28,10 @@
 //! - [`OpenedCamera::Hybrid`]: all three channels are available; events
 //!   only if the backend advertised `EventSource`.
 
-use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender, TryRecvError};
+use std::sync::mpsc::{
+    channel, sync_channel, Receiver, RecvTimeoutError, Sender, SyncSender, TryRecvError,
+    TrySendError,
+};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -38,6 +41,26 @@ use nokhwa_core::traits::{CameraEvent, EventPoll};
 use nokhwa_core::types::{ControlValueSetter, KnownCameraControl};
 
 use crate::session::{HybridCamera, OpenedCamera, ShutterCamera, StreamCamera};
+
+/// Policy for what to do when a bounded runner channel is full.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Overflow {
+    /// Drop the newly-produced item, preserving older backlog. Lowest
+    /// overhead; good when any-recent-frame is acceptable.
+    #[default]
+    DropNewest,
+    /// Drop the oldest item in the channel to make room for the new one.
+    /// Good when consumers want the freshest frame. Implemented via a
+    /// per-channel relay thread — only paid when this policy is selected.
+    DropOldest,
+    /// Block the producer until the consumer drains. Old-school back-
+    /// pressure; the camera worker stalls if the consumer is slow, which
+    /// for a stream backend means real-time frames will be missed by the
+    /// underlying device rather than dropped in software. Use when you
+    /// want every queued frame delivered in order and you're OK with the
+    /// worker pausing.
+    Block,
+}
 
 /// Configuration for [`CameraRunner::spawn`].
 #[derive(Debug, Clone, Copy)]
@@ -53,6 +76,15 @@ pub struct RunnerConfig {
     pub event_tick: Duration,
     /// Timeout for shutter `take_picture(…)` after a trigger.
     pub shutter_timeout: Duration,
+    /// Capacity of the frames channel. `0` = unbounded (pre-0.14 behavior).
+    pub frames_capacity: usize,
+    /// Capacity of the pictures channel. `0` = unbounded.
+    pub pictures_capacity: usize,
+    /// Capacity of the events channel. `0` = unbounded.
+    pub events_capacity: usize,
+    /// Policy when a bounded channel is full. Ignored if the corresponding
+    /// capacity is `0`.
+    pub overflow: Overflow,
 }
 
 impl Default for RunnerConfig {
@@ -61,6 +93,136 @@ impl Default for RunnerConfig {
             poll_interval: Duration::from_millis(10),
             event_tick: Duration::from_millis(50),
             shutter_timeout: Duration::from_secs(5),
+            frames_capacity: 4,
+            pictures_capacity: 8,
+            events_capacity: 32,
+            overflow: Overflow::DropNewest,
+        }
+    }
+}
+
+/// Producer half of a runner channel, abstracting over unbounded /
+/// bounded-with-overflow variants. Shared across the three spawn paths.
+enum Tx<T: Send + 'static> {
+    Unbounded(Sender<T>),
+    /// `DropNewest`: on `Full`, the new item is silently discarded.
+    BoundedDropNewest(SyncSender<T>),
+    /// `DropOldest`: feeds into a relay thread that drop-oldest's into the
+    /// user-facing bounded channel.
+    BoundedDropOldest(SyncSender<T>),
+    /// `Block`: producer stalls until the consumer drains.
+    BoundedBlock(SyncSender<T>),
+}
+
+impl<T: Send + 'static> Tx<T> {
+    /// Send an item. Returns `Err(())` if the consumer has disconnected —
+    /// the worker should treat this as a shutdown signal. Overflow on a
+    /// bounded channel is **not** an error.
+    fn send(&self, item: T) -> Result<(), ()> {
+        match self {
+            Tx::Unbounded(tx) => tx.send(item).map_err(|_| ()),
+            Tx::BoundedDropNewest(tx) => match tx.try_send(item) {
+                Ok(()) | Err(TrySendError::Full(_)) => Ok(()),
+                Err(TrySendError::Disconnected(_)) => Err(()),
+            },
+            Tx::BoundedDropOldest(tx) | Tx::BoundedBlock(tx) => tx.send(item).map_err(|_| ()),
+        }
+    }
+}
+
+/// Build a (producer, consumer) pair for a runner stream, along with an
+/// optional relay-thread `JoinHandle` that the runner must join on shutdown.
+///
+/// - `capacity == 0` → unbounded `std::sync::mpsc::channel`; relay = `None`.
+/// - `capacity > 0, DropNewest` → single `sync_channel(capacity)`; relay = `None`.
+/// - `capacity > 0, DropOldest` → producer feeds a relay thread that
+///   maintains a `VecDeque<T>` of at most `capacity` items; when full, the
+///   oldest item is popped before the new one is pushed. The relay forwards
+///   items into an unbounded channel exposed to the user, so the total
+///   memory footprint stays bounded by `capacity` plus whatever the user
+///   hasn't yet received (which is always immediately drainable).
+fn make_channel<T: Send + 'static>(
+    capacity: usize,
+    policy: Overflow,
+) -> (Tx<T>, Receiver<T>, Option<JoinHandle<()>>) {
+    if capacity == 0 {
+        let (tx, rx) = channel::<T>();
+        return (Tx::Unbounded(tx), rx, None);
+    }
+    match policy {
+        Overflow::DropNewest => {
+            let (tx, rx) = sync_channel::<T>(capacity);
+            (Tx::BoundedDropNewest(tx), rx, None)
+        }
+        Overflow::Block => {
+            let (tx, rx) = sync_channel::<T>(capacity);
+            (Tx::BoundedBlock(tx), rx, None)
+        }
+        Overflow::DropOldest => {
+            // Two chained `sync_channel(capacity)` joined by a relay thread
+            // that owns an in-memory `VecDeque<T>` of at most `capacity`
+            // items. When the user-facing channel is full, the relay drops
+            // the oldest buffered item to make room for the new one. Total
+            // memory footprint is bounded by `2 * capacity` items.
+            let (prod_tx, relay_rx) = sync_channel::<T>(capacity);
+            let (user_tx, user_rx) = sync_channel::<T>(capacity);
+            let handle = thread::spawn(move || {
+                use std::collections::VecDeque;
+                let mut buf: VecDeque<T> = VecDeque::with_capacity(capacity);
+                // 5 ms ≈ 200 Hz: drives the drain-while-waiting fallback
+                // when the producer is idle but `user_tx` was previously
+                // full. Small enough that the user sees freshly-buffered
+                // items without perceptible delay; large enough that an
+                // idle relay costs negligible CPU.
+                let poll = Duration::from_millis(5);
+                loop {
+                    // Try to drain buffer into user_tx first (non-blocking).
+                    while let Some(front) = buf.pop_front() {
+                        match user_tx.try_send(front) {
+                            Ok(()) => {}
+                            Err(TrySendError::Full(item)) => {
+                                buf.push_front(item);
+                                break;
+                            }
+                            Err(TrySendError::Disconnected(_)) => return,
+                        }
+                    }
+                    // Wait for a new item. If buf is non-empty, poll with a
+                    // short timeout so we get another chance to drain into
+                    // user_tx even when the producer has gone idle.
+                    let wait = if buf.is_empty() {
+                        relay_rx.recv().map_err(|_| RecvTimeoutError::Disconnected)
+                    } else {
+                        relay_rx.recv_timeout(poll)
+                    };
+                    match wait {
+                        Ok(item) => {
+                            if buf.len() == capacity {
+                                buf.pop_front();
+                            }
+                            buf.push_back(item);
+                        }
+                        Err(RecvTimeoutError::Timeout) => {}
+                        Err(RecvTimeoutError::Disconnected) => {
+                            // Producer gone; still try to flush buffered items.
+                            // The blocking `user_tx.send` here is safe only
+                            // because `CameraRunner::shutdown` drops the
+                            // user-facing `Receiver` *before* joining the
+                            // relay — so if no one is draining, `send`
+                            // fails with `SendError` and we exit. Future
+                            // refactors of `shutdown` must preserve that
+                            // ordering or this loop can deadlock.
+                            while let Some(front) = buf.pop_front() {
+                                if user_tx.send(front).is_err() {
+                                    return;
+                                }
+                            }
+                            return;
+                        }
+                    }
+                }
+            });
+            (Tx::BoundedDropOldest(prod_tx), user_rx, Some(handle))
         }
     }
 }
@@ -80,17 +242,24 @@ enum Command {
 ///
 /// ## Channel semantics
 ///
-/// In 0.13.0 the channels are unbounded ([`std::sync::mpsc::channel`]). Bounded
-/// channels with a drop-oldest / drop-newest policy are on the 0.14 roadmap.
-/// Until then, if a consumer stops draining the `frames()` receiver while
-/// keeping the runner alive, memory grows without bound.
+/// Channels are **bounded by default** (since 0.14). Capacities and the
+/// [`Overflow`] policy live on [`RunnerConfig`]; the defaults are 4 frames,
+/// 8 pictures, 32 events, and [`Overflow::DropNewest`]. Setting a capacity
+/// to `0` restores the 0.13-era unbounded [`std::sync::mpsc::channel`]
+/// behavior.
 ///
-/// The accessor methods (`frames()`, `pictures()`, `events()`) return borrowed
-/// receivers, so in the current API a caller cannot detach and drop a receiver
-/// independently of the runner — the runner's [`Drop`] signals `Die` and joins
-/// the worker first, then drops the receivers. The worker does defensively
-/// exit on `SendError` so that a future API surface exposing owned receivers
-/// would not be able to leak the worker thread.
+/// Each accessor pair has two flavors: borrowed ([`frames`](Self::frames),
+/// [`pictures`](Self::pictures), [`events`](Self::events)) for in-place
+/// draining, and owned ([`take_frames`](Self::take_frames),
+/// [`take_pictures`](Self::take_pictures), [`take_events`](Self::take_events))
+/// for handing a receiver to another task or wrapper (e.g. the
+/// `nokhwa-tokio` forwarder). The worker thread stays alive after a
+/// `take_*` call; you can still [`trigger`](Self::trigger) and
+/// [`set_control`](Self::set_control).
+///
+/// The worker defensively exits on `SendError` — so if a caller drops a
+/// taken receiver without invoking [`stop`](Self::stop) or dropping the
+/// runner, the worker still shuts down cleanly on its next send attempt.
 #[derive(Debug)]
 pub struct CameraRunner {
     frames: Option<Receiver<Buffer>>,
@@ -98,6 +267,7 @@ pub struct CameraRunner {
     events: Option<Receiver<CameraEvent>>,
     cmd: Sender<Command>,
     join: Option<JoinHandle<()>>,
+    relays: Vec<JoinHandle<()>>,
 }
 
 impl CameraRunner {
@@ -116,7 +286,8 @@ impl CameraRunner {
 
     fn spawn_stream(mut cam: StreamCamera, cfg: RunnerConfig) -> Result<Self, NokhwaError> {
         cam.open()?;
-        let (frame_tx, frame_rx) = channel::<Buffer>();
+        let (frame_tx, frame_rx, frame_relay) =
+            make_channel::<Buffer>(cfg.frames_capacity, cfg.overflow);
         let (cmd_tx, cmd_rx) = channel::<Command>();
         let poll_interval = cfg.poll_interval;
         let join = thread::spawn(move || loop {
@@ -140,17 +311,23 @@ impl CameraRunner {
                 }
             }
         });
+        let mut relays = Vec::new();
+        if let Some(h) = frame_relay {
+            relays.push(h);
+        }
         Ok(Self {
             frames: Some(frame_rx),
             pictures: None,
             events: None,
             cmd: cmd_tx,
             join: Some(join),
+            relays,
         })
     }
 
     fn spawn_shutter(mut cam: ShutterCamera, cfg: RunnerConfig) -> Self {
-        let (pic_tx, pic_rx) = channel::<Buffer>();
+        let (pic_tx, pic_rx, pic_relay) =
+            make_channel::<Buffer>(cfg.pictures_capacity, cfg.overflow);
         let (cmd_tx, cmd_rx) = channel::<Command>();
         let poll_interval = cfg.poll_interval;
         let shutter_timeout = cfg.shutter_timeout;
@@ -160,7 +337,9 @@ impl CameraRunner {
                 Ok(Command::Trigger) => {
                     if cam.trigger().is_ok() {
                         if let Ok(pic) = cam.take_picture(shutter_timeout) {
-                            let _ = pic_tx.send(pic);
+                            if pic_tx.send(pic).is_err() {
+                                break;
+                            }
                         }
                     }
                 }
@@ -170,12 +349,17 @@ impl CameraRunner {
                 Err(RecvTimeoutError::Timeout) => {}
             }
         });
+        let mut relays = Vec::new();
+        if let Some(h) = pic_relay {
+            relays.push(h);
+        }
         Self {
             frames: None,
             pictures: Some(pic_rx),
             events: None,
             cmd: cmd_tx,
             join: Some(join),
+            relays,
         }
     }
 
@@ -193,13 +377,27 @@ impl CameraRunner {
             None => None,
         };
 
-        let (frame_tx, frame_rx) = channel::<Buffer>();
-        let (pic_tx, pic_rx) = channel::<Buffer>();
+        let (frame_tx, frame_rx, frame_relay) =
+            make_channel::<Buffer>(cfg.frames_capacity, cfg.overflow);
+        let (pic_tx, pic_rx, pic_relay) =
+            make_channel::<Buffer>(cfg.pictures_capacity, cfg.overflow);
         let (cmd_tx, cmd_rx) = channel::<Command>();
+
+        let mut relays: Vec<JoinHandle<()>> = Vec::new();
+        if let Some(h) = frame_relay {
+            relays.push(h);
+        }
+        if let Some(h) = pic_relay {
+            relays.push(h);
+        }
 
         // Events thread (if any).
         let (event_rx_opt, event_join_opt) = if let Some(mut poll) = events_poll {
-            let (ev_tx, ev_rx) = channel::<CameraEvent>();
+            let (ev_tx, ev_rx, ev_relay) =
+                make_channel::<CameraEvent>(cfg.events_capacity, cfg.overflow);
+            if let Some(h) = ev_relay {
+                relays.push(h);
+            }
             let (ev_cmd_tx, ev_cmd_rx) = channel::<()>();
             let event_tick = cfg.event_tick;
             let handle = thread::spawn(move || loop {
@@ -207,7 +405,9 @@ impl CameraRunner {
                     break;
                 }
                 if let Some(event) = poll.next_timeout(event_tick) {
-                    let _ = ev_tx.send(event);
+                    if ev_tx.send(event).is_err() {
+                        break;
+                    }
                 }
             });
             (Some(ev_rx), Some((ev_cmd_tx, handle)))
@@ -223,8 +423,17 @@ impl CameraRunner {
                 match cmd_rx.try_recv() {
                     Ok(Command::Die) | Err(TryRecvError::Disconnected) => break,
                     Ok(Command::Trigger) => {
+                        // Trigger / take-picture errors are intentionally
+                        // swallowed here; a backend that wants to surface
+                        // them should emit a `CameraEvent` via the events
+                        // channel instead.
                         if cam.trigger().is_ok() {
                             if let Ok(pic) = cam.take_picture(shutter_timeout) {
+                                // Policy: hybrid workers treat a dropped
+                                // pictures receiver as "caller isn't
+                                // interested in photos right now" — keep
+                                // streaming frames. Only a dropped *frames*
+                                // receiver shuts the worker down (below).
                                 let _ = pic_tx.send(pic);
                             }
                         }
@@ -264,6 +473,7 @@ impl CameraRunner {
             events: event_rx_opt,
             cmd: cmd_tx,
             join: Some(join),
+            relays,
         })
     }
 
@@ -321,6 +531,15 @@ impl CameraRunner {
 
     fn shutdown(&mut self) {
         let _ = self.cmd.send(Command::Die);
+        // Drop receivers first so any blocked relay `try_send` wakes up and
+        // the relay threads can exit cleanly. For `Overflow::Block` the
+        // worker may be parked inside `SyncSender::send` with `Die`
+        // sitting unread in the command queue; the receiver-drop below is
+        // what unblocks that send (via `SendError`), after which the
+        // worker loop exits.
+        self.frames = None;
+        self.pictures = None;
+        self.events = None;
         if let Some(handle) = self.join.take() {
             if let Err(err) = handle.join() {
                 #[cfg(feature = "logging")]
@@ -329,11 +548,165 @@ impl CameraRunner {
                 let _ = err;
             }
         }
+        for relay in self.relays.drain(..) {
+            if let Err(err) = relay.join() {
+                #[cfg(feature = "logging")]
+                log::warn!("CameraRunner: relay thread panicked: {err:?}");
+                #[cfg(not(feature = "logging"))]
+                let _ = err;
+            }
+        }
+    }
+
+    /// Take ownership of the frames receiver. The worker thread keeps
+    /// running so you can still [`trigger`](Self::trigger) and
+    /// [`set_control`](Self::set_control). Returns `None` if the runner was
+    /// built from a shutter-only backend, or the receiver was already taken.
+    #[must_use]
+    pub fn take_frames(&mut self) -> Option<Receiver<Buffer>> {
+        self.frames.take()
+    }
+
+    /// Take ownership of the pictures receiver. See [`take_frames`](Self::take_frames).
+    #[must_use]
+    pub fn take_pictures(&mut self) -> Option<Receiver<Buffer>> {
+        self.pictures.take()
+    }
+
+    /// Take ownership of the events receiver. See [`take_frames`](Self::take_frames).
+    #[must_use]
+    pub fn take_events(&mut self) -> Option<Receiver<CameraEvent>> {
+        self.events.take()
     }
 }
 
 impl Drop for CameraRunner {
     fn drop(&mut self) {
         self.shutdown();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{make_channel, Overflow};
+    use std::time::Duration;
+
+    #[test]
+    fn unbounded_capacity_zero_is_unbounded() {
+        let (tx, rx, relay) = make_channel::<u32>(0, Overflow::DropNewest);
+        assert!(relay.is_none());
+        for i in 0..1000 {
+            tx.send(i).unwrap();
+        }
+        for i in 0..1000 {
+            assert_eq!(rx.recv().unwrap(), i);
+        }
+    }
+
+    #[test]
+    fn drop_newest_discards_overflow() {
+        let (tx, rx, relay) = make_channel::<u32>(2, Overflow::DropNewest);
+        assert!(relay.is_none());
+        // Fill capacity.
+        tx.send(1).unwrap();
+        tx.send(2).unwrap();
+        // Overflow: the new item (3) is dropped; backlog preserved.
+        tx.send(3).unwrap();
+        assert_eq!(rx.recv().unwrap(), 1);
+        assert_eq!(rx.recv().unwrap(), 2);
+        assert!(rx.recv_timeout(Duration::from_millis(50)).is_err());
+    }
+
+    #[test]
+    fn drop_oldest_has_relay_and_accepts_sends() {
+        // We don't attempt to prove the exact sequence observed — the relay
+        // drains into the user channel on a timer, so timing is inherently
+        // fuzzy. What we do check: a relay handle exists, sends succeed,
+        // and the consumer observes *some* items including at least one
+        // item from the tail of the produced sequence.
+        let (tx, rx, relay) = make_channel::<u32>(2, Overflow::DropOldest);
+        assert!(relay.is_some(), "DropOldest should spawn a relay thread");
+        // Produce items and drain concurrently to avoid `SyncSender::send`
+        // back-pressure through the relay.
+        let producer = std::thread::spawn(move || {
+            for i in 0..50u32 {
+                tx.send(i).unwrap();
+            }
+        });
+        let mut received = Vec::new();
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while std::time::Instant::now() < deadline {
+            match rx.recv_timeout(Duration::from_millis(50)) {
+                Ok(v) => received.push(v),
+                Err(_) => {
+                    if received.len() >= 2 {
+                        break;
+                    }
+                }
+            }
+        }
+        producer.join().unwrap();
+        assert!(
+            !received.is_empty(),
+            "expected at least one item through the relay"
+        );
+        // Items must be strictly increasing — the producer emits unique
+        // `0..50` values and drop-oldest never re-orders.
+        for w in received.windows(2) {
+            assert!(w[0] < w[1], "drop-oldest must not reorder: {received:?}");
+        }
+        drop(rx);
+        relay.unwrap().join().unwrap();
+    }
+
+    #[test]
+    fn drop_oldest_relay_exits_when_rx_dropped() {
+        // When the user drops the receiver, the relay must eventually
+        // observe `Disconnected` and exit, and further producer sends
+        // must fail. Guards against future refactors of the relay loop.
+        use std::time::Instant;
+        let (tx, rx, relay) = make_channel::<u32>(2, Overflow::DropOldest);
+        let relay = relay.unwrap();
+        drop(rx);
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while Instant::now() < deadline {
+            if tx.send(0).is_err() {
+                break;
+            }
+            // Yield so the relay thread has a fair chance to observe
+            // the dropped user_rx and exit.
+            std::thread::yield_now();
+        }
+        assert!(
+            tx.send(0).is_err(),
+            "producer send should fail after the relay exits"
+        );
+        relay.join().unwrap();
+    }
+
+    #[test]
+    fn tx_send_err_on_consumer_drop_unbounded() {
+        let (tx, rx, _) = make_channel::<u32>(0, Overflow::DropNewest);
+        drop(rx);
+        assert!(tx.send(1).is_err());
+    }
+
+    #[test]
+    fn tx_send_err_on_consumer_drop_bounded_newest() {
+        let (tx, rx, _) = make_channel::<u32>(2, Overflow::DropNewest);
+        drop(rx);
+        // SyncSender::try_send surfaces Disconnected after the receiver is dropped.
+        // (Note: a pending Full item buffered before drop is not possible here
+        // because nothing was sent.)
+        assert!(tx.send(1).is_err());
+    }
+
+    #[test]
+    fn default_runnerconfig_is_bounded() {
+        let cfg = super::RunnerConfig::default();
+        assert!(cfg.frames_capacity > 0);
+        assert!(cfg.pictures_capacity > 0);
+        assert!(cfg.events_capacity > 0);
+        assert_eq!(cfg.overflow, Overflow::DropNewest);
     }
 }

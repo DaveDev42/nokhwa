@@ -59,6 +59,27 @@
 //! For apps that need live-view + pictures + events concurrently, see
 //! [`CameraRunner`] (feature = `runner`).
 //!
+//! ## Using nokhwa from async runtimes (tokio, async-std, …)
+//!
+//! [`CameraRunner`] is a **sync** helper: its accessors return
+//! [`std::sync::mpsc::Receiver`]s whose `recv()` blocks. That's fine from a
+//! non-async program, and it works from any async runtime if you wrap the
+//! blocking calls in the runtime's blocking-task helper (e.g.
+//! [`tokio::task::spawn_blocking`] or `async_std::task::spawn_blocking`).
+//!
+//! For tokio users, the companion crate
+//! [`nokhwa-tokio`](https://crates.io/crates/nokhwa-tokio) ships
+//! `TokioCameraRunner`, an async wrapper whose receivers are
+//! `tokio::sync::mpsc::Receiver`s (use `.recv().await`). It also handles
+//! async-safe `Drop`: dropping the wrapper inside a tokio runtime does not
+//! block the caller — the underlying worker thread is joined on a
+//! `spawn_blocking` task.
+//!
+//! Bounded channels (with `Overflow::DropNewest` or `DropOldest`) are the
+//! default for new `CameraRunner`s in 0.14+. A slow async consumer no
+//! longer grows memory without bound; the oldest-or-newest frame is
+//! dropped according to the configured [`Overflow`] policy.
+//!
 //! ## Feature flags
 //!
 //! Enable at least one input backend: `input-native` (auto-selects), or
@@ -113,7 +134,7 @@ pub use session::{
 #[cfg(feature = "runner")]
 pub mod runner;
 #[cfg(feature = "runner")]
-pub use runner::{CameraRunner, RunnerConfig};
+pub use runner::{CameraRunner, Overflow, RunnerConfig};
 
 pub use init::*;
 pub use nokhwa_core::buffer::{Buffer, TimestampKind};

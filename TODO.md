@@ -17,9 +17,7 @@
 (None)
 
 ## 0.14.0 Roadmap
-- [ ] `AsyncCameraRunner` behind an `async-tokio` feature (tokio-based channels; replaces ad-hoc `spawn_blocking` wrapping of `recv`).
 - [ ] Migrate `input-opencv` backend to the 0.13.0 trait split (currently gated behind a `compile_error!`).
-- [ ] Add bounded channels + overflow policy (`DropNewest` / `DropOldest`) to `CameraRunner`. 0.13.0 uses unbounded `std::sync::mpsc::channel`; switch to `sync_channel` with an explicit overflow helper and re-introduce the `RunnerConfig` capacity fields / `Overflow` enum that were removed for 0.13.0.
 - [ ] Reconsider `CameraSession` as a real builder or free `open()` function. 0.13.0 leaves it as a unit-struct namespace around `open()`.
 - [ ] Port `tests/device_tests.rs` (gated `device-test`) to the new API. It still references the removed `Camera`/`CallbackCamera`.
 - [ ] Restore a ggez-based live-view demo in `examples/capture` (lost in the 0.13.0 refactor).

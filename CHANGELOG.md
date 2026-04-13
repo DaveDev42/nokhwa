@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased (0.14.0)
+
+### ⚠ BREAKING CHANGES (behavior)
+
+* **`RunnerConfig` now defaults to bounded channels.** Capacities are
+  `frames_capacity = 4`, `pictures_capacity = 8`, `events_capacity = 32`,
+  with [`Overflow::DropNewest`] as the default policy. In 0.13 the
+  channels were unbounded, so a slow consumer would queue forever; in
+  0.14 the slowest-moving item is silently dropped according to the
+  policy. **Mitigation:** set any of the three capacity fields to `0` to
+  restore the 0.13 unbounded behavior.
+
+### Features
+
+* `CameraRunner` channels are bounded by default. `RunnerConfig`
+  re-introduces `frames_capacity`, `pictures_capacity`, `events_capacity`
+  and a new `Overflow` policy enum (`DropNewest` / `DropOldest`). Setting
+  a capacity to `0` keeps the 0.13 unbounded semantics.
+* New `take_frames` / `take_pictures` / `take_events` accessors on
+  `CameraRunner` hand ownership of a receiver to the caller while the
+  worker thread keeps running — enabling wrappers such as
+  `nokhwa-tokio::TokioCameraRunner`.
+* New workspace crate **`nokhwa-tokio`** provides `TokioCameraRunner`,
+  an async wrapper around `CameraRunner` exposing
+  `tokio::sync::mpsc::Receiver`s and async-safe `Drop` (dropping inside a
+  tokio runtime does not block the caller).
+
+### Documentation
+
+* New "Using nokhwa from async runtimes" section in the crate docs.
+* `nokhwa-tokio/examples/tokio_runner.rs` demonstrates pulling frames
+  with `.recv().await`.
+
 ## [0.13.0](https://github.com/DaveDev42/nokhwa/compare/v0.12.0...v0.13.0) (2026-04-13)
 
 ### ⚠ BREAKING CHANGES

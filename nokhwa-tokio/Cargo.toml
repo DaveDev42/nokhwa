@@ -1,0 +1,55 @@
+[package]
+name        = "nokhwa-tokio"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Tokio integration for `nokhwa` — async wrapper around CameraRunner"
+keywords    = [ "camera", "tokio", "async", "webcam" ]
+categories  = [ "api-bindings", "multimedia", "asynchronous" ]
+readme      = "README.md"
+
+[dependencies]
+
+[dependencies.nokhwa-core]
+path    = "../nokhwa-core"
+
+# `nokhwa` requires at least one input backend to compile. Select the
+# native one per target so `nokhwa-tokio` builds standalone on every OS.
+# Downstream consumers can enable additional backends on the `nokhwa`
+# crate directly.
+[target.'cfg(target_os = "linux")'.dependencies.nokhwa]
+path             = ".."
+default-features = false
+features         = [ "runner", "input-v4l" ]
+
+[target.'cfg(target_os = "macos")'.dependencies.nokhwa]
+path             = ".."
+default-features = false
+features         = [ "runner", "input-avfoundation" ]
+
+[target.'cfg(target_os = "windows")'.dependencies.nokhwa]
+path             = ".."
+default-features = false
+features         = [ "runner", "input-msmf" ]
+
+# Fallback for any target without a native backend (e.g. FreeBSD, iOS,
+# wasm32). The `nokhwa` crate refuses to compile without an input-* feature
+# so we intentionally omit this dep — downstream users on such targets
+# must enable a suitable backend on `nokhwa` themselves and will then pick
+# up `nokhwa-tokio` transitively. A clear compile error from `nokhwa`'s
+# own `compile_error!()` is preferable to a silent non-functional build.
+
+[dependencies.tokio]
+version          = "1"
+default-features = false
+features         = [ "sync", "rt" ]
+
+[dev-dependencies.tokio]
+version  = "1"
+features = [ "macros", "rt", "time", "sync" ]
+
+[dev-dependencies.nokhwa-core]
+path     = "../nokhwa-core"
+features = [ "testing" ]
