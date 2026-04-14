@@ -692,17 +692,20 @@ fn mat_from_decoded(
     cv_type: i32,
     src_format: FrameFormat,
 ) -> Result<opencv::core::Mat, NokhwaError> {
-    use opencv::core::{Mat, Mat_AUTO_STEP};
+    use std::ffi::c_void;
 
-    // SAFETY: `new_rows_cols_with_data` borrows `data` without copying.
-    // We immediately `.clone()` the Mat so it owns its own memory,
-    // decoupling the returned Mat from the temporary `data` slice.
+    use opencv::core::{Mat, MatTraitConst, Mat_AUTO_STEP};
+
+    // SAFETY: `data` outlives this block; `try_clone` deep-copies the
+    // aliasing `Mat` before returning, so the returned `Mat` no longer
+    // references the input slice.
+    let data_ptr = data.as_ptr().cast_mut().cast::<c_void>();
     unsafe {
-        let tmp = Mat::new_rows_cols_with_data(
+        let tmp = Mat::new_rows_cols_with_data_unsafe(
             resolution.height_y as i32,
             resolution.width_x as i32,
             cv_type,
-            data.as_ptr().cast_mut().cast(),
+            data_ptr,
             Mat_AUTO_STEP,
         )
         .map_err(|why| NokhwaError::ProcessFrameError {
@@ -711,11 +714,12 @@ fn mat_from_decoded(
             error: why.to_string(),
         })?;
 
-        tmp.clone().map_err(|why| NokhwaError::ProcessFrameError {
-            src: src_format,
-            destination: "OpenCV Mat".to_string(),
-            error: why.to_string(),
-        })
+        tmp.try_clone()
+            .map_err(|why| NokhwaError::ProcessFrameError {
+                src: src_format,
+                destination: "OpenCV Mat".to_string(),
+                error: why.to_string(),
+            })
     }
 }
 

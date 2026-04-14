@@ -14,9 +14,6 @@
 ## Performance
 - [ ] `OpenCvCaptureDevice::raw_frame_vec` allocates a fresh `Vec<u8>` per frame and swizzles BGR→RGB byte-by-byte. Rewrite as a single pre-allocated buffer with chunked swap for throughput.
 
-## 0.14.0 Roadmap
-- [ ] Wire `input-opencv` into CI (requires installing the OpenCV system library on the runner).
-
 ## Backlog
 - [ ] Re-implement GStreamer backend (cross-platform, previously 839 lines)
 - [ ] Re-implement UVC backend (cross-platform via libusb, previously 561 lines)

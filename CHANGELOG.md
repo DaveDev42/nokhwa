@@ -61,6 +61,10 @@
   on macOS and Linux: `nokhwa-bindings-windows-msmf` exposes a non-Windows
   `MediaFoundationCaptureDevice` stub mirroring the existing
   `V4LCaptureDevice` stub.
+* CI: new `Feature check (input-opencv)` job on Ubuntu runs
+  `cargo check --features input-opencv` with `libopencv-dev` + `libclang-dev`
+  installed, so regressions in the restored OpenCV backend are caught on
+  every PR.
 
 ### Documentation
 
