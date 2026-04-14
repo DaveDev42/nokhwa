@@ -692,17 +692,20 @@ fn mat_from_decoded(
     cv_type: i32,
     src_format: FrameFormat,
 ) -> Result<opencv::core::Mat, NokhwaError> {
+    use std::ffi::c_void;
+
     use opencv::core::{Mat, MatTraitConst, Mat_AUTO_STEP};
 
-    // SAFETY: `new_rows_cols_with_data_unsafe` borrows `data` without copying.
-    // We immediately `try_clone` the Mat so it owns its own memory,
-    // decoupling the returned Mat from the temporary `data` slice.
+    // SAFETY: `data` outlives this block; `try_clone` deep-copies the
+    // aliasing `Mat` before returning, so the returned `Mat` no longer
+    // references the input slice.
+    let data_ptr = data.as_ptr().cast_mut().cast::<c_void>();
     unsafe {
         let tmp = Mat::new_rows_cols_with_data_unsafe(
             resolution.height_y as i32,
             resolution.width_x as i32,
             cv_type,
-            data.as_ptr().cast_mut().cast(),
+            data_ptr,
             Mat_AUTO_STEP,
         )
         .map_err(|why| NokhwaError::ProcessFrameError {
