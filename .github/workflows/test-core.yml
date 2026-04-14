@@ -35,3 +35,19 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --features input-v4l,${{ matrix.features }}
+
+  # Verifies the cross-platform OpenCV backend still compiles. Installs
+  # OpenCV from apt so the `opencv` crate's clang-runtime bindgen pass
+  # can find the system headers.
+  check-opencv:
+    name: Feature check (input-opencv)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - name: Install OpenCV
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopencv-dev clang libclang-dev
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --features input-opencv
