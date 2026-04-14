@@ -166,6 +166,18 @@ pub fn open(index: CameraIndex, req: OpenRequest) -> Result<OpenedCamera, Nokhwa
         let dev = MediaFoundationCaptureDevice::new(&index, requested)?;
         return Ok(OpenedCamera::from_device(Box::new(dev)));
     }
+    // Cross-platform opencv fallback. Reachable only when no native backend
+    // matched this target / feature configuration above. The `allow` covers
+    // builds that compile both a native backend AND `input-opencv`, where
+    // every native branch above unconditionally returns and this block is
+    // statically unreachable.
+    #[cfg(feature = "input-opencv")]
+    #[allow(unreachable_code)]
+    {
+        use crate::backends::capture::OpenCvCaptureDevice;
+        let dev = OpenCvCaptureDevice::new(&index, requested)?;
+        return Ok(OpenedCamera::from_device(Box::new(dev)));
+    }
     #[allow(unreachable_code)]
     {
         let _ = (index, requested);

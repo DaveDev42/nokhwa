@@ -18,7 +18,7 @@ use nokhwa_core::types::RequestedFormatType;
 use nokhwa_core::{
     buffer::Buffer,
     error::NokhwaError,
-    traits::CaptureBackendTrait,
+    traits::{CameraDevice, FrameSource},
     types::{
         ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo, ControlValueDescription,
         ControlValueSetter, FrameFormat, KnownCameraControl, RequestedFormat, Resolution,
@@ -32,10 +32,14 @@ use opencv::{
         CAP_V4L2,
     },
 };
-use std::{borrow::Cow, collections::HashMap};
+use std::borrow::Cow;
 
-/// Attempts to convert a [`KnownCameraControl`] into a `OpenCV` video capture property.
-/// If the associated control is not found, this will return `Err`
+/// Attempts to convert a [`KnownCameraControl`] into an `OpenCV` video capture property.
+/// If the associated control is not found, this will return `Err`.
+///
+/// # Errors
+/// Returns [`NokhwaError::UnsupportedOperationError`] if the control has no
+/// `OpenCV` equivalent.
 pub fn known_camera_control_to_video_capture_property(
     ctrl: KnownCameraControl,
 ) -> Result<VideoCaptureProperties, NokhwaError> {
@@ -58,21 +62,26 @@ pub fn known_camera_control_to_video_capture_property(
     }
 }
 
-/// The backend struct that interfaces with `OpenCV`. Note that an `opencv` matching the version that this was either compiled on must be present on the user's machine. (usually 4.5.2 or greater)
-/// For more information, please see [`opencv-rust`](https://github.com/twistedfall/opencv-rust) and [`OpenCV VideoCapture Docs`](https://docs.opencv.org/4.5.2/d8/dfe/classcv_1_1VideoCapture.html).
+/// The backend struct that interfaces with `OpenCV`. An `opencv` install
+/// matching the compile-time version must be present on the user's machine
+/// (usually 4.5.2 or greater). See
+/// [`opencv-rust`](https://github.com/twistedfall/opencv-rust) and
+/// [`OpenCV VideoCapture Docs`](https://docs.opencv.org/4.5.2/d8/dfe/classcv_1_1VideoCapture.html).
 ///
-/// To see what this does, please see [`CaptureBackendTrait`]
+/// Implements [`CameraDevice`] and [`FrameSource`].
+///
 /// # Quirks
-///  - **Some features don't work properly on this backend (yet)! Setting [`Resolution`], FPS, [`FrameFormat`] does not work and will default to 640x480 30FPS. This is being worked on.**
-///  - This is a **cross-platform** backend. This means that it will work on most platforms given that `OpenCV` is present.
-///  - This backend can also do IP Camera input.
-///  - The backend's backend will default to system level APIs on Linux(V4L2), Mac(AVFoundation), and Windows(Media Foundation). Otherwise, it will decide for itself.
-///  - If the [`OpenCvCaptureDevice`] is initialized as a `IPCamera`, the [`CameraFormat`]'s `index` value will be [`u32::MAX`](std::u32::MAX) (4294967295).
-///  - `OpenCV` does not support camera querying. Camera Name and Camera supported resolution/fps/fourcc is a [`UnsupportedOperationError`](NokhwaError::UnsupportedOperationError).
-/// Note: [`resolution()`](crate::camera_traits::CaptureBackendTrait::resolution()), [`frame_format()`](crate::camera_traits::CaptureBackendTrait::frame_format()), and [`frame_rate()`](crate::camera_traits::CaptureBackendTrait::frame_rate()) is not affected.
-///  - [`CameraInfo`]'s human name will be "`OpenCV` Capture Device {location}"
+///  - **Setting [`Resolution`], FPS, [`FrameFormat`] is best-effort** — many
+///    drivers silently ignore the request and keep 640×480 @ 30 FPS.
+///  - This is a **cross-platform** backend; it will work on most platforms where
+///    `OpenCV` is present.
+///  - This backend can also accept an IP-camera URL as its [`CameraIndex::String`].
+///  - The API preference order is the native OS API (linux → `V4L2`,
+///    mac → `AVFoundation`, windows → `MSMF`), else `CAP_ANY`.
+///  - `OpenCV` does not support device enumeration: [`FrameSource::compatible_formats`]
+///    and [`FrameSource::compatible_fourcc`] return [`NokhwaError::UnsupportedOperationError`].
+///  - [`CameraInfo`]'s human name will be "`OpenCV` Capture Device {location}".
 ///  - [`CameraInfo`]'s description will contain the Camera's Index or IP.
-///  - The API Preference order is the native OS API (linux => `v4l2`, mac => `AVFoundation`, windows => `MSMF`) than [`CAP_AUTO`](https://docs.opencv.org/4.5.2/d4/d15/group__videoio__flags__base.html#gga023786be1ee68a9105bf2e48c700294da77ab1fe260fd182f8ec7655fab27a31d)
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-opencv")))]
 pub struct OpenCvCaptureDevice {
     camera_format: CameraFormat,
@@ -82,22 +91,66 @@ pub struct OpenCvCaptureDevice {
     video_capture: VideoCapture,
 }
 
-#[allow(clippy::must_use_candidate)]
+/// Fallback format used when the caller does not pin an [`RequestedFormatType::Exact`]
+/// format (e.g. `OpenRequest::any()`). OpenCV does not expose enumeration, so we
+/// pick the VideoCapture-reported baseline (640×480 @ 30fps).
+///
+/// The [`FrameFormat`] is fixed to [`OPENCV_OUTPUT_FORMAT`] — see that constant
+/// for why.
+const OPENCV_DEFAULT_WIDTH: u32 = 640;
+const OPENCV_DEFAULT_HEIGHT: u32 = 480;
+const OPENCV_DEFAULT_FPS: u32 = 30;
+
+/// `OpenCV`'s `VideoCapture::read` always hands back a BGR `Mat`; our
+/// [`Self::raw_frame_vec`] swizzles it to RGB24 before returning. The
+/// [`Buffer`] produced by [`FrameSource::frame`] therefore carries RGB24 bytes
+/// regardless of what the caller requested, and must be tagged as
+/// [`FrameFormat::RAWRGB`] so downstream decoders treat the payload correctly.
+const OPENCV_OUTPUT_FORMAT: FrameFormat = FrameFormat::RAWRGB;
+
+/// Normalise a caller-supplied [`CameraFormat`] to the format the OpenCV
+/// backend actually emits: the caller's resolution and frame-rate are kept,
+/// but the [`FrameFormat`] is always coerced to [`OPENCV_OUTPUT_FORMAT`].
+///
+/// Callers that expect the `FrameFormat` they passed in to be honoured will
+/// observe the coercion via [`FrameSource::negotiated_format`].
+fn normalise_format(fmt: CameraFormat) -> CameraFormat {
+    CameraFormat::new_from(
+        fmt.width(),
+        fmt.height(),
+        OPENCV_OUTPUT_FORMAT,
+        fmt.frame_rate(),
+    )
+}
+
 impl OpenCvCaptureDevice {
     /// Creates a new capture device using the `OpenCV` backend.
     ///
-    /// Indexes are gives to devices by the OS, and usually numbered by order of discovery.
+    /// Indexes are given to devices by the OS, and usually numbered by order of discovery.
     ///
-    /// `IPCameras` follow the format
+    /// `IPCameras` follow the format:
     /// ```.ignore
     /// <protocol>://<IP>:<port>/
     /// ```
-    /// , but please refer to the manufacturer for the actual IP format.
+    /// but refer to the manufacturer for the actual IP format.
+    ///
+    /// # `FrameFormat` coercion
+    ///
+    /// OpenCV's `VideoCapture::read` always returns a BGR `Mat`, which this
+    /// backend swizzles to RGB24. The [`FrameFormat`] component of
+    /// `cam_fmt` is therefore **ignored** — `negotiated_format()` and every
+    /// [`Buffer`] emitted by [`FrameSource::frame`] always report
+    /// [`FrameFormat::RAWRGB`]. Only the requested resolution and frame-rate
+    /// pass through to the driver (best-effort — see the type-level quirks).
+    /// Requests that are not [`RequestedFormatType::Exact`] fall back to a
+    /// 640×480 RAWRGB @ 30fps baseline.
     ///
     /// # Errors
-    /// If the backend fails to open the camera (e.g. Device does not exist at specified index/ip), Camera does not support specified [`CameraFormat`], and/or other `OpenCV` Error, this will error.
+    /// Errors if the backend fails to open the camera (e.g. device does not
+    /// exist at the specified index/ip), the camera does not support the
+    /// specified [`CameraFormat`], or any other `OpenCV` error occurs.
     /// # Panics
-    /// If the API u32 -> i32 fails this will error
+    /// Panics if the requested `CameraIndex::Index` does not fit into `i32`.
     #[allow(clippy::cast_possible_wrap)]
     pub fn new(index: &CameraIndex, cam_fmt: RequestedFormat) -> Result<Self, NokhwaError> {
         let api_pref = if index.is_string() {
@@ -106,7 +159,7 @@ impl OpenCvCaptureDevice {
             get_api_pref_int()
         };
 
-        let mut video_capture = match &index {
+        let mut video_capture = match index {
             CameraIndex::Index(idx) => VideoCapture::new(*idx as i32, api_pref),
             CameraIndex::String(ip) => VideoCapture::from_file(ip.as_str(), api_pref),
         }
@@ -115,12 +168,23 @@ impl OpenCvCaptureDevice {
             error: why.to_string(),
         })?;
 
-        let camera_format =
-            if let RequestedFormatType::Exact(exact) = cam_fmt.requested_format_type() {
-                exact
-            } else {
-                return Err(NokhwaError::UnsupportedOperationError(ApiBackend::OpenCv));
-            };
+        // OpenCV has no enumeration API, so requests that aren't `Exact` fall
+        // back to the backend's baseline (640×480 @ 30fps, RGB24). This matches
+        // the "best-effort" quirk documented above — many drivers will ignore
+        // the requested format regardless of what we ask for.
+        //
+        // The `Exact` branch keeps the caller's resolution/fps but normalises
+        // the `FrameFormat` to `OPENCV_OUTPUT_FORMAT` (RGB24), because
+        // `raw_frame_vec` always emits RGB24 — see `OPENCV_OUTPUT_FORMAT`.
+        let camera_format = match cam_fmt.requested_format_type() {
+            RequestedFormatType::Exact(exact) => normalise_format(exact),
+            _ => CameraFormat::new_from(
+                OPENCV_DEFAULT_WIDTH,
+                OPENCV_DEFAULT_HEIGHT,
+                OPENCV_OUTPUT_FORMAT,
+                OPENCV_DEFAULT_FPS,
+            ),
+        };
 
         set_properties(&mut video_capture, camera_format)?;
 
@@ -140,39 +204,38 @@ impl OpenCvCaptureDevice {
         })
     }
 
-    /// Gets weather said capture device is an `IPCamera`.
+    /// Returns `true` if this capture device was opened as an IP camera.
+    #[must_use]
     pub fn is_ip_camera(&self) -> bool {
-        match self.camera_location {
-            CameraIndex::Index(_) => false,
-            CameraIndex::String(_) => true,
-        }
+        matches!(self.camera_location, CameraIndex::String(_))
     }
 
-    /// Gets weather said capture device is an OS-based indexed camera.
+    /// Returns `true` if this capture device was opened by OS-assigned index.
+    #[must_use]
     pub fn is_index_camera(&self) -> bool {
-        match self.camera_location {
-            CameraIndex::Index(_) => true,
-            CameraIndex::String(_) => false,
-        }
+        matches!(self.camera_location, CameraIndex::Index(_))
     }
 
-    /// Gets the camera location
+    /// Camera location this backend was opened against.
+    #[must_use]
     pub fn camera_location(&self) -> &CameraIndex {
         &self.camera_location
     }
 
-    /// Gets the `OpenCV` API Preference number. Please refer to [`OpenCV VideoCapture Flag Docs`](https://docs.opencv.org/4.5.2/d4/d15/group__videoio__flags__base.html).
+    /// `OpenCV` API preference integer. See
+    /// [`OpenCV VideoCapture flag docs`](https://docs.opencv.org/4.5.2/d4/d15/group__videoio__flags__base.html).
+    #[must_use]
     pub fn opencv_preference(&self) -> i32 {
         self.api_preference
     }
 
     /// Gets the RGB24 frame directly read from `OpenCV` without any additional processing.
     /// # Errors
-    /// If the frame is failed to be read, this will error.
+    /// Errors if the frame fails to be read.
     #[allow(clippy::cast_sign_loss)]
     pub fn raw_frame_vec(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
         let frame_fmt = Some(self.camera_format.format());
-        if !self.is_stream_open() {
+        if !self.is_open() {
             return Err(NokhwaError::ReadFrameError {
                 message: "Stream is not open!".to_string(),
                 format: frame_fmt,
@@ -191,7 +254,7 @@ impl OpenCvCaptureDevice {
             }
             Err(why) => {
                 return Err(NokhwaError::ReadFrameError {
-                    message: format!("Failed to read frame from videocapture: {}", why),
+                    message: format!("Failed to read frame from videocapture: {why}"),
                     format: frame_fmt,
                 })
             }
@@ -215,8 +278,7 @@ impl OpenCvCaptureDevice {
                             Err(why) => {
                                 return Err(NokhwaError::ReadFrameError {
                                     message: format!(
-                                        "Failed to convert frame into raw Vec3b: {}",
-                                        why
+                                        "Failed to convert frame into raw Vec3b: {why}"
                                     ),
                                     format: frame_fmt,
                                 })
@@ -245,17 +307,16 @@ impl OpenCvCaptureDevice {
             }
             Err(why) => Err(NokhwaError::ReadFrameError {
                 message: format!(
-                    "Failed to read frame from videocapture: failed to read size: {}",
-                    why
+                    "Failed to read frame from videocapture: failed to read size: {why}"
                 ),
                 format: frame_fmt,
             }),
         }
     }
 
-    /// Gets the resolution raw as read by `OpenCV`.
+    /// Resolution as currently reported by `OpenCV`.
     /// # Errors
-    /// If the resolution is failed to be read (e.g. invalid or not supported), this will error.
+    /// Errors if the resolution cannot be read (e.g. invalid or not supported).
     #[allow(clippy::cast_sign_loss)]
     #[allow(clippy::cast_possible_truncation)]
     pub fn raw_resolution(&self) -> Result<Resolution, NokhwaError> {
@@ -282,9 +343,9 @@ impl OpenCvCaptureDevice {
         Ok(Resolution::new(width, height))
     }
 
-    /// Gets the framerate raw as read by `OpenCV`.
+    /// Framerate as currently reported by `OpenCV`.
     /// # Errors
-    /// If the framerate is failed to be read (e.g. invalid or not supported), this will error.
+    /// Errors if the framerate cannot be read (e.g. invalid or not supported).
     #[allow(clippy::cast_sign_loss)]
     #[allow(clippy::cast_possible_truncation)]
     pub fn raw_framerate(&self) -> Result<u32, NokhwaError> {
@@ -296,134 +357,28 @@ impl OpenCvCaptureDevice {
             }),
         }
     }
-}
 
-impl CaptureBackendTrait for OpenCvCaptureDevice {
-    fn backend(&self) -> ApiBackend {
-        ApiBackend::OpenCv
-    }
-
-    fn camera_info(&self) -> &CameraInfo {
-        &self.camera_info
-    }
-
-    #[allow(clippy::cast_lossless)]
-    fn refresh_camera_format(&mut self) -> Result<(), NokhwaError> {
-        let width = u32::from(
-            self.video_capture
-                .set(CAP_PROP_FRAME_WIDTH, self.camera_format.width() as f64)
-                .map_err(|why| NokhwaError::SetPropertyError {
-                    property: "Resolution Width".to_string(),
-                    value: self.camera_format.to_string(),
-                    error: why.to_string(),
-                })?,
-        );
-        let height = self
-            .video_capture
-            .set(CAP_PROP_FRAME_HEIGHT, self.camera_format.height() as f64)
-            .map_err(|why| NokhwaError::SetPropertyError {
-                property: "Resolution Height".to_string(),
-                value: self.camera_format.to_string(),
-                error: why.to_string(),
-            })? as u32;
-        let fps = self
-            .video_capture
-            .set(CAP_PROP_FPS, self.camera_format.frame_rate() as f64)
-            .map_err(|why| NokhwaError::SetPropertyError {
-                property: "FPS".to_string(),
-                value: self.camera_format.to_string(),
-                error: why.to_string(),
-            })? as u32;
-
-        let ffmt = self.frame_format();
-        self.set_camera_format(CameraFormat::new_from(width, height, ffmt, fps))?;
-
-        Ok(())
-    }
-
-    fn camera_format(&self) -> CameraFormat {
-        self.camera_format
-    }
-
-    fn set_camera_format(&mut self, new_fmt: CameraFormat) -> Result<(), NokhwaError> {
-        let current_format = self.camera_format;
-        let is_opened = match self.video_capture.is_opened() {
-            Ok(opened) => opened,
-            Err(why) => {
-                return Err(NokhwaError::GetPropertyError {
-                    property: "Is Stream Open".to_string(),
-                    error: why.to_string(),
-                })
-            }
-        };
-
-        self.camera_format = new_fmt;
-
-        if let Err(why) = set_properties(&mut self.video_capture, new_fmt) {
-            self.camera_format = current_format;
-            return Err(why);
-        }
-        if is_opened {
-            self.stop_stream()?;
-            if let Err(why) = self.open_stream() {
-                return Err(NokhwaError::OpenDeviceError {
-                    device: self.camera_location.to_string(),
-                    error: why.to_string(),
-                });
-            }
-        }
-        Ok(())
-    }
-
-    fn compatible_list_by_resolution(
-        &mut self,
-        _fourcc: FrameFormat,
-    ) -> Result<HashMap<Resolution, Vec<u32>>, NokhwaError> {
-        Err(NokhwaError::UnsupportedOperationError(ApiBackend::OpenCv))
-    }
-
-    fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
-        Err(NokhwaError::UnsupportedOperationError(ApiBackend::OpenCv))
-    }
-
-    fn resolution(&self) -> Resolution {
-        self.raw_resolution()
-            .unwrap_or_else(|_| Resolution::new(640, 480))
-    }
-
-    fn set_resolution(&mut self, new_res: Resolution) -> Result<(), NokhwaError> {
-        let mut current_fmt = self.camera_format;
-        current_fmt.set_resolution(new_res);
-        self.set_camera_format(current_fmt)
-    }
-
-    fn frame_rate(&self) -> u32 {
-        self.raw_framerate().unwrap_or(30)
-    }
-
-    fn set_frame_rate(&mut self, new_fps: u32) -> Result<(), NokhwaError> {
-        let mut current_fmt = self.camera_format;
-        current_fmt.set_frame_rate(new_fps);
-        self.set_camera_format(current_fmt)
-    }
-
-    fn frame_format(&self) -> FrameFormat {
-        self.camera_format.format()
-    }
-
-    fn set_frame_format(&mut self, fourcc: FrameFormat) -> Result<(), NokhwaError> {
-        let mut current_fmt = self.camera_format;
-        current_fmt.set_format(fourcc);
-        self.set_camera_format(current_fmt)
-    }
-
-    fn camera_control(&self, control: KnownCameraControl) -> Result<CameraControl, NokhwaError> {
+    /// Look up a single control by its [`KnownCameraControl`] identifier.
+    /// Kept as an inherent helper after the trait split; used internally by
+    /// `set_control` to verify writes, mirroring the v4l backend.
+    ///
+    /// The returned [`CameraControl`] reports only the current value. OpenCV
+    /// does not expose min/max/step/default/flags for `VideoCapture` properties,
+    /// so those fields are placeholders (`default: 0.0`, `step: 0.0`, empty flags).
+    ///
+    /// # Errors
+    /// Returns [`NokhwaError`] if the control has no `OpenCV` equivalent or
+    /// the underlying get fails.
+    pub fn camera_control(
+        &self,
+        control: KnownCameraControl,
+    ) -> Result<CameraControl, NokhwaError> {
         let id = known_camera_control_to_video_capture_property(control)? as i32;
         let current = self
             .video_capture
             .get(id)
             .map_err(|why| NokhwaError::GetPropertyError {
-                property: id.to_string(),
+                property: format!("{control:?}"),
                 error: why.to_string(),
             })?;
         Ok(CameraControl::new(
@@ -438,25 +393,36 @@ impl CaptureBackendTrait for OpenCvCaptureDevice {
             true,
         ))
     }
+}
 
-    fn camera_controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+impl CameraDevice for OpenCvCaptureDevice {
+    fn backend(&self) -> ApiBackend {
+        ApiBackend::OpenCv
+    }
+
+    fn info(&self) -> &CameraInfo {
+        &self.camera_info
+    }
+
+    fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
         Err(NokhwaError::UnsupportedOperationError(ApiBackend::OpenCv))
     }
 
     #[allow(clippy::cast_precision_loss)]
     #[allow(clippy::cast_lossless)]
-    fn set_camera_control(
+    fn set_control(
         &mut self,
         id: KnownCameraControl,
         value: ControlValueSetter,
     ) -> Result<(), NokhwaError> {
-        let control_val = match value {
-            ControlValueSetter::Integer(i) => i as f64,
-            ControlValueSetter::Float(f) => f,
-            ControlValueSetter::Boolean(b) => u8::from(b) as f64,
+        let property = format!("{id:?}");
+        let control_val = match &value {
+            ControlValueSetter::Integer(i) => *i as f64,
+            ControlValueSetter::Float(f) => *f,
+            ControlValueSetter::Boolean(b) => u8::from(*b) as f64,
             val => {
                 return Err(NokhwaError::SetPropertyError {
-                    property: "Camera Control".to_string(),
+                    property,
                     value: val.to_string(),
                     error: "unsupported value".to_string(),
                 })
@@ -470,13 +436,13 @@ impl CaptureBackendTrait for OpenCvCaptureDevice {
                 control_val,
             )
             .map_err(|why| NokhwaError::SetPropertyError {
-                property: "Camera Control".to_string(),
+                property: property.clone(),
                 value: control_val.to_string(),
                 error: why.to_string(),
             })?
         {
             return Err(NokhwaError::SetPropertyError {
-                property: "Camera Control".to_string(),
+                property,
                 value: control_val.to_string(),
                 error: "false".to_string(),
             });
@@ -485,7 +451,7 @@ impl CaptureBackendTrait for OpenCvCaptureDevice {
         let set_value = self.camera_control(id)?.value();
         if set_value != value {
             return Err(NokhwaError::SetPropertyError {
-                property: "Camera Control".to_string(),
+                property,
                 value: control_val.to_string(),
                 error: "failed to set value: rejected".to_string(),
             });
@@ -493,9 +459,63 @@ impl CaptureBackendTrait for OpenCvCaptureDevice {
 
         Ok(())
     }
+}
+
+impl FrameSource for OpenCvCaptureDevice {
+    fn negotiated_format(&self) -> CameraFormat {
+        self.camera_format
+    }
+
+    fn set_format(&mut self, new_fmt: CameraFormat) -> Result<(), NokhwaError> {
+        // Coerce the caller's request to what OpenCV actually emits (RGB24).
+        // Mirrors the constructor so `negotiated_format()` never lies about
+        // the bytes handed back from `frame()`.
+        let normalised = normalise_format(new_fmt);
+        let current_format = self.camera_format;
+        let was_open = match self.video_capture.is_opened() {
+            Ok(opened) => opened,
+            Err(why) => {
+                return Err(NokhwaError::GetPropertyError {
+                    property: "Is Stream Open".to_string(),
+                    error: why.to_string(),
+                })
+            }
+        };
+
+        self.camera_format = normalised;
+
+        if let Err(why) = set_properties(&mut self.video_capture, normalised) {
+            self.camera_format = current_format;
+            return Err(why);
+        }
+        if was_open {
+            self.close()?;
+            if let Err(why) = self.open() {
+                // Revert the advertised format so getters don't lie. The
+                // device stays closed — caller must reopen after
+                // diagnosing `why`. We don't replay `set_properties` here
+                // because the `VideoCapture` is released and would ignore
+                // the call.
+                self.camera_format = current_format;
+                return Err(NokhwaError::OpenDeviceError {
+                    device: self.camera_location.to_string(),
+                    error: why.to_string(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+        Err(NokhwaError::UnsupportedOperationError(ApiBackend::OpenCv))
+    }
+
+    fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
+        Err(NokhwaError::UnsupportedOperationError(ApiBackend::OpenCv))
+    }
 
     #[allow(clippy::cast_possible_wrap)]
-    fn open_stream(&mut self) -> Result<(), NokhwaError> {
+    fn open(&mut self) -> Result<(), NokhwaError> {
         match self.camera_location.clone() {
             CameraIndex::Index(idx) => {
                 match self.video_capture.open(idx as i32, get_api_pref_int()) {
@@ -538,7 +558,7 @@ impl CaptureBackendTrait for OpenCvCaptureDevice {
         }
     }
 
-    fn is_stream_open(&self) -> bool {
+    fn is_open(&self) -> bool {
         self.video_capture.is_opened().unwrap_or(false)
     }
 
@@ -546,26 +566,37 @@ impl CaptureBackendTrait for OpenCvCaptureDevice {
         let camera_resolution = self.camera_format.resolution();
         let expected_size = (camera_resolution.width() * camera_resolution.height() * 3) as usize;
         let raw = self.frame_raw()?;
-        let mut data = match raw {
+        let data = match raw {
             Cow::Owned(v) => v,
             Cow::Borrowed(s) => s.to_vec(),
         };
-        data.resize(expected_size, 0_u8);
+        if data.len() != expected_size {
+            return Err(NokhwaError::ReadFrameError {
+                message: format!(
+                    "OpenCV produced {} bytes, expected {expected_size} \
+                     ({}×{}, 3 bytes/pixel after BGR→RGB swizzle) — driver \
+                     likely returned a different resolution than requested",
+                    data.len(),
+                    camera_resolution.width(),
+                    camera_resolution.height(),
+                ),
+                format: Some(OPENCV_OUTPUT_FORMAT),
+            });
+        }
         Ok(Buffer::from_vec(
             camera_resolution,
             data,
-            self.camera_format.format(),
+            OPENCV_OUTPUT_FORMAT,
         ))
     }
 
     fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
-        let cow = self.raw_frame_vec()?;
-        Ok(cow)
+        self.raw_frame_vec()
     }
 
-    fn stop_stream(&mut self) -> Result<(), NokhwaError> {
+    fn close(&mut self) -> Result<(), NokhwaError> {
         match self.video_capture.release() {
-            Ok(_) => Ok(()),
+            Ok(()) => Ok(()),
             Err(why) => Err(NokhwaError::StreamShutdownError {
                 message: why.to_string(),
                 backend: Some(ApiBackend::OpenCv),
@@ -578,13 +609,14 @@ fn get_api_pref_int() -> i32 {
     match std::env::consts::OS {
         "linux" => CAP_V4L2,
         "windows" => CAP_MSMF,
-        "mac" => CAP_AVFOUNDATION,
-        &_ => CAP_ANY,
+        "macos" | "ios" => CAP_AVFOUNDATION,
+        _ => CAP_ANY,
     }
 }
 
-// I'm done. This stupid POS refuses to actually do anything useful with camera settings
-// If anyone else wants to tackle this monster, please do.
+// Historical note: setting OpenCV camera properties is unreliable across drivers.
+// Many backends silently ignore the requested width/height/fps. We surface any
+// explicit error but do not attempt to verify the applied format.
 fn set_properties(vc: &mut VideoCapture, camera_format: CameraFormat) -> Result<(), NokhwaError> {
     if !vc
         .set(CAP_PROP_FRAME_WIDTH, f64::from(camera_format.width()))

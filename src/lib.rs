@@ -98,13 +98,6 @@
 //! [`ShutterCapture`](nokhwa_core::traits::ShutterCapture),
 //! [`EventSource`](nokhwa_core::traits::EventSource).
 
-// input-opencv backend is pending migration to the 0.13.0 trait split.
-#[cfg(feature = "input-opencv")]
-compile_error!(
-    "input-opencv backend is pending migration to the 0.13.0 trait split. \
-     Track progress in TODO.md."
-);
-
 // Ensure at least one input backend is enabled (skip during docs-only builds).
 #[cfg(not(feature = "docs-only"))]
 #[cfg(not(any(
