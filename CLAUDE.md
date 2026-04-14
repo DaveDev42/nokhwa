@@ -79,6 +79,13 @@ Almost everything is behind feature flags. A build **must** enable at least one 
 - **Always keep `TODO.md` current.** After every PR merge or task completion, immediately update TODO.md: mark completed items as done and remove them, add newly discovered issues, and re-prioritize as needed. TODO.md must always reflect the true current state of the project.
 - **When delegating tasks to worktrees (gw),** always include in the prompt: "Update TODO.md to mark the relevant item as completed and include the change in your commit." Each worktree PR must include the TODO.md update alongside the code changes.
 
+## Commit & Release Convention
+
+- **Default to patch version bumps.** Unless the user explicitly asks for a major or minor bump, every change (including API-breaking ones in 0.x) must ship as a patch release. release-please drives version bumps from conventional-commit prefixes.
+- **Never use `feat!`, `fix!`, or a `BREAKING CHANGE:` footer** in PR titles, squash-merge messages, or commit messages. These escalate release-please to major bumps automatically (e.g. 0.x → 1.0.0). Use plain `feat:` / `fix:` / `refactor:` / `chore:` instead, and describe breaking changes in the PR body and `CHANGELOG.md` / `MIGRATING-*.md` rather than the commit prefix.
+- **Manual major/minor bump**: when a major/minor release is explicitly requested, push a commit to `main` with a `Release-As: x.y.z` footer (release-please auto-detects it), or temporarily set `release-as` in `release-please-config.json` via a chore PR, then remove it in a follow-up chore PR after the release ships.
+- **Squash-merge messages are authoritative** for release-please. Before merging a PR, verify the squash commit title uses an allowed prefix. If the PR title contains `feat!` / `fix!`, edit the squash message at merge time.
+
 ## Versioning
 
 All workspace crates use a **unified version number** (e.g. `0.11.0`). When bumping versions, update ALL `Cargo.toml` files (root, nokhwa-core, nokhwa-bindings-macos, nokhwa-bindings-linux, nokhwa-bindings-windows) to the same version, including cross-reference `version` fields in `[dependencies.nokhwa-*]`.
