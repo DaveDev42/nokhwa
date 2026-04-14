@@ -60,11 +60,11 @@ pub use nokhwa_bindings_windows_msmf::MediaFoundationCaptureDevice;
 crate::nokhwa_backend!(
     nokhwa_bindings_windows_msmf::MediaFoundationCaptureDevice: FrameSource
 );
-// input-opencv backend is pending migration to the 0.13.0 trait split.
-// See TODO.md (T21/T22). The opencv_backend.rs file is preserved on disk
-// as dead code until the migration lands.
-// #[cfg(feature = "input-opencv")]
-// mod opencv_backend;
-// #[cfg(feature = "input-opencv")]
-// #[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-opencv")))]
-// pub use opencv_backend::OpenCvCaptureDevice;
+#[cfg(feature = "input-opencv")]
+mod opencv_backend;
+#[cfg(feature = "input-opencv")]
+#[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-opencv")))]
+pub use opencv_backend::OpenCvCaptureDevice;
+
+#[cfg(feature = "input-opencv")]
+crate::nokhwa_backend!(OpenCvCaptureDevice: FrameSource);

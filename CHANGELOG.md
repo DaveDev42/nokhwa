@@ -35,6 +35,13 @@
   an async wrapper around `CameraRunner` exposing
   `tokio::sync::mpsc::Receiver`s and async-safe `Drop` (dropping inside a
   tokio runtime does not block the caller).
+* **Restored `input-opencv` backend.** Migrated `OpenCvCaptureDevice` to the
+  0.13.0 `CameraDevice` + `FrameSource` trait split, re-registered via
+  `nokhwa_backend!`, and removed the `compile_error!` gate. `nokhwa::open`
+  now falls through to the opencv branch when no native `input-*` backend
+  matches the current target/feature configuration. OpenCV still requires
+  the system library at build time (`opencv/clang-runtime`); CI coverage is
+  tracked as a separate follow-up.
 
 ### Infrastructure
 
