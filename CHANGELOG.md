@@ -42,6 +42,11 @@
   matches the current target/feature configuration. OpenCV still requires
   the system library at build time (`opencv/clang-runtime`); CI coverage is
   tracked as a separate follow-up.
+* **New `examples/live_view` demo.** Standalone example crate that opens a
+  camera via `nokhwa::open`, spawns `CameraRunner` on a worker thread, and
+  paints decoded RGB frames to a `minifb` window. Replaces the ggez-based
+  live-view demo lost in the 0.13.0 refactor — `minifb` is a lighter fit
+  for the "pump frames into a window" use case.
 
 ### Infrastructure
 
@@ -49,6 +54,13 @@
   exercises the `EventSource` arm of the `nokhwa_backend!` macro from an
   external-crate-style newtype, validating that the extension point is
   usable by third-party backends such as a Canon EDSDK binding.
+* `tests/device_tests.rs` (gated `device-test`) ported to the post-0.13
+  `nokhwa::open` / `OpenedCamera` API. Covers `query`, stream capture,
+  control enumeration, and `CameraRunner` smoke testing on real hardware.
+* Cross-platform `cargo doc --features docs-only,docs-nolink` now builds
+  on macOS and Linux: `nokhwa-bindings-windows-msmf` exposes a non-Windows
+  `MediaFoundationCaptureDevice` stub mirroring the existing
+  `V4LCaptureDevice` stub.
 
 ### Documentation
 

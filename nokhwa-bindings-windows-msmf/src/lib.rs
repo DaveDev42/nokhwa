@@ -1386,3 +1386,127 @@ pub mod wmf {
 mod capture;
 #[cfg(all(windows, not(feature = "docs-only")))]
 pub use capture::MediaFoundationCaptureDevice;
+
+/// Non-Windows stub for `MediaFoundationCaptureDevice`.
+///
+/// Exists so that cross-platform documentation builds (`cargo doc
+/// --features docs-only,docs-nolink`) and downstream code that merely
+/// references the type can compile on macOS / Linux hosts. Fallible
+/// methods return [`NokhwaError::NotImplementedError`]; infallible
+/// methods panic via `unreachable!()` — they cannot be reached in
+/// practice because `MediaFoundationCaptureDevice::new` errors off
+/// Windows, so no value of this stub type can exist at runtime.
+///
+/// Mirrors the non-Linux stub used by `V4LCaptureDevice`.
+#[cfg(any(not(windows), feature = "docs-only"))]
+mod stub {
+    use nokhwa_core::buffer::Buffer;
+    use nokhwa_core::error::NokhwaError;
+    use nokhwa_core::traits::{CameraDevice, FrameSource};
+    use nokhwa_core::types::{
+        ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo, ControlValueSetter,
+        FrameFormat, KnownCameraControl, RequestedFormat,
+    };
+    use std::borrow::Cow;
+
+    /// See module docs for behavior off Windows.
+    pub struct MediaFoundationCaptureDevice;
+
+    #[allow(unused_variables)]
+    impl MediaFoundationCaptureDevice {
+        /// Creates a new capture device using the Media Foundation backend.
+        /// # Errors
+        /// Always returns [`NokhwaError::NotImplementedError`] off Windows.
+        pub fn new(index: &CameraIndex, camera_fmt: RequestedFormat) -> Result<Self, NokhwaError> {
+            Err(NokhwaError::NotImplementedError(
+                "MediaFoundation only on Windows".to_string(),
+            ))
+        }
+
+        /// Returns the list of supported [`KnownCameraControl`]s.
+        #[must_use]
+        pub fn supported_camera_controls(&self) -> Vec<KnownCameraControl> {
+            Vec::new()
+        }
+    }
+
+    // Shared error for fallible stub methods.
+    fn not_on_this_platform() -> NokhwaError {
+        NokhwaError::NotImplementedError("MediaFoundation only on Windows".to_string())
+    }
+
+    // Shared panic message for infallible stub methods. These methods
+    // cannot return an error and should never be called in practice
+    // because `MediaFoundationCaptureDevice::new` errors off Windows,
+    // so no `MediaFoundationCaptureDevice` value can exist at runtime.
+    #[cold]
+    #[inline(never)]
+    fn stub_unreachable() -> ! {
+        unreachable!("MediaFoundation stub: only available on Windows")
+    }
+
+    #[allow(unused_variables)]
+    impl CameraDevice for MediaFoundationCaptureDevice {
+        fn backend(&self) -> ApiBackend {
+            ApiBackend::MediaFoundation
+        }
+
+        fn info(&self) -> &CameraInfo {
+            stub_unreachable()
+        }
+
+        fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+            Err(not_on_this_platform())
+        }
+
+        fn set_control(
+            &mut self,
+            id: KnownCameraControl,
+            value: ControlValueSetter,
+        ) -> Result<(), NokhwaError> {
+            Err(not_on_this_platform())
+        }
+    }
+
+    #[allow(unused_variables)]
+    impl FrameSource for MediaFoundationCaptureDevice {
+        fn negotiated_format(&self) -> CameraFormat {
+            stub_unreachable()
+        }
+
+        fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
+            Err(not_on_this_platform())
+        }
+
+        fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+            Err(not_on_this_platform())
+        }
+
+        fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
+            Err(not_on_this_platform())
+        }
+
+        fn open(&mut self) -> Result<(), NokhwaError> {
+            Err(not_on_this_platform())
+        }
+
+        fn is_open(&self) -> bool {
+            false
+        }
+
+        fn frame(&mut self) -> Result<Buffer, NokhwaError> {
+            Err(not_on_this_platform())
+        }
+
+        fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
+            Err(not_on_this_platform())
+        }
+
+        fn close(&mut self) -> Result<(), NokhwaError> {
+            Err(not_on_this_platform())
+        }
+    }
+}
+
+#[cfg(any(not(windows), feature = "docs-only"))]
+pub use stub::MediaFoundationCaptureDevice;

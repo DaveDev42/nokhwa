@@ -1,0 +1,22 @@
+[package]
+name = "nokhwa-live-view"
+version = "0.1.0"
+authors = [
+    "Dave Choi <dave.dev@icloud.com>",
+    "The Nokhwa Contributors",
+]
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+description = "Live-view demo: opens a camera, decodes frames, and paints them in a minifb window."
+
+[dependencies]
+minifb = "0.27"
+
+[dependencies.nokhwa]
+path = "../.."
+features = ["input-native", "runner", "mjpeg"]
+
+# Declares a nested workspace rooted at this crate so it resolves its
+# (heavier) dependencies independently of the repo's root workspace.
+[workspace]
