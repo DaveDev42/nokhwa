@@ -93,8 +93,20 @@ pub struct OpenCvCaptureDevice {
 
 /// Fallback format used when the caller does not pin an [`RequestedFormatType::Exact`]
 /// format (e.g. `OpenRequest::any()`). OpenCV does not expose enumeration, so we
-/// pick the VideoCapture-reported baseline (640×480 MJPEG @ 30fps).
-const OPENCV_DEFAULT_FORMAT: (u32, u32, FrameFormat, u32) = (640, 480, FrameFormat::MJPEG, 30);
+/// pick the VideoCapture-reported baseline (640×480 @ 30fps).
+///
+/// The [`FrameFormat`] is fixed to [`OPENCV_OUTPUT_FORMAT`] — see that constant
+/// for why.
+const OPENCV_DEFAULT_WIDTH: u32 = 640;
+const OPENCV_DEFAULT_HEIGHT: u32 = 480;
+const OPENCV_DEFAULT_FPS: u32 = 30;
+
+/// `OpenCV`'s `VideoCapture::read` always hands back a BGR `Mat`; our
+/// [`Self::raw_frame_vec`] swizzles it to RGB24 before returning. The
+/// [`Buffer`] produced by [`FrameSource::frame`] therefore carries RGB24 bytes
+/// regardless of what the caller requested, and must be tagged as
+/// [`FrameFormat::RAWRGB`] so downstream decoders treat the payload correctly.
+const OPENCV_OUTPUT_FORMAT: FrameFormat = FrameFormat::RAWRGB;
 
 impl OpenCvCaptureDevice {
     /// Creates a new capture device using the `OpenCV` backend.
@@ -131,15 +143,26 @@ impl OpenCvCaptureDevice {
         })?;
 
         // OpenCV has no enumeration API, so requests that aren't `Exact` fall
-        // back to the backend's baseline (640×480 MJPEG @ 30fps). This matches
+        // back to the backend's baseline (640×480 @ 30fps, RGB24). This matches
         // the "best-effort" quirk documented above — many drivers will ignore
         // the requested format regardless of what we ask for.
+        //
+        // The `Exact` branch keeps the caller's resolution/fps but overrides
+        // the `FrameFormat` to `OPENCV_OUTPUT_FORMAT` (RGB24), because
+        // `raw_frame_vec` always emits RGB24 — see `OPENCV_OUTPUT_FORMAT`.
         let camera_format = match cam_fmt.requested_format_type() {
-            RequestedFormatType::Exact(exact) => exact,
-            _ => {
-                let (w, h, ff, fps) = OPENCV_DEFAULT_FORMAT;
-                CameraFormat::new_from(w, h, ff, fps)
-            }
+            RequestedFormatType::Exact(exact) => CameraFormat::new_from(
+                exact.width(),
+                exact.height(),
+                OPENCV_OUTPUT_FORMAT,
+                exact.frame_rate(),
+            ),
+            _ => CameraFormat::new_from(
+                OPENCV_DEFAULT_WIDTH,
+                OPENCV_DEFAULT_HEIGHT,
+                OPENCV_OUTPUT_FORMAT,
+                OPENCV_DEFAULT_FPS,
+            ),
         };
 
         set_properties(&mut video_capture, camera_format)?;
@@ -371,13 +394,14 @@ impl CameraDevice for OpenCvCaptureDevice {
         id: KnownCameraControl,
         value: ControlValueSetter,
     ) -> Result<(), NokhwaError> {
+        let property = format!("{id:?}");
         let control_val = match &value {
             ControlValueSetter::Integer(i) => *i as f64,
             ControlValueSetter::Float(f) => *f,
             ControlValueSetter::Boolean(b) => u8::from(*b) as f64,
             val => {
                 return Err(NokhwaError::SetPropertyError {
-                    property: format!("{id:?}"),
+                    property,
                     value: val.to_string(),
                     error: "unsupported value".to_string(),
                 })
@@ -391,13 +415,13 @@ impl CameraDevice for OpenCvCaptureDevice {
                 control_val,
             )
             .map_err(|why| NokhwaError::SetPropertyError {
-                property: format!("{id:?}"),
+                property: property.clone(),
                 value: control_val.to_string(),
                 error: why.to_string(),
             })?
         {
             return Err(NokhwaError::SetPropertyError {
-                property: format!("{id:?}"),
+                property,
                 value: control_val.to_string(),
                 error: "false".to_string(),
             });
@@ -406,7 +430,7 @@ impl CameraDevice for OpenCvCaptureDevice {
         let set_value = self.camera_control(id)?.value();
         if set_value != value {
             return Err(NokhwaError::SetPropertyError {
-                property: format!("{id:?}"),
+                property,
                 value: control_val.to_string(),
                 error: "failed to set value: rejected".to_string(),
             });
@@ -442,11 +466,12 @@ impl FrameSource for OpenCvCaptureDevice {
         if was_open {
             self.close()?;
             if let Err(why) = self.open() {
-                // Revert so the backend's advertised format reflects the
-                // last successfully-applied one. The device stays closed —
-                // the caller must reopen explicitly after diagnosing `why`.
+                // Revert the advertised format so getters don't lie. The
+                // device stays closed — caller must reopen after
+                // diagnosing `why`. We don't replay `set_properties` here
+                // because the `VideoCapture` is released and would ignore
+                // the call.
                 self.camera_format = current_format;
-                let _ = set_properties(&mut self.video_capture, current_format);
                 return Err(NokhwaError::OpenDeviceError {
                     device: self.camera_location.to_string(),
                     error: why.to_string(),
@@ -524,19 +549,19 @@ impl FrameSource for OpenCvCaptureDevice {
             return Err(NokhwaError::ReadFrameError {
                 message: format!(
                     "OpenCV produced {} bytes, expected {expected_size} \
-                     ({}×{} RGB24) — driver likely returned a different \
-                     resolution than requested",
+                     ({}×{}, 3 bytes/pixel after BGR→RGB swizzle) — driver \
+                     likely returned a different resolution than requested",
                     data.len(),
                     camera_resolution.width(),
                     camera_resolution.height(),
                 ),
-                format: Some(self.camera_format.format()),
+                format: Some(OPENCV_OUTPUT_FORMAT),
             });
         }
         Ok(Buffer::from_vec(
             camera_resolution,
             data,
-            self.camera_format.format(),
+            OPENCV_OUTPUT_FORMAT,
         ))
     }
 
