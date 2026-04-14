@@ -76,6 +76,9 @@ fn enumerate_controls_and_formats() {
     }
 }
 
+// The file is already gated by `device-test` at the top, so this
+// submodule's effective gate is `device-test AND runner` — i.e. it
+// compiles only when both features are enabled.
 #[cfg(feature = "runner")]
 mod runner_tests {
     use super::{open, CameraIndex, OpenRequest};

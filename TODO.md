@@ -7,10 +7,8 @@
 (None)
 
 ## Low Priority
-- [ ] Add platform integration tests (requires physical camera, gated behind `device-test` feature)
-  - [ ] End-to-end capture pipeline: format negotiation → stream open → frame capture → decode
+- [ ] Expand platform integration tests (requires physical camera, gated behind `device-test` feature). Port in `tests/device_tests.rs` covers query, multi-frame streaming, control enumeration, and `CameraRunner` smoke. Still missing:
   - [ ] Camera control round-trip on real hardware (set → get value verification)
-  - [ ] Multi-frame streaming consistency (no corruption across frames)
   - [ ] V4L `nokhwa::open` dispatch regression test (hardware-gated) — guards against the 0.13.0 stub recurring silently
 
 ## Performance

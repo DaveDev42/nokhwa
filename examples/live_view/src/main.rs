@@ -70,10 +70,11 @@ fn run() -> Result<(), NokhwaError> {
         }
     };
 
-    let width = usize::try_from(negotiated.resolution().width())
-        .expect("width fits in usize");
-    let height = usize::try_from(negotiated.resolution().height())
-        .expect("height fits in usize");
+    // On every target nokhwa supports, `usize >= u32`, so widening is
+    // infallible. The crate-level `cast_possible_truncation` allow
+    // above covers the pedantic lint.
+    let width = negotiated.resolution().width() as usize;
+    let height = negotiated.resolution().height() as usize;
     let fcc = negotiated.format();
     println!(
         "opened camera: {}x{} @ {} fps ({:?})",

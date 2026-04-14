@@ -1409,7 +1409,7 @@ mod stub {
     };
     use std::borrow::Cow;
 
-    /// Non-Windows stub for `MediaFoundationCaptureDevice`. See module docs.
+    /// See module docs for behavior off Windows.
     pub struct MediaFoundationCaptureDevice;
 
     #[allow(unused_variables)]
