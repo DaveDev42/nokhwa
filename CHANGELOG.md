@@ -57,6 +57,13 @@
 * `nokhwa-tokio/examples/tokio_runner.rs` demonstrates pulling frames
   with `.recv().await`.
 
+## [0.13.3](https://github.com/DaveDev42/nokhwa/compare/v0.13.2...v0.13.3) (2026-04-14)
+
+
+### Infrastructure
+
+* adopt patch-only release policy and force 0.13.3 bump ([#129](https://github.com/DaveDev42/nokhwa/issues/129)) ([8ea5156](https://github.com/DaveDev42/nokhwa/commit/8ea51563754ec67918b6267713f19474b75ea2f0))
+
 ## [0.13.2](https://github.com/DaveDev42/nokhwa/compare/v0.13.1...v0.13.2) (2026-04-14)
 
 
