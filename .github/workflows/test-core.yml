@@ -49,17 +49,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
       - name: Install OpenCV
-        # Install only the OpenCV modules the `input-opencv` feature uses
-        # (core + imgproc + videoio). The `libopencv-dev` metapackage
-        # pulls ~2GB of ROCm/HIP/GStreamer transitive deps from slow
-        # Azure mirrors and regularly times out; the per-module headers
-        # are a few hundred MB and install in ~1 min.
+        # `libopencv-dev` is needed for `OpenCVConfig.cmake` / `opencv4.pc`
+        # (per-module `libopencv-*-dev` don't ship those). Use
+        # `--no-install-recommends` to skip Recommends that pull ~2GB of
+        # ROCm/HIP and GStreamer extras from slow Azure mirrors.
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libopencv-core-dev \
-            libopencv-imgproc-dev \
-            libopencv-videoio-dev \
-            libclang-dev
+            libopencv-dev \
+            libclang-dev \
+            pkg-config
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --features input-opencv
