@@ -692,7 +692,7 @@ fn mat_from_decoded(
     cv_type: i32,
     src_format: FrameFormat,
 ) -> Result<opencv::core::Mat, NokhwaError> {
-    use opencv::core::{Mat, Mat_AUTO_STEP};
+    use opencv::core::{Mat, MatTraitConst, Mat_AUTO_STEP};
 
     // SAFETY: `new_rows_cols_with_data_unsafe` borrows `data` without copying.
     // We immediately `try_clone` the Mat so it owns its own memory,
