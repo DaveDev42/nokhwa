@@ -694,11 +694,11 @@ fn mat_from_decoded(
 ) -> Result<opencv::core::Mat, NokhwaError> {
     use opencv::core::{Mat, Mat_AUTO_STEP};
 
-    // SAFETY: `new_rows_cols_with_data` borrows `data` without copying.
-    // We immediately `.clone()` the Mat so it owns its own memory,
+    // SAFETY: `new_rows_cols_with_data_unsafe` borrows `data` without copying.
+    // We immediately `try_clone` the Mat so it owns its own memory,
     // decoupling the returned Mat from the temporary `data` slice.
     unsafe {
-        let tmp = Mat::new_rows_cols_with_data(
+        let tmp = Mat::new_rows_cols_with_data_unsafe(
             resolution.height_y as i32,
             resolution.width_x as i32,
             cv_type,
@@ -711,11 +711,12 @@ fn mat_from_decoded(
             error: why.to_string(),
         })?;
 
-        tmp.clone().map_err(|why| NokhwaError::ProcessFrameError {
-            src: src_format,
-            destination: "OpenCV Mat".to_string(),
-            error: why.to_string(),
-        })
+        tmp.try_clone()
+            .map_err(|why| NokhwaError::ProcessFrameError {
+                src: src_format,
+                destination: "OpenCV Mat".to_string(),
+                error: why.to_string(),
+            })
     }
 }
 
