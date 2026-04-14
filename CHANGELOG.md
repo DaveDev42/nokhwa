@@ -48,13 +48,6 @@
   live-view demo lost in the 0.13.0 refactor — `minifb` is a lighter fit
   for the "pump frames into a window" use case.
 
-### Bug Fixes
-
-* Fix cross-platform `cargo doc --features docs-only,docs-nolink`:
-  `nokhwa-bindings-windows-msmf` now exposes a non-Windows stub
-  `MediaFoundationCaptureDevice` mirroring the existing `V4LCaptureDevice`
-  stub, so docs and cross-platform code checks build on macOS and Linux.
-
 ### Infrastructure
 
 * New integration test `tests/session.rs::hybrid_camera_with_events_delivers_poller`
@@ -64,6 +57,10 @@
 * `tests/device_tests.rs` (gated `device-test`) ported to the post-0.13
   `nokhwa::open` / `OpenedCamera` API. Covers `query`, stream capture,
   control enumeration, and `CameraRunner` smoke testing on real hardware.
+* Cross-platform `cargo doc --features docs-only,docs-nolink` now builds
+  on macOS and Linux: `nokhwa-bindings-windows-msmf` exposes a non-Windows
+  `MediaFoundationCaptureDevice` stub mirroring the existing
+  `V4LCaptureDevice` stub.
 
 ### Documentation
 

@@ -7,14 +7,10 @@
 
 #![cfg(feature = "device-test")]
 
-use nokhwa::{
-    native_api_backend, open, query, CameraRunner, OpenRequest, OpenedCamera, RunnerConfig,
-};
-use nokhwa_core::error::NokhwaError;
-use nokhwa_core::types::CameraIndex;
-use std::time::Duration;
+use nokhwa::utils::{ApiBackend, CameraIndex};
+use nokhwa::{native_api_backend, open, query, OpenRequest, OpenedCamera};
 
-fn native_backend() -> nokhwa::utils::ApiBackend {
+fn native_backend() -> ApiBackend {
     native_api_backend().expect("no native API backend compiled in for this target")
 }
 
@@ -33,27 +29,27 @@ fn query_reports_at_least_one_device() {
 }
 
 #[test]
-fn open_stream_and_capture_frames() -> Result<(), NokhwaError> {
+fn open_stream_and_capture_frames() {
     match open_first() {
         OpenedCamera::Stream(mut cam) => {
-            cam.open()?;
+            cam.open().expect("StreamCamera::open");
             let res = cam.negotiated_format().resolution();
             for i in 0..5 {
-                let buf = cam.frame()?;
+                let buf = cam.frame().expect("StreamCamera::frame");
                 assert!(!buf.buffer().is_empty(), "frame {i} empty");
                 assert_eq!(buf.resolution(), res);
             }
-            cam.close()
+            cam.close().expect("StreamCamera::close");
         }
         OpenedCamera::Hybrid(mut cam) => {
-            cam.open()?;
+            cam.open().expect("HybridCamera::open");
             let res = cam.negotiated_format().resolution();
             for i in 0..5 {
-                let buf = cam.frame()?;
+                let buf = cam.frame().expect("HybridCamera::frame");
                 assert!(!buf.buffer().is_empty(), "frame {i} empty");
                 assert_eq!(buf.resolution(), res);
             }
-            cam.close()
+            cam.close().expect("HybridCamera::close");
         }
         OpenedCamera::Shutter(_) => {
             panic!("expected a stream-capable camera, got Shutter-only")
@@ -62,35 +58,43 @@ fn open_stream_and_capture_frames() -> Result<(), NokhwaError> {
 }
 
 #[test]
-fn enumerate_controls_and_formats() -> Result<(), NokhwaError> {
+fn enumerate_controls_and_formats() {
     match open_first() {
+        // Stream needs `&mut` for `compatible_formats()`; the other
+        // two wrappers expose `controls()` via `&self`.
         OpenedCamera::Stream(mut cam) => {
-            let _ = cam.controls()?;
-            let _ = cam.compatible_formats()?;
+            cam.controls().expect("StreamCamera::controls");
+            cam.compatible_formats()
+                .expect("StreamCamera::compatible_formats");
         }
         OpenedCamera::Hybrid(cam) => {
-            let _ = cam.controls()?;
+            cam.controls().expect("HybridCamera::controls");
         }
         OpenedCamera::Shutter(cam) => {
-            let _ = cam.controls()?;
+            cam.controls().expect("ShutterCamera::controls");
         }
     }
-    Ok(())
 }
 
 #[cfg(feature = "runner")]
-#[test]
-fn runner_produces_frames() -> Result<(), NokhwaError> {
-    let opened = open(CameraIndex::Index(0), OpenRequest::any())?;
-    let runner = CameraRunner::spawn(opened, RunnerConfig::default())?;
-    let frames = runner
-        .frames()
-        .ok_or_else(|| NokhwaError::general("runner has no frames channel"))?;
-    for i in 0..3 {
-        let buf = frames
-            .recv_timeout(Duration::from_secs(5))
-            .map_err(|e| NokhwaError::general(format!("recv frame {i}: {e}")))?;
-        assert!(!buf.buffer().is_empty(), "runner frame {i} empty");
+mod runner_tests {
+    use super::{open, CameraIndex, OpenRequest};
+    use nokhwa::{CameraRunner, RunnerConfig};
+    use std::time::Duration;
+
+    #[test]
+    fn runner_produces_frames() {
+        let opened = open(CameraIndex::Index(0), OpenRequest::any())
+            .expect("open(CameraIndex::Index(0)) failed");
+        let runner =
+            CameraRunner::spawn(opened, RunnerConfig::default()).expect("CameraRunner::spawn");
+        let frames = runner.frames().expect("runner has no frames channel");
+        for i in 0..3 {
+            let buf = frames
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap_or_else(|e| panic!("recv frame {i}: {e}"));
+            assert!(!buf.buffer().is_empty(), "runner frame {i} empty");
+        }
+        runner.stop().expect("runner.stop()");
     }
-    runner.stop()
 }

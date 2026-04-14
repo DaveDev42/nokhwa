@@ -1428,6 +1428,21 @@ mod stub {
         }
     }
 
+    // Shared error for fallible stub methods.
+    fn not_on_this_platform() -> NokhwaError {
+        NokhwaError::NotImplementedError("MediaFoundation only on Windows".to_string())
+    }
+
+    // Shared panic message for infallible stub methods. These methods
+    // cannot return an error and should never be called in practice
+    // because `MediaFoundationCaptureDevice::new` errors off Windows,
+    // so no `MediaFoundationCaptureDevice` value can exist at runtime.
+    #[cold]
+    #[inline(never)]
+    fn stub_unreachable() -> ! {
+        unreachable!("MediaFoundation stub: only available on Windows")
+    }
+
     #[allow(unused_variables)]
     impl CameraDevice for MediaFoundationCaptureDevice {
         fn backend(&self) -> ApiBackend {
@@ -1435,11 +1450,11 @@ mod stub {
         }
 
         fn info(&self) -> &CameraInfo {
-            todo!()
+            stub_unreachable()
         }
 
         fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
-            todo!()
+            Err(not_on_this_platform())
         }
 
         fn set_control(
@@ -1447,46 +1462,46 @@ mod stub {
             id: KnownCameraControl,
             value: ControlValueSetter,
         ) -> Result<(), NokhwaError> {
-            todo!()
+            Err(not_on_this_platform())
         }
     }
 
     #[allow(unused_variables)]
     impl FrameSource for MediaFoundationCaptureDevice {
         fn negotiated_format(&self) -> CameraFormat {
-            todo!()
+            stub_unreachable()
         }
 
         fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
-            todo!()
+            Err(not_on_this_platform())
         }
 
         fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
-            todo!()
+            Err(not_on_this_platform())
         }
 
         fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
-            todo!()
+            Err(not_on_this_platform())
         }
 
         fn open(&mut self) -> Result<(), NokhwaError> {
-            todo!()
+            Err(not_on_this_platform())
         }
 
         fn is_open(&self) -> bool {
-            todo!()
+            false
         }
 
         fn frame(&mut self) -> Result<Buffer, NokhwaError> {
-            todo!()
+            Err(not_on_this_platform())
         }
 
         fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
-            todo!()
+            Err(not_on_this_platform())
         }
 
         fn close(&mut self) -> Result<(), NokhwaError> {
-            todo!()
+            Err(not_on_this_platform())
         }
     }
 }

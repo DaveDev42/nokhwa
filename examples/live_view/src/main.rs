@@ -1,5 +1,5 @@
 /*
- * Copyright 2026 Dave Choi / The Nokhwa Contributors
+ * Copyright 2026 The Nokhwa Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,30 +20,42 @@
 //! ```text
 //! cargo run --release
 //! ```
+//!
+//! The demo dispatches on the camera's negotiated `FrameFormat`, so it
+//! works regardless of whether the backend picks MJPEG, YUYV, NV12, or
+//! a raw RGB/BGR pixel format.
+
+#![allow(clippy::cast_possible_truncation)]
 
 use minifb::{Key, Window, WindowOptions};
 use nokhwa::error::NokhwaError;
-use nokhwa::format_types::Mjpeg;
-use nokhwa::frame::{Frame, IntoRgb};
-use nokhwa::utils::CameraIndex;
+use nokhwa::format_types::{Mjpeg, Nv12, RawBgr, RawRgb, Yuyv};
+use nokhwa::frame::{Frame, IntoRgb, RgbConversion};
+use nokhwa::utils::{CameraIndex, FrameFormat};
 use nokhwa::{
-    nokhwa_initialize, open, CameraRunner, OpenRequest, OpenedCamera, RunnerConfig,
+    nokhwa_initialize, open, Buffer, CameraRunner, OpenRequest, OpenedCamera, RunnerConfig,
 };
+use std::sync::mpsc;
 use std::time::Duration;
 
 fn main() {
-    nokhwa_initialize(|granted| {
-        if !granted {
-            eprintln!("camera permission denied");
-            return;
-        }
-        if let Err(e) = run() {
-            eprintln!("error: {e}");
-        }
+    // `nokhwa_initialize` on macOS requests camera permission asynchronously.
+    // Block the main thread on the permission result so `run()` only starts
+    // after the user has (or has not) granted access — and so `main` does
+    // not return while the permission dialog is still open.
+    let (tx, rx) = mpsc::channel();
+    nokhwa_initialize(move |granted| {
+        let _ = tx.send(granted);
     });
-    // Keep the main thread alive briefly so the init callback has a chance
-    // to run on macOS (where permission dialogs are async).
-    std::thread::sleep(Duration::from_millis(200));
+    match rx.recv_timeout(Duration::from_secs(60)) {
+        Ok(true) => {
+            if let Err(e) = run() {
+                eprintln!("error: {e}");
+            }
+        }
+        Ok(false) => eprintln!("camera permission denied"),
+        Err(_) => eprintln!("timed out waiting for camera permission"),
+    }
 }
 
 fn run() -> Result<(), NokhwaError> {
@@ -58,14 +70,17 @@ fn run() -> Result<(), NokhwaError> {
         }
     };
 
-    let width = negotiated.resolution().width() as usize;
-    let height = negotiated.resolution().height() as usize;
+    let width = usize::try_from(negotiated.resolution().width())
+        .expect("width fits in usize");
+    let height = usize::try_from(negotiated.resolution().height())
+        .expect("height fits in usize");
+    let fcc = negotiated.format();
     println!(
         "opened camera: {}x{} @ {} fps ({:?})",
         width,
         height,
         negotiated.frame_rate(),
-        negotiated.format()
+        fcc
     );
 
     let runner = CameraRunner::spawn(opened, RunnerConfig::default())?;
@@ -87,19 +102,24 @@ fn run() -> Result<(), NokhwaError> {
     while window.is_open() && !window.is_key_down(Key::Escape) {
         match frames.recv_timeout(Duration::from_millis(500)) {
             Ok(buf) => {
-                let rgb = Frame::<Mjpeg>::new(buf).into_rgb().materialize()?;
-                let (rgb_w, rgb_h) = (rgb.width() as usize, rgb.height() as usize);
-                if rgb_w * rgb_h != pixels.len() {
-                    // Resolution changed mid-stream (rare); resize the buffer.
-                    pixels = vec![0; rgb_w * rgb_h];
-                }
+                let rgb = decode_to_rgb(buf, fcc)?.materialize()?;
+                // Cameras do not renegotiate resolution mid-stream; a
+                // mismatch here would mean either a nokhwa bug or a
+                // backend firmware quirk. Fail loud rather than paper
+                // over it.
+                assert_eq!(
+                    rgb.width() as usize * rgb.height() as usize,
+                    pixels.len(),
+                    "frame resolution changed mid-stream"
+                );
+                // minifb's u32 layout is 0x00RRGGBB (top byte ignored).
                 for (dst, src) in pixels.iter_mut().zip(rgb.chunks_exact(3)) {
                     *dst = (u32::from(src[0]) << 16)
                         | (u32::from(src[1]) << 8)
                         | u32::from(src[2]);
                 }
                 window
-                    .update_with_buffer(&pixels, rgb_w, rgb_h)
+                    .update_with_buffer(&pixels, width, height)
                     .map_err(|e| NokhwaError::general(format!("minifb: {e}")))?;
             }
             Err(_) => {
@@ -110,4 +130,21 @@ fn run() -> Result<(), NokhwaError> {
     }
 
     runner.stop()
+}
+
+/// Wrap a `Buffer` in the correct typed `Frame<F>` based on the camera's
+/// negotiated fourcc and start a lazy RGB conversion. Returning the
+/// `RgbConversion` (instead of a materialized image) keeps the match arms
+/// uniform.
+fn decode_to_rgb(buf: Buffer, fcc: FrameFormat) -> Result<RgbConversion, NokhwaError> {
+    match fcc {
+        FrameFormat::MJPEG => Ok(Frame::<Mjpeg>::try_new(buf)?.into_rgb()),
+        FrameFormat::YUYV => Ok(Frame::<Yuyv>::try_new(buf)?.into_rgb()),
+        FrameFormat::NV12 => Ok(Frame::<Nv12>::try_new(buf)?.into_rgb()),
+        FrameFormat::RAWRGB => Ok(Frame::<RawRgb>::try_new(buf)?.into_rgb()),
+        FrameFormat::RAWBGR => Ok(Frame::<RawBgr>::try_new(buf)?.into_rgb()),
+        FrameFormat::GRAY => Err(NokhwaError::general(
+            "live_view does not support GRAY/Luma cameras",
+        )),
+    }
 }

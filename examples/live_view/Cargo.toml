@@ -17,10 +17,6 @@ minifb = "0.27"
 path = "../.."
 features = ["input-native", "runner", "mjpeg"]
 
-[dependencies.image]
-version = "0.25"
-default-features = false
-
-# Opt out of the root workspace so this example builds standalone with
-# its own (heavier) dependency tree.
+# Declares a nested workspace rooted at this crate so it resolves its
+# (heavier) dependencies independently of the repo's root workspace.
 [workspace]
