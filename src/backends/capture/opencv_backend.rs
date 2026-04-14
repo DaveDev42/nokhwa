@@ -108,6 +108,21 @@ const OPENCV_DEFAULT_FPS: u32 = 30;
 /// [`FrameFormat::RAWRGB`] so downstream decoders treat the payload correctly.
 const OPENCV_OUTPUT_FORMAT: FrameFormat = FrameFormat::RAWRGB;
 
+/// Normalise a caller-supplied [`CameraFormat`] to the format the OpenCV
+/// backend actually emits: the caller's resolution and frame-rate are kept,
+/// but the [`FrameFormat`] is always coerced to [`OPENCV_OUTPUT_FORMAT`].
+///
+/// Callers that expect the `FrameFormat` they passed in to be honoured will
+/// observe the coercion via [`FrameSource::negotiated_format`].
+fn normalise_format(fmt: CameraFormat) -> CameraFormat {
+    CameraFormat::new_from(
+        fmt.width(),
+        fmt.height(),
+        OPENCV_OUTPUT_FORMAT,
+        fmt.frame_rate(),
+    )
+}
+
 impl OpenCvCaptureDevice {
     /// Creates a new capture device using the `OpenCV` backend.
     ///
@@ -118,6 +133,17 @@ impl OpenCvCaptureDevice {
     /// <protocol>://<IP>:<port>/
     /// ```
     /// but refer to the manufacturer for the actual IP format.
+    ///
+    /// # `FrameFormat` coercion
+    ///
+    /// OpenCV's `VideoCapture::read` always returns a BGR `Mat`, which this
+    /// backend swizzles to RGB24. The [`FrameFormat`] component of
+    /// `cam_fmt` is therefore **ignored** — `negotiated_format()` and every
+    /// [`Buffer`] emitted by [`FrameSource::frame`] always report
+    /// [`FrameFormat::RAWRGB`]. Only the requested resolution and frame-rate
+    /// pass through to the driver (best-effort — see the type-level quirks).
+    /// Requests that are not [`RequestedFormatType::Exact`] fall back to a
+    /// 640×480 RAWRGB @ 30fps baseline.
     ///
     /// # Errors
     /// Errors if the backend fails to open the camera (e.g. device does not
@@ -147,16 +173,11 @@ impl OpenCvCaptureDevice {
         // the "best-effort" quirk documented above — many drivers will ignore
         // the requested format regardless of what we ask for.
         //
-        // The `Exact` branch keeps the caller's resolution/fps but overrides
+        // The `Exact` branch keeps the caller's resolution/fps but normalises
         // the `FrameFormat` to `OPENCV_OUTPUT_FORMAT` (RGB24), because
         // `raw_frame_vec` always emits RGB24 — see `OPENCV_OUTPUT_FORMAT`.
         let camera_format = match cam_fmt.requested_format_type() {
-            RequestedFormatType::Exact(exact) => CameraFormat::new_from(
-                exact.width(),
-                exact.height(),
-                OPENCV_OUTPUT_FORMAT,
-                exact.frame_rate(),
-            ),
+            RequestedFormatType::Exact(exact) => normalise_format(exact),
             _ => CameraFormat::new_from(
                 OPENCV_DEFAULT_WIDTH,
                 OPENCV_DEFAULT_HEIGHT,
@@ -446,6 +467,10 @@ impl FrameSource for OpenCvCaptureDevice {
     }
 
     fn set_format(&mut self, new_fmt: CameraFormat) -> Result<(), NokhwaError> {
+        // Coerce the caller's request to what OpenCV actually emits (RGB24).
+        // Mirrors the constructor so `negotiated_format()` never lies about
+        // the bytes handed back from `frame()`.
+        let normalised = normalise_format(new_fmt);
         let current_format = self.camera_format;
         let was_open = match self.video_capture.is_opened() {
             Ok(opened) => opened,
@@ -457,9 +482,9 @@ impl FrameSource for OpenCvCaptureDevice {
             }
         };
 
-        self.camera_format = new_fmt;
+        self.camera_format = normalised;
 
-        if let Err(why) = set_properties(&mut self.video_capture, new_fmt) {
+        if let Err(why) = set_properties(&mut self.video_capture, normalised) {
             self.camera_format = current_format;
             return Err(why);
         }
