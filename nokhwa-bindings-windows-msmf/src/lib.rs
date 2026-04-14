@@ -1391,9 +1391,11 @@ pub use capture::MediaFoundationCaptureDevice;
 ///
 /// Exists so that cross-platform documentation builds (`cargo doc
 /// --features docs-only,docs-nolink`) and downstream code that merely
-/// references the type can compile on macOS / Linux hosts. Every
-/// method returns [`NokhwaError::NotImplementedError`] or panics with
-/// `todo!()`; none of the trait methods do useful work off Windows.
+/// references the type can compile on macOS / Linux hosts. Fallible
+/// methods return [`NokhwaError::NotImplementedError`]; infallible
+/// methods panic via `unreachable!()` — they cannot be reached in
+/// practice because `MediaFoundationCaptureDevice::new` errors off
+/// Windows, so no value of this stub type can exist at runtime.
 ///
 /// Mirrors the non-Linux stub used by `V4LCaptureDevice`.
 #[cfg(any(not(windows), feature = "docs-only"))]
