@@ -1386,3 +1386,110 @@ pub mod wmf {
 mod capture;
 #[cfg(all(windows, not(feature = "docs-only")))]
 pub use capture::MediaFoundationCaptureDevice;
+
+/// Non-Windows stub for `MediaFoundationCaptureDevice`.
+///
+/// Exists so that cross-platform documentation builds (`cargo doc
+/// --features docs-only,docs-nolink`) and downstream code that merely
+/// references the type can compile on macOS / Linux hosts. Every
+/// method returns [`NokhwaError::NotImplementedError`] or panics with
+/// `todo!()`; none of the trait methods do useful work off Windows.
+///
+/// Mirrors the non-Linux stub used by `V4LCaptureDevice`.
+#[cfg(any(not(windows), feature = "docs-only"))]
+mod stub {
+    use nokhwa_core::buffer::Buffer;
+    use nokhwa_core::error::NokhwaError;
+    use nokhwa_core::traits::{CameraDevice, FrameSource};
+    use nokhwa_core::types::{
+        ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo, ControlValueSetter,
+        FrameFormat, KnownCameraControl, RequestedFormat,
+    };
+    use std::borrow::Cow;
+
+    /// Non-Windows stub for `MediaFoundationCaptureDevice`. See module docs.
+    pub struct MediaFoundationCaptureDevice;
+
+    #[allow(unused_variables)]
+    impl MediaFoundationCaptureDevice {
+        /// Creates a new capture device using the Media Foundation backend.
+        /// # Errors
+        /// Always returns [`NokhwaError::NotImplementedError`] off Windows.
+        pub fn new(index: &CameraIndex, camera_fmt: RequestedFormat) -> Result<Self, NokhwaError> {
+            Err(NokhwaError::NotImplementedError(
+                "MediaFoundation only on Windows".to_string(),
+            ))
+        }
+
+        /// Returns the list of supported [`KnownCameraControl`]s.
+        #[must_use]
+        pub fn supported_camera_controls(&self) -> Vec<KnownCameraControl> {
+            Vec::new()
+        }
+    }
+
+    #[allow(unused_variables)]
+    impl CameraDevice for MediaFoundationCaptureDevice {
+        fn backend(&self) -> ApiBackend {
+            ApiBackend::MediaFoundation
+        }
+
+        fn info(&self) -> &CameraInfo {
+            todo!()
+        }
+
+        fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+            todo!()
+        }
+
+        fn set_control(
+            &mut self,
+            id: KnownCameraControl,
+            value: ControlValueSetter,
+        ) -> Result<(), NokhwaError> {
+            todo!()
+        }
+    }
+
+    #[allow(unused_variables)]
+    impl FrameSource for MediaFoundationCaptureDevice {
+        fn negotiated_format(&self) -> CameraFormat {
+            todo!()
+        }
+
+        fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
+            todo!()
+        }
+
+        fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+            todo!()
+        }
+
+        fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
+            todo!()
+        }
+
+        fn open(&mut self) -> Result<(), NokhwaError> {
+            todo!()
+        }
+
+        fn is_open(&self) -> bool {
+            todo!()
+        }
+
+        fn frame(&mut self) -> Result<Buffer, NokhwaError> {
+            todo!()
+        }
+
+        fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
+            todo!()
+        }
+
+        fn close(&mut self) -> Result<(), NokhwaError> {
+            todo!()
+        }
+    }
+}
+
+#[cfg(any(not(windows), feature = "docs-only"))]
+pub use stub::MediaFoundationCaptureDevice;

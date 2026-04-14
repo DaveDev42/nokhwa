@@ -17,10 +17,7 @@
 - [ ] `OpenCvCaptureDevice::raw_frame_vec` allocates a fresh `Vec<u8>` per frame and swizzles BGR→RGB byte-by-byte. Rewrite as a single pre-allocated buffer with chunked swap for throughput.
 
 ## 0.14.0 Roadmap
-- [ ] Port `tests/device_tests.rs` (gated `device-test`) to the new API. It still references the removed `Camera`/`CallbackCamera`.
 - [ ] Wire `input-opencv` into CI (requires installing the OpenCV system library on the runner).
-- [ ] Restore a ggez-based live-view demo in `examples/capture` (lost in the 0.13.0 refactor).
-- [ ] Fix the `docs-only + docs-nolink + input-msmf` stub export so `cargo doc --features docs-only,docs-nolink` builds on non-Windows hosts (MSMF crate's docs-only branch doesn't re-export `MediaFoundationCaptureDevice`).
 
 ## Backlog
 - [ ] Re-implement GStreamer backend (cross-platform, previously 839 lines)
