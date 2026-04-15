@@ -45,6 +45,11 @@ jobs:
 
       - name: Load v4l2loopback module
         run: |
+          # v4l2loopback depends on symbols from videodev (v4l2_fh_exit,
+          # video_device_*). On ubuntu-latest the videodev module is not
+          # autoloaded, so insmod fails with "Unknown symbol". Ensure the
+          # prerequisite modules are loaded first.
+          sudo modprobe videodev
           sudo modprobe v4l2loopback \
             devices=1 \
             video_nr=0 \
