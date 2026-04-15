@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.14.1)
+## [0.14.1](https://github.com/DaveDev42/nokhwa/compare/v0.14.0...v0.14.1) (2026-04-15)
 
 ### Performance
 
