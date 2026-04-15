@@ -1,0 +1,111 @@
+name: V4L Loopback Device Tests
+
+# Linux-only hardware-gated tests using v4l2loopback to create a virtual
+# /dev/video0 fed by an ffmpeg test pattern. Exercises the device-test
+# suite (query, nokhwa::open dispatch, frame streaming, controls, runner)
+# on every PR without needing a physical camera.
+#
+# `continue-on-error: true` — if the runner kernel/DKMS combination
+# breaks v4l2loopback on a given day, this job surfaces the failure but
+# does not block merges. See TODO.md / PR description for follow-up.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  v4l-loopback:
+    name: V4L loopback device tests (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libv4l-dev \
+            v4l-utils \
+            v4l2loopback-dkms \
+            ffmpeg
+
+      - name: Load v4l2loopback module
+        run: |
+          sudo modprobe v4l2loopback \
+            devices=1 \
+            video_nr=0 \
+            card_label="nokhwa-ci-loopback" \
+            exclusive_caps=1
+          # Give udev a moment to create the device node.
+          for i in $(seq 1 10); do
+            if [ -e /dev/video0 ]; then
+              break
+            fi
+            sleep 0.5
+          done
+          ls -l /dev/video0
+          v4l2-ctl --list-devices
+
+      - name: Start ffmpeg synthetic stream
+        run: |
+          # Feed a 640x480 YUYV test pattern at 30fps into /dev/video0.
+          # setsid detaches from the controlling terminal so the job step
+          # does not hang waiting for the backgrounded ffmpeg to exit.
+          setsid ffmpeg -nostdin -loglevel warning \
+            -f lavfi -i "testsrc2=size=640x480:rate=30" \
+            -pix_fmt yuyv422 \
+            -f v4l2 /dev/video0 \
+            > /tmp/ffmpeg.log 2>&1 &
+          echo $! > /tmp/ffmpeg.pid
+          # Wait until v4l2-ctl reports a driver attached to the device.
+          for i in $(seq 1 20); do
+            if v4l2-ctl -d /dev/video0 --get-fmt-video 2>/dev/null | grep -q "Width/Height"; then
+              echo "ffmpeg producer ready after ${i} polls"
+              v4l2-ctl -d /dev/video0 --get-fmt-video
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "ffmpeg did not become ready; dumping log:"
+          cat /tmp/ffmpeg.log || true
+          exit 1
+
+      - name: Build device tests
+        run: cargo test --features input-v4l,device-test,runner --no-run
+
+      - name: Run device tests
+        run: cargo test --features input-v4l,device-test,runner -- --test-threads=1 --nocapture
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== ffmpeg log ==="
+          cat /tmp/ffmpeg.log || true
+          echo "=== v4l2-ctl --list-devices ==="
+          v4l2-ctl --list-devices || true
+          echo "=== v4l2-ctl --all ==="
+          v4l2-ctl -d /dev/video0 --all || true
+          echo "=== dmesg (v4l2loopback) ==="
+          sudo dmesg | grep -i v4l2 || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ -f /tmp/ffmpeg.pid ]; then
+            kill "$(cat /tmp/ffmpeg.pid)" 2>/dev/null || true
+          fi
+          sudo modprobe -r v4l2loopback || true
