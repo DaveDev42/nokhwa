@@ -12,7 +12,7 @@
   - [ ] V4L `nokhwa::open` dispatch regression test (hardware-gated) — guards against the 0.13.0 stub recurring silently
 
 ## Performance
-- [ ] `OpenCvCaptureDevice::raw_frame_vec` allocates a fresh `Vec<u8>` per frame and swizzles BGR→RGB byte-by-byte. Rewrite as a single pre-allocated buffer with chunked swap for throughput.
+(None)
 
 ## Backlog
 - [ ] Re-implement GStreamer backend (cross-platform, previously 839 lines)

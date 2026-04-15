@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased (0.14.1)
+
+### Performance
+
+* `OpenCvCaptureDevice::raw_frame_vec` now reuses a single per-device
+  frame buffer and performs the BGR→RGB swizzle via `chunks_exact_mut`
+  instead of allocating a fresh `Vec<u8>` and pushing byte-by-byte on
+  every frame. The return value switches from `Cow::Owned` to
+  `Cow::Borrowed`; the public `Cow<'_, [u8]>` signature is unchanged.
+
 ## [0.14.0](https://github.com/DaveDev42/nokhwa/compare/v0.13.3...v0.14.0) (2026-04-15)
 
 ### ⚠ BREAKING CHANGES (API)
