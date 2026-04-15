@@ -90,8 +90,9 @@ pub struct OpenCvCaptureDevice {
     api_preference: i32,
     video_capture: VideoCapture,
     // Reused across `raw_frame_vec` calls to avoid a fresh allocation per
-    // frame. `Vec::resize` grows it if the incoming frame is larger than the
-    // previous one (e.g. mid-stream resolution change).
+    // frame. `clear()` preserves the capacity, and `extend` grows it if the
+    // incoming frame is larger than the previous one (e.g. mid-stream
+    // resolution change).
     frame_buf: Vec<u8>,
 }
 
