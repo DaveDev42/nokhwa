@@ -237,9 +237,9 @@ impl OpenCvCaptureDevice {
     /// Gets the RGB24 frame directly read from `OpenCV` without any additional processing.
     ///
     /// The returned `Cow` borrows from an internal reusable buffer owned by
-    /// `self`, so the slice is only valid until the next call to
-    /// `raw_frame_vec` (or any method that mutates the device). Callers that
-    /// need to retain the frame across calls must clone it into an owned
+    /// `self`. The borrow checker enforces that the slice cannot outlive the
+    /// next `&mut self` call on this device, so callers that need to retain
+    /// the frame across subsequent calls must clone it into an owned
     /// `Vec<u8>`.
     ///
     /// # Errors
@@ -296,8 +296,6 @@ impl OpenCvCaptureDevice {
                         };
 
                         self.frame_buf.clear();
-                        self.frame_buf
-                            .reserve(frame_data_vec.len().saturating_mul(3));
                         self.frame_buf
                             .extend(frame_data_vec.iter().flat_map(|p| [p[2], p[1], p[0]]));
 
