@@ -235,6 +235,13 @@ impl OpenCvCaptureDevice {
     }
 
     /// Gets the RGB24 frame directly read from `OpenCV` without any additional processing.
+    ///
+    /// The returned `Cow` borrows from an internal reusable buffer owned by
+    /// `self`, so the slice is only valid until the next call to
+    /// `raw_frame_vec` (or any method that mutates the device). Callers that
+    /// need to retain the frame across calls must clone it into an owned
+    /// `Vec<u8>`.
+    ///
     /// # Errors
     /// Errors if the frame fails to be read.
     #[allow(clippy::cast_sign_loss)]
@@ -288,17 +295,11 @@ impl OpenCvCaptureDevice {
                             }
                         };
 
-                        let byte_len = frame_data_vec.len().saturating_mul(3);
-                        self.frame_buf.resize(byte_len, 0);
-                        for (dst, src) in self
-                            .frame_buf
-                            .chunks_exact_mut(3)
-                            .zip(frame_data_vec.iter())
-                        {
-                            dst[0] = src[2];
-                            dst[1] = src[1];
-                            dst[2] = src[0];
-                        }
+                        self.frame_buf.clear();
+                        self.frame_buf
+                            .reserve(frame_data_vec.len().saturating_mul(3));
+                        self.frame_buf
+                            .extend(frame_data_vec.iter().flat_map(|p| [p[2], p[1], p[0]]));
 
                         Ok(Cow::Borrowed(&self.frame_buf))
                     } else {
