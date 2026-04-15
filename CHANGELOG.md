@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.14.0)
+## [0.14.0](https://github.com/DaveDev42/nokhwa/compare/v0.13.3...v0.14.0) (2026-04-15)
 
 ### ⚠ BREAKING CHANGES (API)
 
