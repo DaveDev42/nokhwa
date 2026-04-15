@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.14.0)
+## [0.14.0](https://github.com/DaveDev42/nokhwa/compare/v0.13.3...v0.14.0) (2026-04-15)
 
 ### ⚠ BREAKING CHANGES (API)
 
@@ -72,20 +72,6 @@
 * New "Using nokhwa from async runtimes" section in the crate docs.
 * `nokhwa-tokio/examples/tokio_runner.rs` demonstrates pulling frames
   with `.recv().await`.
-
-## [0.14.0](https://github.com/DaveDev42/nokhwa/compare/v0.13.3...v0.14.0) (2026-04-15)
-
-
-### Features
-
-* 0.14.0 group D — device_tests port, live-view demo, MSMF docs stub ([#133](https://github.com/DaveDev42/nokhwa/issues/133)) ([d00eb3c](https://github.com/DaveDev42/nokhwa/commit/d00eb3c84f7fd66d974a481ae5859d332f2ca5ae))
-
-
-### Infrastructure
-
-* add input-opencv feature check to CI matrix ([#134](https://github.com/DaveDev42/nokhwa/issues/134)) ([ee8e80b](https://github.com/DaveDev42/nokhwa/commit/ee8e80b097fbc6858a9f81f60193b1929437293c))
-* **ci:** force release-please to 0.14.0 via release-as override ([#135](https://github.com/DaveDev42/nokhwa/issues/135)) ([bbdd7d1](https://github.com/DaveDev42/nokhwa/commit/bbdd7d14bb4676406004887455d1d2577f24d9a1))
-* **ci:** remove release-as override after v0.13.3 ([#131](https://github.com/DaveDev42/nokhwa/issues/131)) ([2a921e2](https://github.com/DaveDev42/nokhwa/commit/2a921e2872b2a2ae2420fb0ee3c5a05fc8a605bf))
 
 ## [0.13.3](https://github.com/DaveDev42/nokhwa/compare/v0.13.2...v0.13.3) (2026-04-14)
 
