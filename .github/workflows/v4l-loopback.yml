@@ -1,0 +1,168 @@
+name: V4L Loopback Device Tests
+
+# Linux-only hardware-gated tests using v4l2loopback to create a virtual
+# /dev/video0 fed by an ffmpeg test pattern. Exercises the device-test
+# suite (query, nokhwa::open dispatch, frame streaming, controls, runner)
+# on every PR without needing a physical camera.
+#
+# `continue-on-error: true` — if the runner kernel/DKMS combination
+# breaks v4l2loopback on a given day, this job surfaces the failure but
+# does not block merges. See TODO.md / PR description for follow-up.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  v4l-loopback:
+    name: V4L loopback device tests (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install system dependencies
+        # linux-modules-extra-$(uname -r) is ~50MB and the azure mirror
+        # has been observed to stall on it. `Acquire::Retries=5` plus a
+        # bash retry loop covers both per-package and whole-transaction
+        # flakes without inflating the job timeout further.
+        run: |
+          set -e
+          sudo apt-get update -o Acquire::Retries=5
+          ok=0
+          for attempt in 1 2 3; do
+            if sudo apt-get install -y \
+                -o Acquire::Retries=5 \
+                -o Acquire::http::Timeout=60 \
+                "linux-modules-extra-$(uname -r)" \
+                libv4l-dev \
+                v4l-utils \
+                v4l2loopback-dkms \
+                ffmpeg; then
+              ok=1
+              break
+            fi
+            echo "apt-get install failed (attempt ${attempt}); retrying"
+            sleep 10
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "apt-get install failed after 3 attempts"
+            exit 1
+          fi
+
+      - name: Load v4l2loopback module
+        run: |
+          # v4l2loopback depends on symbols from videodev (v4l2_fh_exit,
+          # video_device_*). On ubuntu-latest the videodev module is not
+          # autoloaded, so insmod fails with "Unknown symbol". Ensure the
+          # prerequisite modules are loaded first.
+          sudo modprobe videodev
+          # exclusive_caps=1 makes the node advertise either capture or
+          # output caps depending on which side opens first — required
+          # so `nokhwa` sees it as a plain capture device rather than a
+          # device that claims both roles simultaneously.
+          sudo modprobe v4l2loopback \
+            devices=1 \
+            video_nr=0 \
+            card_label="nokhwa-ci-loopback" \
+            exclusive_caps=1
+          # Wait for udev to create the device node.
+          for _ in $(seq 1 10); do
+            if [ -e /dev/video0 ]; then
+              break
+            fi
+            sleep 0.5
+          done
+          if [ ! -e /dev/video0 ]; then
+            echo "/dev/video0 never appeared after modprobe v4l2loopback"
+            sudo dmesg | tail -40
+            exit 1
+          fi
+          # The loopback device node is root-only by default; hand it to
+          # the unprivileged runner user so ffmpeg + cargo test can open
+          # it without sudo. Use $(id -un) rather than $USER for
+          # robustness against runner-image env changes.
+          sudo chown "$(id -un)" /dev/video0
+          ls -l /dev/video0
+          v4l2-ctl --list-devices
+
+      - name: Start ffmpeg synthetic stream
+        run: |
+          # Feed a 640x480 YUYV test pattern at 30fps into /dev/video0.
+          # `-nostdin` disowns the TTY so the backgrounded process does
+          # not hold the step open. Cleanup uses `pkill -f` rather than a
+          # PID file because tracking the exact ffmpeg pid across job
+          # steps via /tmp is brittle and not needed here.
+          ffmpeg -nostdin -loglevel warning \
+            -f lavfi -i "testsrc2=size=640x480:rate=30" \
+            -pix_fmt yuyv422 \
+            -f v4l2 /dev/video0 \
+            > /tmp/ffmpeg.log 2>&1 &
+          disown
+          # Wait until v4l2-ctl reports a driver attached to the device.
+          ready=0
+          for i in $(seq 1 20); do
+            if v4l2-ctl -d /dev/video0 --get-fmt-video 2>/dev/null | grep -q "Width/Height"; then
+              echo "ffmpeg producer ready after ${i} polls"
+              ready=1
+              break
+            fi
+            sleep 0.5
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "ffmpeg did not become ready; dumping log:"
+            cat /tmp/ffmpeg.log || true
+            exit 1
+          fi
+          v4l2-ctl -d /dev/video0 --get-fmt-video
+
+      - name: Build device tests
+        run: cargo test --features input-v4l,device-test,runner --test device_tests --no-run
+
+      - name: Run device tests
+        run: |
+          cargo test --features input-v4l,device-test,runner --test device_tests \
+            -- --test-threads=1 --nocapture
+
+      - name: Device status (post-test)
+        if: always()
+        # Surface the device the tests ran against — a silent fallback
+        # to some other /dev/videoN would be visible here. Runs even on
+        # test failure so the diagnostic isn't lost when it matters most.
+        run: v4l2-ctl -d /dev/video0 --log-status || true
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          echo "=== ffmpeg log ==="
+          cat /tmp/ffmpeg.log || true
+          echo "=== v4l2-ctl --list-devices ==="
+          v4l2-ctl --list-devices || true
+          echo "=== v4l2-ctl --all ==="
+          v4l2-ctl -d /dev/video0 --all || true
+          echo "=== dmesg (v4l2loopback) ==="
+          sudo dmesg | grep -i v4l2 || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          # Match by command line — no PID file is kept (see "Start ffmpeg
+          # synthetic stream"). Stop ffmpeg before unloading the module
+          # so the producer doesn't error noisily on EBADF.
+          pkill -f "ffmpeg.*testsrc2" 2>/dev/null || true
+          sudo modprobe -r v4l2loopback || true
+          # Symmetric with the load step. modprobe -r is a no-op if the
+          # module is still in use elsewhere on the runner image, hence
+          # the `|| true`.
+          sudo modprobe -r videodev || true

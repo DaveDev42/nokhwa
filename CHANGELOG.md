@@ -10,6 +10,18 @@
   every frame. The return value switches from `Cow::Owned` to
   `Cow::Borrowed`; the public `Cow<'_, [u8]>` signature is unchanged.
 
+### Infrastructure
+
+* Hardware-gated V4L tests now run on every pull request via a new
+  `v4l-loopback` CI job. The job loads `v4l2loopback` as `/dev/video0`,
+  pumps an `ffmpeg` YUYV test pattern into it, and runs
+  `cargo test --features input-v4l,device-test,runner` against the
+  synthetic device. Closes the V4L `nokhwa::open` dispatch regression
+  gap (previously a self-hosted camera was required). See
+  `.github/workflows/v4l-loopback.yml`. The job is marked
+  `continue-on-error` so DKMS / kernel-ABI drift on GitHub-hosted
+  runners cannot block merges.
+
 ## [0.14.0](https://github.com/DaveDev42/nokhwa/compare/v0.13.3...v0.14.0) (2026-04-15)
 
 ### ⚠ BREAKING CHANGES (API)
