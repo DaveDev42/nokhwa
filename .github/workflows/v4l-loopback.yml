@@ -67,6 +67,10 @@ jobs:
             fi
             sleep 0.5
           done
+          # The loopback device node is root-only by default; relax
+          # permissions so the unprivileged runner (ffmpeg + cargo test)
+          # can open it.
+          sudo chmod 666 /dev/video0
           ls -l /dev/video0
           v4l2-ctl --list-devices
 
