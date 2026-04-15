@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (0.14.1)
+## [0.14.1](https://github.com/DaveDev42/nokhwa/compare/v0.14.0...v0.14.1) (2026-04-15)
 
 ### Performance
 
@@ -21,19 +21,6 @@
   `.github/workflows/v4l-loopback.yml`. The job is marked
   `continue-on-error` so DKMS / kernel-ABI drift on GitHub-hosted
   runners cannot block merges.
-
-## [0.14.1](https://github.com/DaveDev42/nokhwa/compare/v0.14.0...v0.14.1) (2026-04-15)
-
-
-### Performance
-
-* **opencv:** reuse frame buffer in raw_frame_vec to cut per-frame allocation ([#138](https://github.com/DaveDev42/nokhwa/issues/138)) ([e0709a9](https://github.com/DaveDev42/nokhwa/commit/e0709a9f5a03ccef188d61c492ec50becbe39a77))
-
-
-### Infrastructure
-
-* **ci:** remove release-as override after v0.14.0 ([#136](https://github.com/DaveDev42/nokhwa/issues/136)) ([38a82d6](https://github.com/DaveDev42/nokhwa/commit/38a82d6508e95c52170d4e5941c06210ca7027ef))
-* hardware-gated V4L tests via v4l2loopback (Linux) ([#139](https://github.com/DaveDev42/nokhwa/issues/139)) ([ef672af](https://github.com/DaveDev42/nokhwa/commit/ef672afb193056a4590d50f9e094a36df004547a))
 
 ## [0.14.0](https://github.com/DaveDev42/nokhwa/compare/v0.13.3...v0.14.0) (2026-04-15)
 
