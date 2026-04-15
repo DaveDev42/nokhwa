@@ -89,6 +89,11 @@ pub struct OpenCvCaptureDevice {
     camera_info: CameraInfo,
     api_preference: i32,
     video_capture: VideoCapture,
+    // Reused across `raw_frame_vec` calls to avoid a fresh allocation per
+    // frame. `clear()` preserves the capacity, and `extend` grows it if the
+    // incoming frame is larger than the previous one (e.g. mid-stream
+    // resolution change).
+    frame_buf: Vec<u8>,
 }
 
 /// Fallback format used when the caller does not pin an [`RequestedFormatType::Exact`]
@@ -201,6 +206,7 @@ impl OpenCvCaptureDevice {
             camera_info,
             api_preference: api_pref,
             video_capture,
+            frame_buf: Vec::new(),
         })
     }
 
@@ -230,6 +236,13 @@ impl OpenCvCaptureDevice {
     }
 
     /// Gets the RGB24 frame directly read from `OpenCV` without any additional processing.
+    ///
+    /// The returned `Cow` borrows from an internal reusable buffer owned by
+    /// `self`. The borrow checker enforces that the slice cannot outlive the
+    /// next `&mut self` call on this device, so callers that need to retain
+    /// the frame across subsequent calls must clone it into an owned
+    /// `Vec<u8>`.
+    ///
     /// # Errors
     /// Errors if the frame fails to be read.
     #[allow(clippy::cast_sign_loss)]
@@ -271,8 +284,6 @@ impl OpenCvCaptureDevice {
             Ok(size) => {
                 if size.width > 0 {
                     return if frame.is_continuous() {
-                        let mut raw_vec: Vec<u8> = Vec::new();
-
                         let frame_data_vec = match Mat::data_typed::<Vec3b>(&frame) {
                             Ok(v) => v,
                             Err(why) => {
@@ -285,14 +296,11 @@ impl OpenCvCaptureDevice {
                             }
                         };
 
-                        for pixel in frame_data_vec.iter() {
-                            let pixel_slice: &[u8; 3] = pixel;
-                            raw_vec.push(pixel_slice[2]);
-                            raw_vec.push(pixel_slice[1]);
-                            raw_vec.push(pixel_slice[0]);
-                        }
+                        self.frame_buf.clear();
+                        self.frame_buf
+                            .extend(frame_data_vec.iter().flat_map(|p| [p[2], p[1], p[0]]));
 
-                        Ok(Cow::from(raw_vec))
+                        Ok(Cow::Borrowed(&self.frame_buf))
                     } else {
                         Err(NokhwaError::ReadFrameError {
                             message: "Failed to read frame from videocapture: not cont".to_string(),
