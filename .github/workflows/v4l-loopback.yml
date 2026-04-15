@@ -21,7 +21,7 @@ jobs:
   v4l-loopback:
     name: V4L loopback device tests (Linux)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     continue-on-error: true
     permissions:
       contents: read
@@ -33,18 +33,33 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Install system dependencies
+        # linux-modules-extra-$(uname -r) is ~50MB and the azure mirror
+        # has been observed to stall on it. `Acquire::Retries=5` plus a
+        # bash retry loop covers both per-package and whole-transaction
+        # flakes without inflating the job timeout further.
         run: |
-          sudo apt-get update
-          # linux-modules-extra-$(uname -r) ships the videodev/v4l2-common
-          # modules that v4l2loopback depends on; the Azure kernel image
-          # used by ubuntu-latest does not include them by default, so
-          # modprobe fails with "Module videodev not found" without it.
-          sudo apt-get install -y \
-            "linux-modules-extra-$(uname -r)" \
-            libv4l-dev \
-            v4l-utils \
-            v4l2loopback-dkms \
-            ffmpeg
+          set -e
+          sudo apt-get update -o Acquire::Retries=5
+          ok=0
+          for attempt in 1 2 3; do
+            if sudo apt-get install -y \
+                -o Acquire::Retries=5 \
+                -o Acquire::http::Timeout=60 \
+                "linux-modules-extra-$(uname -r)" \
+                libv4l-dev \
+                v4l-utils \
+                v4l2loopback-dkms \
+                ffmpeg; then
+              ok=1
+              break
+            fi
+            echo "apt-get install failed (attempt ${attempt}); retrying"
+            sleep 10
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "apt-get install failed after 3 attempts"
+            exit 1
+          fi
 
       - name: Load v4l2loopback module
         run: |
