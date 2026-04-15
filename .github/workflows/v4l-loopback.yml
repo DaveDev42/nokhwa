@@ -63,7 +63,7 @@ jobs:
             card_label="nokhwa-ci-loopback" \
             exclusive_caps=1
           # Wait for udev to create the device node.
-          for i in $(seq 1 10); do
+          for _ in $(seq 1 10); do
             if [ -e /dev/video0 ]; then
               break
             fi
@@ -76,22 +76,25 @@ jobs:
           fi
           # The loopback device node is root-only by default; hand it to
           # the unprivileged runner user so ffmpeg + cargo test can open
-          # it without sudo.
-          sudo chown "$USER" /dev/video0
+          # it without sudo. Use $(id -un) rather than $USER for
+          # robustness against runner-image env changes.
+          sudo chown "$(id -un)" /dev/video0
           ls -l /dev/video0
           v4l2-ctl --list-devices
 
       - name: Start ffmpeg synthetic stream
         run: |
           # Feed a 640x480 YUYV test pattern at 30fps into /dev/video0.
-          # setsid detaches from the controlling terminal so the job step
-          # does not hang waiting for the backgrounded ffmpeg to exit.
-          setsid ffmpeg -nostdin -loglevel warning \
+          # `-nostdin` disowns the TTY so the backgrounded process does
+          # not hold the step open. Cleanup uses `pkill -f` rather than a
+          # PID file because tracking the exact ffmpeg pid across job
+          # steps via /tmp is brittle and not needed here.
+          ffmpeg -nostdin -loglevel warning \
             -f lavfi -i "testsrc2=size=640x480:rate=30" \
             -pix_fmt yuyv422 \
             -f v4l2 /dev/video0 \
             > /tmp/ffmpeg.log 2>&1 &
-          echo $! > /tmp/ffmpeg.pid
+          disown
           # Wait until v4l2-ctl reports a driver attached to the device.
           ready=0
           for i in $(seq 1 20); do
@@ -116,9 +119,13 @@ jobs:
         run: |
           cargo test --features input-v4l,device-test,runner --test device_tests \
             -- --test-threads=1 --nocapture
-          # Surface the device the tests ran against, so a silent
-          # fallback to some other /dev/videoN would be visible in logs.
-          v4l2-ctl -d /dev/video0 --log-status || true
+
+      - name: Device status (post-test)
+        if: always()
+        # Surface the device the tests ran against — a silent fallback
+        # to some other /dev/videoN would be visible here. Runs even on
+        # test failure so the diagnostic isn't lost when it matters most.
+        run: v4l2-ctl -d /dev/video0 --log-status || true
 
       - name: Diagnostics on failure
         if: failure()
@@ -135,11 +142,12 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          if [ -f /tmp/ffmpeg.pid ]; then
-            kill "$(cat /tmp/ffmpeg.pid)" 2>/dev/null || true
-          fi
-          # setsid's PID is not ffmpeg's PID, and the ffmpeg process may
-          # survive the setsid-leader kill. Belt-and-braces: also match
-          # by command line before unloading the module.
+          # Match by command line — no PID file is kept (see "Start ffmpeg
+          # synthetic stream"). Stop ffmpeg before unloading the module
+          # so the producer doesn't error noisily on EBADF.
           pkill -f "ffmpeg.*testsrc2" 2>/dev/null || true
           sudo modprobe -r v4l2loopback || true
+          # Symmetric with the load step. modprobe -r is a no-op if the
+          # module is still in use elsewhere on the runner image, hence
+          # the `|| true`.
+          sudo modprobe -r videodev || true
