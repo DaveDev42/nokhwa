@@ -33,6 +33,18 @@
   backends that override these `ShutterCapture` methods, must rename their
   usages. Backends that use the default no-op impls are unaffected.
 
+## [0.14.2](https://github.com/DaveDev42/nokhwa/compare/v0.14.1...v0.14.2) (2026-04-16)
+
+
+### Features
+
+* add HotplugSource trait for backend-level plug/unplug events ([#140](https://github.com/DaveDev42/nokhwa/issues/140)) ([682f750](https://github.com/DaveDev42/nokhwa/commit/682f75082786c28681ebec58787ddea2c4b97ee0))
+
+
+### Refactoring
+
+* rename ShutterCapture lock/unlock to lock_ui/unlock_ui ([#141](https://github.com/DaveDev42/nokhwa/issues/141)) ([190a387](https://github.com/DaveDev42/nokhwa/commit/190a387fa7fe2ec93d07faeff731e8259729d7a4))
+
 ## [0.14.1](https://github.com/DaveDev42/nokhwa/compare/v0.14.0...v0.14.1) (2026-04-15)
 
 ### Performance
