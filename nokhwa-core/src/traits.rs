@@ -282,3 +282,60 @@ pub enum CameraEvent {
     CaptureError { code: i32, message: String },
     WillShutDown,
 }
+
+/// Optional backend-level hotplug capability.
+///
+/// Distinct from [`EventSource`], which is scoped to a single already-opened
+/// camera. `HotplugSource` is implemented by a backend-wide context or
+/// registry type and reports plug / unplug signals for the backend as a
+/// whole — including devices that appear *before* any camera has been
+/// opened. Typical implementors wrap Canon EDSDK's
+/// `EdsSetCameraAddedHandler`, Linux `inotify` on `/dev/video*`, macOS `IOKit`
+/// matching notifications, or Windows MSMF device-change notifications.
+///
+/// This trait is **optional**. Backends that cannot detect hotplug (for
+/// example `OpenCV`, or UVC stacks that do not expose device-change
+/// callbacks) simply do not implement it.
+///
+/// [`HotplugEvent::Connected`] carries the [`CameraInfo`] of the newly
+/// visible device, so consumers can immediately open it.
+/// [`HotplugEvent::Disconnected`] carries the [`CameraInfo`] of the device
+/// that disappeared so consumers can match against their currently-open
+/// camera instances and tear them down.
+///
+/// Ordering and delivery guarantees (coalescing, duplicate suppression,
+/// backpressure, per-bus vs. global scope) are backend-specific; consult
+/// each implementor's documentation.
+pub trait HotplugSource {
+    /// Take the hotplug-event poller. Succeeds at most once per backend
+    /// instance. Subsequent calls must return
+    /// `Err(NokhwaError::UnsupportedOperationError(...))`, mirroring
+    /// [`EventSource::take_events`].
+    /// # Errors
+    /// Returns [`NokhwaError::UnsupportedOperationError`] if the poller has
+    /// already been taken or the backend does not support hotplug events.
+    fn take_hotplug_events(&mut self) -> Result<Box<dyn HotplugEventPoll + Send>, NokhwaError>;
+}
+
+/// Sync hotplug-event polling interface. Mirrors [`EventPoll`].
+pub trait HotplugEventPoll: Send {
+    fn try_next(&mut self) -> Option<HotplugEvent>;
+    fn next_timeout(&mut self, d: Duration) -> Option<HotplugEvent>;
+}
+
+/// Backend-level plug / unplug signal produced by a [`HotplugSource`].
+///
+/// Distinct from [`CameraEvent::Disconnected`], which is scoped to a camera
+/// the application has already opened. `HotplugEvent` covers devices the
+/// application has not yet opened — in particular, arrivals.
+#[non_exhaustive]
+#[derive(Debug, Clone)]
+pub enum HotplugEvent {
+    /// A camera became visible to the backend. The [`CameraInfo`] is
+    /// sufficient to open the device.
+    Connected(CameraInfo),
+    /// A camera was removed from the backend. Consumers should match the
+    /// [`CameraInfo`] against any currently-open camera instances they
+    /// hold.
+    Disconnected(CameraInfo),
+}

@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+* New `HotplugSource` trait and `HotplugEvent` enum (`Connected(CameraInfo)` /
+  `Disconnected(CameraInfo)`) in `nokhwa-core::traits` for backend-level
+  plug/unplug signals. Distinct from the per-camera `EventSource` /
+  `CameraEvent::Disconnected` pair: `HotplugSource` reports devices appearing
+  or disappearing for the backend as a whole, including before any camera has
+  been opened. Mirrors the `EventSource::take_events` pattern — `take_hotplug_events`
+  succeeds at most once per backend instance. Trait-only; no backend
+  implementations ship in this release. Intended consumers include Canon
+  EDSDK (`EdsSetCameraAddedHandler`), Linux `inotify` on `/dev/video*`,
+  macOS `IOKit` matching notifications, and Windows MSMF device-change
+  notifications.
+
 ## [0.14.1](https://github.com/DaveDev42/nokhwa/compare/v0.14.0...v0.14.1) (2026-04-15)
 
 ### Performance
