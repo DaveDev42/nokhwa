@@ -21,6 +21,18 @@
   `IOKit` matching notifications, and Windows MSMF device-change
   notifications.
 
+### Refactoring
+
+* Renamed `ShutterCapture::lock` / `ShutterCapture::unlock` to `lock_ui` /
+  `unlock_ui` to make intent unambiguous. These methods lock the camera's
+  physical UI controls so that host-side commands have exclusive effect —
+  they do not lock the shutter. The new names also align with Canon's
+  EDSDK terminology (`EdsSendStatusCommand(UILock / UIUnLock)`), which
+  makes the upcoming Canon DSLR backend map cleanly onto the trait.
+  Downstream code that calls `ShutterCamera::lock` / `unlock` directly, or
+  backends that override these `ShutterCapture` methods, must rename their
+  usages. Backends that use the default no-op impls are unaffected.
+
 ## [0.14.1](https://github.com/DaveDev42/nokhwa/compare/v0.14.0...v0.14.1) (2026-04-15)
 
 ### Performance

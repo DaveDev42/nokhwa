@@ -132,8 +132,8 @@ fn shutter_capture_default_methods() {
         info: sample_info(),
         open: false,
     };
-    assert!(d.lock().is_ok());
-    assert!(d.unlock().is_ok());
+    assert!(d.lock_ui().is_ok());
+    assert!(d.unlock_ui().is_ok());
     let r = d.capture(Duration::ZERO);
     assert!(matches!(r, Err(NokhwaError::TimeoutError(_))));
 }
