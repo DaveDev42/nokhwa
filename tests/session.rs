@@ -223,7 +223,7 @@ fn stream_camera_open_frame_close_cycle() {
 }
 
 #[test]
-fn shutter_camera_capture_wraps_lock_trigger_take_unlock() {
+fn shutter_camera_capture_wraps_lock_ui_trigger_take_unlock_ui() {
     let mut cam = ShutterCamera::from_device(Box::new(make_shutter()));
     let photo = cam.capture(Duration::from_millis(100));
     assert!(photo.is_ok());

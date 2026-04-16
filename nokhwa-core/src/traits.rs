@@ -233,27 +233,30 @@ pub trait ShutterCapture: CameraDevice {
     /// Returns [`NokhwaError`] if no picture is available within `timeout`.
     fn take_picture(&mut self, timeout: Duration) -> Result<Buffer, NokhwaError>;
 
-    /// UI/physical-control lock. No-op default — webcams do not need this.
+    /// Locks the camera's physical UI controls so that host-side commands have
+    /// exclusive effect. No-op default — webcams do not need this.
     /// # Errors
-    /// Returns [`NokhwaError`] if acquiring the lock fails.
-    fn lock(&mut self) -> Result<(), NokhwaError> {
+    /// Returns [`NokhwaError`] if acquiring the UI lock fails.
+    fn lock_ui(&mut self) -> Result<(), NokhwaError> {
         Ok(())
     }
+    /// Releases the UI lock acquired by [`lock_ui`](Self::lock_ui).
     /// # Errors
-    /// Returns [`NokhwaError`] if releasing the lock fails.
-    fn unlock(&mut self) -> Result<(), NokhwaError> {
+    /// Returns [`NokhwaError`] if releasing the UI lock fails.
+    fn unlock_ui(&mut self) -> Result<(), NokhwaError> {
         Ok(())
     }
 
-    /// Convenience: lock → trigger → `take_picture` → unlock, with unlock always
-    /// attempted (errors from `unlock` are discarded if the inner sequence failed).
+    /// Convenience: `lock_ui` → `trigger` → `take_picture` → `unlock_ui`, with
+    /// `unlock_ui` always attempted (errors from `unlock_ui` are discarded if
+    /// the inner sequence failed).
     /// # Errors
     /// Returns [`NokhwaError`] if any step of the sequence fails.
     fn capture(&mut self, timeout: Duration) -> Result<Buffer, NokhwaError> {
-        self.lock()?;
+        self.lock_ui()?;
         self.trigger()?;
         let result = self.take_picture(timeout);
-        let _ = self.unlock();
+        let _ = self.unlock_ui();
         result
     }
 }

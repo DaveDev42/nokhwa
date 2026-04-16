@@ -375,13 +375,13 @@ impl ShutterCamera {
     }
     /// # Errors
     /// Propagates the backend's error.
-    pub fn lock(&mut self) -> Result<(), NokhwaError> {
-        self.inner.lock()
+    pub fn lock_ui(&mut self) -> Result<(), NokhwaError> {
+        self.inner.lock_ui()
     }
     /// # Errors
     /// Propagates the backend's error.
-    pub fn unlock(&mut self) -> Result<(), NokhwaError> {
-        self.inner.unlock()
+    pub fn unlock_ui(&mut self) -> Result<(), NokhwaError> {
+        self.inner.unlock_ui()
     }
     /// # Errors
     /// Propagates the backend's error.
