@@ -234,7 +234,8 @@ pub trait ShutterCapture: CameraDevice {
     fn take_picture(&mut self, timeout: Duration) -> Result<Buffer, NokhwaError>;
 
     /// Locks the camera's physical UI controls so that host-side commands have
-    /// exclusive effect. No-op default — webcams do not need this.
+    /// exclusive effect. Release with [`unlock_ui`](Self::unlock_ui). No-op
+    /// default — webcams do not need this.
     /// # Errors
     /// Returns [`NokhwaError`] if acquiring the UI lock fails.
     fn lock_ui(&mut self) -> Result<(), NokhwaError> {
