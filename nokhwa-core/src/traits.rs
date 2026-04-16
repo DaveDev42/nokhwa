@@ -288,10 +288,14 @@ pub enum CameraEvent {
 /// Distinct from [`EventSource`], which is scoped to a single already-opened
 /// camera. `HotplugSource` is implemented by a backend-wide context or
 /// registry type and reports plug / unplug signals for the backend as a
-/// whole — including devices that appear *before* any camera has been
+/// whole — including devices that appear **before** any camera has been
 /// opened. Typical implementors wrap Canon EDSDK's
 /// `EdsSetCameraAddedHandler`, Linux `inotify` on `/dev/video*`, macOS `IOKit`
 /// matching notifications, or Windows MSMF device-change notifications.
+///
+/// `HotplugSource` is intentionally **not** a supertrait of [`CameraDevice`]:
+/// hotplug is a backend-registry concern, not a per-camera concern. It is
+/// implemented on a backend-wide context type, not on individual cameras.
 ///
 /// This trait is **optional**. Backends that cannot detect hotplug (for
 /// example `OpenCV`, or UVC stacks that do not expose device-change
@@ -301,7 +305,13 @@ pub enum CameraEvent {
 /// visible device, so consumers can immediately open it.
 /// [`HotplugEvent::Disconnected`] carries the [`CameraInfo`] of the device
 /// that disappeared so consumers can match against their currently-open
-/// camera instances and tear them down.
+/// camera instances and tear them down. Backends **must** guarantee that
+/// the [`CameraInfo::index`] of a `Disconnected` event matches the `index`
+/// previously delivered in the corresponding `Connected` event (or the
+/// `index` seen during initial enumeration); the human-readable
+/// `human_name` / `description` / `misc` fields are best-effort and may
+/// drift between arrival and removal, so consumers should match on
+/// [`CameraInfo::index`] rather than structural equality.
 ///
 /// Ordering and delivery guarantees (coalescing, duplicate suppression,
 /// backpressure, per-bus vs. global scope) are backend-specific; consult
@@ -311,15 +321,32 @@ pub trait HotplugSource {
     /// instance. Subsequent calls must return
     /// `Err(NokhwaError::UnsupportedOperationError(...))`, mirroring
     /// [`EventSource::take_events`].
+    ///
+    /// The returned poller is the only handle through which hotplug
+    /// events can be observed; dropping it silently unsubscribes the
+    /// caller, hence the `#[must_use]` hint.
     /// # Errors
     /// Returns [`NokhwaError::UnsupportedOperationError`] if the poller has
     /// already been taken or the backend does not support hotplug events.
+    #[must_use = "the hotplug poller is the only way to observe hotplug events; dropping it discards the subscription"]
     fn take_hotplug_events(&mut self) -> Result<Box<dyn HotplugEventPoll + Send>, NokhwaError>;
 }
 
 /// Sync hotplug-event polling interface. Mirrors [`EventPoll`].
+///
+/// The `Send` bound mirrors [`EventPoll`] so that pollers can be handed
+/// off to a dedicated supervisor thread. `Sync` is intentionally not
+/// required: most backends protect their internal event queue with
+/// interior mutability that only guarantees `Send`, and applications that
+/// need shared access can wrap the poller in `Arc<Mutex<_>>`.
 pub trait HotplugEventPoll: Send {
+    /// Non-blocking poll. Returns the next buffered [`HotplugEvent`], or
+    /// `None` when no event is currently buffered. `None` does **not**
+    /// mean the source is closed — callers should keep polling.
     fn try_next(&mut self) -> Option<HotplugEvent>;
+    /// Block for up to `d` waiting for the next [`HotplugEvent`]. Returns
+    /// `None` when the wait times out without an event arriving; this
+    /// does **not** indicate that the source is closed.
     fn next_timeout(&mut self, d: Duration) -> Option<HotplugEvent>;
 }
 
@@ -328,14 +355,21 @@ pub trait HotplugEventPoll: Send {
 /// Distinct from [`CameraEvent::Disconnected`], which is scoped to a camera
 /// the application has already opened. `HotplugEvent` covers devices the
 /// application has not yet opened — in particular, arrivals.
+///
+/// `PartialEq` / `Eq` / `Hash` are derived so consumers can dedupe events
+/// (useful when a backend does not suppress duplicates) or use them as
+/// hashmap keys. Note that structural equality compares the full
+/// [`CameraInfo`]; to match a `Disconnected` event against a previously
+/// seen `Connected`, prefer comparing [`CameraInfo::index`] — see the
+/// [`HotplugSource`] docs for the ordering guarantee.
 #[non_exhaustive]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum HotplugEvent {
     /// A camera became visible to the backend. The [`CameraInfo`] is
     /// sufficient to open the device.
     Connected(CameraInfo),
-    /// A camera was removed from the backend. Consumers should match the
-    /// [`CameraInfo`] against any currently-open camera instances they
-    /// hold.
+    /// A camera was removed from the backend. Consumers should match by
+    /// [`CameraInfo::index`] against any currently-open camera instances
+    /// they hold; other fields may have drifted since arrival.
     Disconnected(CameraInfo),
 }
