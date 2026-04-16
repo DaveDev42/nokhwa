@@ -258,7 +258,9 @@ pub trait ShutterCapture: CameraDevice {
     }
 }
 
-/// Optional event-stream capability.
+/// Optional per-camera event-stream capability. See [`HotplugSource`] for
+/// the backend-wide analog that reports device arrival / removal before
+/// any camera has been opened.
 pub trait EventSource: CameraDevice {
     /// Take the event poller. Succeeds at most once. Subsequent calls must
     /// return `Err(NokhwaError::UnsupportedOperationError(...))`.
@@ -306,12 +308,16 @@ pub enum CameraEvent {
 /// [`HotplugEvent::Disconnected`] carries the [`CameraInfo`] of the device
 /// that disappeared so consumers can match against their currently-open
 /// camera instances and tear them down. Backends **must** guarantee that
-/// the [`CameraInfo::index`] of a `Disconnected` event matches the `index`
+/// the [`CameraInfo::index()`] of a `Disconnected` event matches the `index`
 /// previously delivered in the corresponding `Connected` event (or the
 /// `index` seen during initial enumeration); the human-readable
 /// `human_name` / `description` / `misc` fields are best-effort and may
 /// drift between arrival and removal, so consumers should match on
-/// [`CameraInfo::index`] rather than structural equality.
+/// [`CameraInfo::index()`] rather than structural equality.
+///
+/// Re-plugging the same physical device may produce a *new* `index` on
+/// the second `Connected` event; backends are not required to recognize
+/// the device as the same across a disconnect / reconnect cycle.
 ///
 /// Ordering and delivery guarantees (coalescing, duplicate suppression,
 /// backpressure, per-bus vs. global scope) are backend-specific; consult
@@ -360,7 +366,7 @@ pub trait HotplugEventPoll: Send {
 /// (useful when a backend does not suppress duplicates) or use them as
 /// hashmap keys. Note that structural equality compares the full
 /// [`CameraInfo`]; to match a `Disconnected` event against a previously
-/// seen `Connected`, prefer comparing [`CameraInfo::index`] — see the
+/// seen `Connected`, prefer comparing [`CameraInfo::index()`] — see the
 /// [`HotplugSource`] docs for the ordering guarantee.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -369,7 +375,7 @@ pub enum HotplugEvent {
     /// sufficient to open the device.
     Connected(CameraInfo),
     /// A camera was removed from the backend. Consumers should match by
-    /// [`CameraInfo::index`] against any currently-open camera instances
+    /// [`CameraInfo::index()`] against any currently-open camera instances
     /// they hold; other fields may have drifted since arrival.
     Disconnected(CameraInfo),
 }
