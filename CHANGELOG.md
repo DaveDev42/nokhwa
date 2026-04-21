@@ -261,6 +261,53 @@
   backends that override these `ShutterCapture` methods, must rename their
   usages. Backends that use the default no-op impls are unaffected.
 
+## [0.14.2](https://github.com/DaveDev42/nokhwa/compare/v0.14.1...v0.14.2) (2026-04-21)
+
+
+### Features
+
+* add HotplugSource trait for backend-level plug/unplug events ([#140](https://github.com/DaveDev42/nokhwa/issues/140)) ([682f750](https://github.com/DaveDev42/nokhwa/commit/682f75082786c28681ebec58787ddea2c4b97ee0))
+* **avf:** implement HotplugSource via polling device::query() ([#158](https://github.com/DaveDev42/nokhwa/issues/158)) ([a4d96df](https://github.com/DaveDev42/nokhwa/commit/a4d96df01bb29bd3fb19bab44e02c6f4ed48dd45))
+* **gstreamer:** session 1 — nokhwa-bindings-gstreamer crate + query() enumeration ([#150](https://github.com/DaveDev42/nokhwa/issues/150)) ([46f309b](https://github.com/DaveDev42/nokhwa/commit/46f309be71758bf57ffd758f4565fffc9e080846))
+* **gstreamer:** session 2 — streaming via appsink on real hardware ([#160](https://github.com/DaveDev42/nokhwa/issues/160)) ([4629cab](https://github.com/DaveDev42/nokhwa/commit/4629cab5d413ca462bcd842b34757d8ed6b62bfa))
+* **msmf:** implement HotplugSource via polling wmf::query() ([#153](https://github.com/DaveDev42/nokhwa/issues/153)) ([4e19a61](https://github.com/DaveDev42/nokhwa/commit/4e19a6124d78608b5e34e8b2ac7fb212ee40eb9a))
+* **uvc:** session 1 — nokhwa-bindings-uvc crate + query() enumeration ([#149](https://github.com/DaveDev42/nokhwa/issues/149)) ([e01e825](https://github.com/DaveDev42/nokhwa/commit/e01e825f7823a40b1dea587ac12df917238ec3cf))
+* **uvc:** session 2a — descriptor parsing + format discovery on real hardware ([#152](https://github.com/DaveDev42/nokhwa/issues/152)) ([fbc4a86](https://github.com/DaveDev42/nokhwa/commit/fbc4a8607d4427294d99f366e2be1129fb48af05))
+* **v4l:** implement HotplugSource via polling enum_devices() ([#156](https://github.com/DaveDev42/nokhwa/issues/156)) ([f8700b3](https://github.com/DaveDev42/nokhwa/commit/f8700b3b52b93097385cf0f3b8571cfb3ea492ec))
+
+
+### Bug Fixes
+
+* **gstreamer:** enumerate FractionRange framerates (Windows mfvideosrc/ksvideosrc) ([#161](https://github.com/DaveDev42/nokhwa/issues/161)) ([eed176c](https://github.com/DaveDev42/nokhwa/commit/eed176cec2f609475be48e7576f634c620543d0a))
+* **opencv:** re-open CameraIndex::String (IP camera) via from_file ([#147](https://github.com/DaveDev42/nokhwa/issues/147)) ([9fedf4d](https://github.com/DaveDev42/nokhwa/commit/9fedf4d5b736619a18328e6fdca953f509f6efb2))
+
+
+### Refactoring
+
+* remove UVC backend before 0.14.2 ships ([#159](https://github.com/DaveDev42/nokhwa/issues/159)) ([65a61ef](https://github.com/DaveDev42/nokhwa/commit/65a61ef063713c4715f6ffb3838bf90d5938ef81))
+* rename ShutterCapture lock/unlock to lock_ui/unlock_ui ([#141](https://github.com/DaveDev42/nokhwa/issues/141)) ([190a387](https://github.com/DaveDev42/nokhwa/commit/190a387fa7fe2ec93d07faeff731e8259729d7a4))
+
+
+### Infrastructure
+
+* **msmf:** drop dead docs-features cfg_attr in capture.rs ([#143](https://github.com/DaveDev42/nokhwa/issues/143)) ([a9d9387](https://github.com/DaveDev42/nokhwa/commit/a9d9387c247dc6c85f7fb130e5a89fbefeb32f83))
+* spike MSMF device tests on windows-latest via OBS virtual camera ([#148](https://github.com/DaveDev42/nokhwa/issues/148)) ([6f0937c](https://github.com/DaveDev42/nokhwa/commit/6f0937ce94fcb9b377f3ea57cc2fcf883b554dc9))
+* **v4l:** remove silent-skip paths from hotplug smoke ([#157](https://github.com/DaveDev42/nokhwa/issues/157)) ([fe5d0a2](https://github.com/DaveDev42/nokhwa/commit/fe5d0a2787cb1fe25141d9f05a4278b4c4c085d6))
+
+
+### Documentation
+
+* **gstreamer:** record session-2 prerequisites (usbipd + WSL setup) ([#155](https://github.com/DaveDev42/nokhwa/issues/155)) ([1b7f786](https://github.com/DaveDev42/nokhwa/commit/1b7f7863040bdc88a3d06dc38e5a0b734f7b25d7))
+* **msmf-obs:** abandon session 2, document DShow vs MF structural blocker ([#154](https://github.com/DaveDev42/nokhwa/issues/154)) ([e46f404](https://github.com/DaveDev42/nokhwa/commit/e46f40455f4cb83e73fd8ac5a8ce52a69816f6a8))
+* **todo:** annotate MSMF spike session 2 with first-run failure mode ([#151](https://github.com/DaveDev42/nokhwa/issues/151)) ([0f5203a](https://github.com/DaveDev42/nokhwa/commit/0f5203a9812e798a500a4d0e8dbeae8d39021284))
+* **todo:** rescope backlog — close Network/IP, flag OpenCV re-open bug ([#146](https://github.com/DaveDev42/nokhwa/issues/146)) ([bee66fa](https://github.com/DaveDev42/nokhwa/commit/bee66fae81c70de5adfa649b387659f17f089b26))
+* **todo:** scope virtual-camera CI — close macOS, keep Windows spike ([#145](https://github.com/DaveDev42/nokhwa/issues/145)) ([09d865a](https://github.com/DaveDev42/nokhwa/commit/09d865a90bcf3505e0e880ba748d6749dc4ddc4b))
+
+
+### Testing
+
+* **device:** add control set/get round-trip on real hardware ([#144](https://github.com/DaveDev42/nokhwa/issues/144)) ([de39d9e](https://github.com/DaveDev42/nokhwa/commit/de39d9eae0f052fcdebf3daea078e8babfec8fb8))
+
 ## [0.14.1](https://github.com/DaveDev42/nokhwa/compare/v0.14.0...v0.14.1) (2026-04-15)
 
 ### Performance
