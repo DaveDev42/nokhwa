@@ -38,11 +38,12 @@
     `nokhwa-bindings-linux-v4l::hotplug` mirrors MSMF — 500ms poll of
     `v4l::context::enum_devices()` keyed on `CameraIndex`. CI coverage
     lands via `.github/workflows/v4l-loopback.yml::V4L hotplug smoke
-    test` which dynamically adds + removes `/dev/video1` via
-    `v4l2loopback-ctl` and asserts the probe observed `Connected(` +
-    `Disconnected(` events. `inotify`-based event-driven impl is a
-    follow-up if the 2×/sec wake becomes a concern — same perf-only
-    gap the MSMF impl has.
+    test` which reloads `v4l2loopback` with `devices=2` → `devices=1`
+    → `devices=2` via `modprobe -r` + `modprobe` (Ubuntu's packaged
+    `v4l2loopback-ctl` lacks `add`/`delete`) and asserts the probe
+    observed `Connected(` + `Disconnected(` events. `inotify`-based
+    event-driven impl is a follow-up if the 2×/sec wake becomes a
+    concern — same perf-only gap the MSMF impl has.
 
 ## Backlog
 - [ ] Re-implement GStreamer backend (cross-platform, previously ~839 lines). Multi-session rollout in progress:

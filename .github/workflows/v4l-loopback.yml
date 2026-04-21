@@ -141,36 +141,65 @@ jobs:
             -- --test-threads=1 --nocapture
 
       - name: V4L hotplug smoke test
-        # Boots the `hotplug_probe` example, dynamically adds then
-        # removes a second v4l2loopback node via `v4l2loopback-ctl`, and
-        # asserts the probe observed both a `Connected` and a
-        # `Disconnected` event. Gates on `v4l2loopback-ctl` being
-        # installed — on runner images where the utility package is
-        # unavailable the step skips rather than failing the whole job.
+        # Runs `hotplug_probe` against a dynamically changing v4l2loopback
+        # device set and asserts the probe observed both a `Connected`
+        # and a `Disconnected` event end-to-end.
+        #
+        # We drive change via `modprobe -r` + `modprobe` with a different
+        # `devices=` count rather than `v4l2loopback-ctl add/delete`
+        # because the Ubuntu-packaged `v4l2loopback-utils` ships an older
+        # control binary whose only subcommands are `set-fps` /
+        # `set-timeout-image` / `set-caps` — `add` / `delete` are not
+        # available. The ffmpeg producer from earlier steps is already
+        # done with /dev/video0 at this point; we kill it first so
+        # `modprobe -r` isn't blocked by an open handle.
+        #
         # `continue-on-error: true` covers kernel/DKMS flakiness the
         # same way the surrounding steps do.
         continue-on-error: true
         run: |
           set -e
-          if ! command -v v4l2loopback-ctl >/dev/null 2>&1; then
-            echo "v4l2loopback-ctl not installed — skipping hotplug smoke"
+          # Stop ffmpeg (already served its purpose) so modprobe -r can
+          # succeed without EBUSY on /dev/video0.
+          pkill -f "ffmpeg.*testsrc2" 2>/dev/null || true
+          sleep 1
+          # Reload with two devices so the probe's seed snapshot contains
+          # both; we'll then remove one to generate a Disconnected event
+          # and re-add it to generate Connected.
+          sudo modprobe -r v4l2loopback
+          sudo modprobe v4l2loopback devices=2 video_nr=0,1 \
+            card_label="nokhwa-ci-hotplug-0,nokhwa-ci-hotplug-1" \
+            exclusive_caps=1
+          for _ in $(seq 1 10); do
+            [ -e /dev/video0 ] && [ -e /dev/video1 ] && break
+            sleep 0.5
+          done
+          if [ ! -e /dev/video1 ]; then
+            echo "v4l2loopback reload did not expose /dev/video1 — skipping hotplug smoke"
             exit 0
           fi
-          # hotplug_probe runs for 15s, long enough to span
-          # settle → add → settle → delete → settle.
+          sudo chown "$(id -un)" /dev/video0 /dev/video1
+
           cargo build --features input-v4l --example hotplug_probe
           (target/debug/examples/hotplug_probe \
               > /tmp/hotplug_probe.log 2>&1) &
           PROBE_PID=$!
-          sleep 2  # let the poll loop seed its snapshot
-          sudo v4l2loopback-ctl add /dev/video1 || {
-            echo "v4l2loopback-ctl add failed — skipping hotplug smoke"
-            kill "$PROBE_PID" 2>/dev/null || true
-            exit 0
-          }
-          sleep 2  # one full POLL_INTERVAL (500ms) + margin
-          sudo v4l2loopback-ctl delete /dev/video1 || true
+          sleep 2  # seed snapshot (both devices present)
+
+          # Remove /dev/video1 by reloading with a single device. The
+          # probe should observe this as Disconnected within ~500ms.
+          sudo modprobe -r v4l2loopback
+          sudo modprobe v4l2loopback devices=1 video_nr=0 \
+            card_label="nokhwa-ci-hotplug-0" exclusive_caps=1
           sleep 2
+
+          # Re-add /dev/video1 to generate a Connected event.
+          sudo modprobe -r v4l2loopback
+          sudo modprobe v4l2loopback devices=2 video_nr=0,1 \
+            card_label="nokhwa-ci-hotplug-0,nokhwa-ci-hotplug-1" \
+            exclusive_caps=1
+          sleep 2
+
           # Probe self-exits at 15s; `wait` returns immediately if it's
           # already gone.
           wait "$PROBE_PID" 2>/dev/null || true

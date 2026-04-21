@@ -29,10 +29,12 @@
   Dropping the poll flips an `AtomicBool` shutdown flag; the thread
   observes it within one `POLL_INTERVAL` and joins. CI coverage lands
   via `.github/workflows/v4l-loopback.yml::V4L hotplug smoke test`
-  which dynamically adds + removes `/dev/video1` with
-  `v4l2loopback-ctl` and asserts the probe observed both event
-  variants. `examples/hotplug_probe.rs` now picks the right backend at
-  compile time (`input-msmf` on Windows, `input-v4l` on Linux).
+  which reloads `v4l2loopback` with `devices=2` → `devices=1` →
+  `devices=2` via `modprobe -r` + `modprobe` (Ubuntu's packaged
+  `v4l2loopback-ctl` lacks `add`/`delete`) and asserts the probe
+  observed both event variants. `examples/hotplug_probe.rs` now picks
+  the right backend at compile time (`input-msmf` on Windows,
+  `input-v4l` on Linux).
 
 * **MSMF hotplug (`HotplugSource` implementation).** New
   `MediaFoundationHotplugContext` in `nokhwa-bindings-windows-msmf`,
