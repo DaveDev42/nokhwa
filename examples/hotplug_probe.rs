@@ -3,8 +3,9 @@
 //! Run with:
 //!
 //! ```text
-//! cargo run --features input-msmf --example hotplug_probe    # Windows
-//! cargo run --features input-v4l  --example hotplug_probe    # Linux
+//! cargo run --features input-msmf         --example hotplug_probe   # Windows
+//! cargo run --features input-v4l          --example hotplug_probe   # Linux
+//! cargo run --features input-avfoundation --example hotplug_probe   # macOS
 //! ```
 //!
 //! Listens for fifteen seconds on the native hotplug source, printing
@@ -25,9 +26,21 @@ fn backend_context() -> Box<dyn nokhwa_core::traits::HotplugSource> {
     Box::new(nokhwa::backends::hotplug::V4LHotplugContext::new())
 }
 
+#[cfg(all(
+    feature = "input-avfoundation",
+    any(target_os = "macos", target_os = "ios")
+))]
+fn backend_context() -> Box<dyn nokhwa_core::traits::HotplugSource> {
+    Box::new(nokhwa::backends::hotplug::AVFoundationHotplugContext::new())
+}
+
 #[cfg(any(
     all(feature = "input-msmf", target_os = "windows"),
     all(feature = "input-v4l", target_os = "linux"),
+    all(
+        feature = "input-avfoundation",
+        any(target_os = "macos", target_os = "ios")
+    ),
 ))]
 fn main() {
     let mut ctx = backend_context();
@@ -44,12 +57,17 @@ fn main() {
 #[cfg(not(any(
     all(feature = "input-msmf", target_os = "windows"),
     all(feature = "input-v4l", target_os = "linux"),
+    all(
+        feature = "input-avfoundation",
+        any(target_os = "macos", target_os = "ios")
+    ),
 )))]
 fn main() {
     eprintln!(
         "This example requires a hotplug-capable backend for the current OS.\n\
          Try one of:\n\
-           cargo run --features input-msmf --example hotplug_probe   # Windows\n\
-           cargo run --features input-v4l  --example hotplug_probe   # Linux"
+           cargo run --features input-msmf         --example hotplug_probe   # Windows\n\
+           cargo run --features input-v4l          --example hotplug_probe   # Linux\n\
+           cargo run --features input-avfoundation --example hotplug_probe   # macOS"
     );
 }

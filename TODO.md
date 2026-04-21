@@ -30,10 +30,8 @@
   `RegisterDeviceNotification(KSCATEGORY_VIDEO_CAMERA)` with a
   hidden window + message pump; the hotplug API surface doesn't
   change. Tracked as a perf optimisation, not a correctness gap.
-- [ ] Hotplug impls on the other backends. AVFoundation could use
-  `IOKit` matching notifications. The `HotplugSource` trait surface is
-  identical across backends — pattern-match on the MSMF / V4L polling
-  impl.
+- [x] ~~Hotplug impls on the other backends.~~ All three native
+  backends now ship `HotplugSource`:
   - [x] **V4L** polling impl (2026-04-21): `V4LHotplugContext` in
     `nokhwa-bindings-linux-v4l::hotplug` mirrors MSMF — 500ms poll of
     `v4l::context::enum_devices()` keyed on `CameraIndex`. CI coverage
@@ -44,6 +42,16 @@
     observed `Connected(` + `Disconnected(` events. `inotify`-based
     event-driven impl is a follow-up if the 2×/sec wake becomes a
     concern — same perf-only gap the MSMF impl has.
+  - [x] **AVFoundation** polling impl (2026-04-21):
+    `AVFoundationHotplugContext` in
+    `nokhwa-bindings-macos-avfoundation::hotplug` mirrors MSMF/V4L —
+    500ms poll of `device::query()` keyed on
+    `AVCaptureDevice.uniqueID` (stored in `CameraInfo.misc`).
+    Compilation verified on macOS via the `Build (macos)` CI job.
+    End-to-end hardware verification awaits the self-hosted
+    `macos-camera` runner or a manual `hotplug_probe` run. `IOKit`
+    matching-notification event-driven impl is a follow-up if the
+    2×/sec wake becomes a concern — same perf-only gap as MSMF/V4L.
 
 ## Backlog
 - [ ] Re-implement GStreamer backend (cross-platform, previously ~839 lines). Multi-session rollout in progress:
