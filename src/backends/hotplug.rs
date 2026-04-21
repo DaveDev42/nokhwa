@@ -14,5 +14,13 @@
  * limitations under the License.
  */
 
-pub mod capture;
-pub mod hotplug;
+//! Backend-level hotplug contexts. Each `HotplugSource`-implementing
+//! type here wraps a platform's device-change notification plumbing:
+//! create one, call [`HotplugSource::take_hotplug_events`][tho] once,
+//! and poll the returned handle.
+//!
+//! [tho]: nokhwa_core::traits::HotplugSource::take_hotplug_events
+
+#[cfg(all(feature = "input-msmf", target_os = "windows"))]
+#[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-msmf")))]
+pub use nokhwa_bindings_windows_msmf::MediaFoundationHotplugContext;
