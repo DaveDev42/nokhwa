@@ -95,7 +95,7 @@ The default feature set enables only `mjpeg`. You **must** additionally enable a
 - `input-avfoundation`: macOS/iOS AVFoundation backend
 - `input-v4l`: Linux Video4Linux2 backend
 - `input-msmf`: Windows Media Foundation backend
-- `input-opencv`: Cross-platform OpenCV backend *(pending migration to 0.13 trait split; enabling it currently triggers a `compile_error!`)*
+- `input-opencv`: Cross-platform OpenCV backend (requires a system OpenCV install). Also the supported path for **IP / RTSP cameras**: pass the URL as `CameraIndex::String` and open with `input-opencv`. The old `NetworkCamera` wrapper was removed in 0.10.0.
 
 **Output features:**
 - `output-wgpu`: Copy frames directly into a `wgpu` texture
