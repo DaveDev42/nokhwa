@@ -13,7 +13,7 @@ keywords    = [ "gstreamer", "capture", "webcam", "pipeline" ]
 # the crate only compiles the cross-platform stub, which is what docs
 # builds and feature-less consumers want. The top-level `nokhwa` crate
 # toggles this feature via `input-gstreamer`.
-backend = [ "dep:gstreamer" ]
+backend = [ "dep:gstreamer", "dep:gstreamer-app", "dep:gstreamer-video" ]
 # Alias that downstream docs builds pass to force the stub path
 # regardless of target. Symmetric with the other bindings crates.
 docs-only = [  ]
@@ -31,6 +31,19 @@ path    = "../nokhwa-core"
 # this workspace targets the stable 1.89 toolchain used by the `nightly`
 # toolchain action in CI.
 [dependencies.gstreamer]
+version  = "0.23"
+optional = true
+
+# `gstreamer-app::AppSink` is how session-2 streaming pulls frames out
+# of the pipeline. Version-matched to `gstreamer` above.
+[dependencies.gstreamer-app]
+version  = "0.23"
+optional = true
+
+# `gstreamer-video::VideoFormat` is how we map caps `format=...` strings
+# to nokhwa's `FrameFormat` enum without hand-parsing the FOURCC/GUID
+# mess. Version-matched to `gstreamer` above.
+[dependencies.gstreamer-video]
 version  = "0.23"
 optional = true
 

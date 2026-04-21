@@ -40,6 +40,26 @@
 
 ### Features
 
+* **GStreamer session 2 — streaming on real hardware.**
+  `GStreamerCaptureDevice::new()` / `open()` / `frame()` /
+  `frame_raw()` / `close()` / `set_format()` are now live. The device
+  owns a `source ! capsfilter ! videoconvert ! appsink` pipeline where
+  `source` is whatever `Device::create_element(None)` hands us on the
+  host (`v4l2src` on Linux, `mfvideosrc` on Windows, `avfvideosrc` on
+  macOS), `capsfilter` pins the negotiated `video/x-raw` format,
+  `videoconvert` handles I420 ↔ NV12 ↔ YUY2 transparently, and
+  `AppSink` serves frames via `try_pull_sample` with
+  `max_buffers=1 drop=true sync=false` for "latest frame" semantics.
+  Format enumeration walks `Device::caps()` for `video/x-raw` (YUY2 /
+  NV12 / GRAY8) structures and their framerate lists. New module
+  layout: `src/format.rs` (caps ↔ `CameraFormat` mapping, 6 unit
+  tests) and `src/pipeline.rs` (`PipelineHandle` lifecycle).
+  Hardware-verified on a Logitech MX Brio (046d:0944) forwarded to
+  WSL2 Ubuntu 24.04 via `usbipd-win 5.3.0` + GStreamer 1.24.2:
+  5 frames at 640x480 NV12 30fps, 460800 bytes each. Higher
+  resolutions may hit usbip bandwidth caps in WSL but work on direct
+  USB. New `examples/gstreamer_probe.rs` demonstrates end-to-end use.
+
 * **AVFoundation hotplug (`HotplugSource` implementation).** New
   `AVFoundationHotplugContext` in `nokhwa-bindings-macos-avfoundation`,
   re-exported as
