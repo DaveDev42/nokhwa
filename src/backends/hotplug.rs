@@ -28,3 +28,10 @@ pub use nokhwa_bindings_windows_msmf::MediaFoundationHotplugContext;
 #[cfg(all(feature = "input-v4l", target_os = "linux"))]
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-v4l")))]
 pub use nokhwa_bindings_linux_v4l::V4LHotplugContext;
+
+#[cfg(all(
+    feature = "input-avfoundation",
+    any(target_os = "macos", target_os = "ios")
+))]
+#[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-avfoundation")))]
+pub use nokhwa_bindings_macos_avfoundation::AVFoundationHotplugContext;

@@ -37,6 +37,9 @@ pub mod types;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod util;
 
+mod hotplug;
+pub use hotplug::AVFoundationHotplugContext;
+
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use callback::{
     current_authorization_status, request_permission_with_callback, AVCaptureVideoCallback,

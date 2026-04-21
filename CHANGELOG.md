@@ -18,6 +18,27 @@
 
 ### Features
 
+* **AVFoundation hotplug (`HotplugSource` implementation).** New
+  `AVFoundationHotplugContext` in `nokhwa-bindings-macos-avfoundation`,
+  re-exported as
+  `nokhwa::backends::hotplug::AVFoundationHotplugContext` when the
+  `input-avfoundation` feature is enabled on macOS / iOS. Mirrors the
+  MSMF and V4L polling impls: a dedicated background thread calls
+  `device::query()` every 500ms, diffs successive snapshots keyed on
+  `AVCaptureDevice.uniqueID` (which the device module already stores
+  in `CameraInfo.misc`), and emits `HotplugEvent::Connected` /
+  `Disconnected` through an mpsc channel wrapped in
+  `Box<dyn HotplugEventPoll>`. Dropping the poll flips an
+  `AtomicBool`; the thread observes it within one `POLL_INTERVAL` and
+  joins. `IOKit` matching notifications would be event-driven but
+  require runloop + Objective-C block plumbing for marginal benefit
+  at seconds-scale latency budgets. `examples/hotplug_probe.rs` now
+  picks the right backend on all three native OSes at compile time.
+
+  This closes the \"Hotplug impls on the other backends\" follow-up —
+  all three native backends (MSMF / V4L / AVFoundation) now ship a
+  `HotplugSource` implementation with identical trait surface.
+
 * **V4L hotplug (`HotplugSource` implementation).** New
   `V4LHotplugContext` in `nokhwa-bindings-linux-v4l`, re-exported as
   `nokhwa::backends::hotplug::V4LHotplugContext` when the `input-v4l`
