@@ -32,7 +32,7 @@ pub fn native_api_backend() -> Option<ApiBackend> {
 
 // TODO: Update as this goes
 /// Query the system for a list of available devices. Please refer to the API Backends that support `Query`) <br>
-/// Usually the order goes Native -> UVC -> Gstreamer.
+/// Usually the order goes Native -> GStreamer.
 /// # Quirks
 /// - `Media Foundation`: The symbolic link for the device is listed in the `misc` attribute of the [`CameraInfo`].
 /// - `Media Foundation`: The names may contain invalid characters since they were converted from UTF16.
@@ -101,7 +101,6 @@ pub fn query(api: ApiBackend) -> Result<Vec<CameraInfo>, NokhwaError> {
         ApiBackend::AVFoundation => query_avfoundation(),
         ApiBackend::Video4Linux => query_v4l(),
         ApiBackend::MediaFoundation => query_msmf(),
-        ApiBackend::UniversalVideoClass => query_uvc(),
         ApiBackend::GStreamer => query_gstreamer(),
         ApiBackend::OpenCv | ApiBackend::Network => {
             Err(NokhwaError::UnsupportedOperationError(api))
@@ -122,18 +121,6 @@ fn query_v4l() -> Result<Vec<CameraInfo>, NokhwaError> {
 fn query_v4l() -> Result<Vec<CameraInfo>, NokhwaError> {
     Err(NokhwaError::UnsupportedOperationError(
         ApiBackend::Video4Linux,
-    ))
-}
-
-#[cfg(feature = "input-uvc")]
-fn query_uvc() -> Result<Vec<CameraInfo>, NokhwaError> {
-    nokhwa_bindings_uvc::query()
-}
-
-#[cfg(not(feature = "input-uvc"))]
-fn query_uvc() -> Result<Vec<CameraInfo>, NokhwaError> {
-    Err(NokhwaError::UnsupportedOperationError(
-        ApiBackend::UniversalVideoClass,
     ))
 }
 

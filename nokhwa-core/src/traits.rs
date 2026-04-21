@@ -304,8 +304,8 @@ pub enum CameraEvent {
 /// implemented on a backend-wide context type, not on individual cameras.
 ///
 /// This trait is **optional**. Backends that cannot detect hotplug (for
-/// example `OpenCV`, or UVC stacks that do not expose device-change
-/// callbacks) simply do not implement it.
+/// example `OpenCV`, which wraps platform APIs without surfacing
+/// device-change callbacks) simply do not implement it.
 ///
 /// [`HotplugEvent::Connected`] carries the [`CameraInfo`] of the newly
 /// visible device, so consumers can immediately open it.
