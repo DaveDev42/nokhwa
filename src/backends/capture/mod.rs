@@ -60,13 +60,6 @@ pub use nokhwa_bindings_windows_msmf::MediaFoundationCaptureDevice;
 crate::nokhwa_backend!(
     nokhwa_bindings_windows_msmf::MediaFoundationCaptureDevice: FrameSource
 );
-#[cfg(feature = "input-uvc")]
-#[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-uvc")))]
-pub use nokhwa_bindings_uvc::UVCCaptureDevice;
-
-#[cfg(feature = "input-uvc")]
-crate::nokhwa_backend!(nokhwa_bindings_uvc::UVCCaptureDevice: FrameSource);
-
 #[cfg(feature = "input-gstreamer")]
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-gstreamer")))]
 pub use nokhwa_bindings_gstreamer::GStreamerCaptureDevice;

@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+> **Note on the UVC backend in this release.** Commits under the
+> `feat(uvc):` prefix (sessions 1 and 2a) added a new
+> `nokhwa-bindings-uvc` crate with libusb-based enumeration + UVC
+> descriptor parsing. The backend was **removed before 0.14.2
+> shipped** — `ApiBackend::UniversalVideoClass`, the `input-uvc`
+> feature, and the bindings crate no longer exist in 0.14.2. The
+> three native backends (MSMF / V4L / AVFoundation) are now
+> feature-complete including hotplug, which eliminates the
+> cross-platform motivation for a generic libusb-UVC path; streaming
+> itself is also structurally blocked on Windows (`usbvideo.sys`
+> owns the interface) and redundant with V4L / AVFoundation on
+> Linux / macOS. See `TODO.md` for the full rationale. Future niche
+> work (industrial / IR / UVC Processing Unit extensions) will be
+> addressed by purpose-built backends rather than a generic UVC
+> path. **No action required for downstream users** — anything
+> relying on `input-uvc` would not have compiled in 0.14.1 anyway.
+
+### Removed
+
+* **UVC backend (`ApiBackend::UniversalVideoClass`, `input-uvc`,
+  `nokhwa-bindings-uvc`)** before its first release. Rationale above.
+
 ### Infrastructure
 
 * `msmf_probe` example and a long-form finding comment at the top of

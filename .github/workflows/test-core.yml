@@ -62,34 +62,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --features input-opencv
 
-  # Verifies the cross-platform UVC backend (session 1: enumeration only)
-  # still compiles on the canonical Linux path. rusb pulls in libusb-1.0
-  # at build time via pkg-config.
-  check-uvc:
-    name: Feature check (input-uvc)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      RUSTFLAGS: "-D warnings"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@nightly
-      - name: Install libusb
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libusb-1.0-0-dev \
-            pkg-config
-      - uses: Swatinem/rust-cache@v2
-      # Check `input-uvc` standalone — not paired with `input-v4l` — so
-      # `-D warnings` only applies to the UVC crate and the top-level
-      # crate. Pre-existing warnings in the v4l bindings crate (e.g. an
-      # unused `Stream` import) are intentionally out of scope for this
-      # job; they surface as warnings under the `check-features` job
-      # that does not set `-D warnings`.
-      - run: cargo check --features input-uvc
-      - run: cargo test -p nokhwa-bindings-uvc
-
   # Verifies the cross-platform GStreamer backend (session 1: enumeration
   # only) compiles on the canonical Linux path. gstreamer-rs links against
   # the system GStreamer install at build time.
