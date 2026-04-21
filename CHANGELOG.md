@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Infrastructure
+
+* `msmf_probe` example and a long-form finding comment at the top of
+  `.github/workflows/msmf-obs-virtualcam.yml` record the outcome of
+  the MSMF OBS virtual-camera CI spike: OBS's virtualcam is a
+  DirectShow filter, and `MFEnumDeviceSources` (the API nokhwa's MSMF
+  backend uses) does not bridge DShow filters. Seeding OBS's
+  first-run profile makes OBS start cleanly but does not make the
+  virtual camera visible to MSMF. The workflow stays
+  `workflow_dispatch`-only + `continue-on-error: true` as a
+  diagnostic harness; TODO.md tracks the remaining MSMF-CI
+  candidates (Windows 11 Camera Extension sample, in-harness Rust MF
+  source, or a self-hosted Windows runner).
+
 ### Features
 
 * **MSMF hotplug (`HotplugSource` implementation).** New
