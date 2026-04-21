@@ -7,7 +7,9 @@
 
 #![cfg(feature = "device-test")]
 
-use nokhwa::utils::{ApiBackend, CameraIndex};
+use nokhwa::utils::{
+    ApiBackend, CameraIndex, ControlValueDescription, ControlValueSetter, KnownCameraControlFlag,
+};
 use nokhwa::{native_api_backend, open, query, OpenRequest, OpenedCamera};
 
 fn native_backend() -> ApiBackend {
@@ -73,6 +75,94 @@ fn enumerate_controls_and_formats() {
         OpenedCamera::Shutter(cam) => {
             cam.controls().expect("ShutterCamera::controls");
         }
+    }
+}
+
+#[test]
+fn control_set_get_round_trip() {
+    macro_rules! round_trip {
+        ($cam:expr) => {{
+            let cam = $cam;
+            let controls = cam.controls().expect("controls()");
+
+            // Prefer a Manual-mode IntegerRange control with headroom. Automatic-
+            // flagged controls are skipped because set_control on MSMF preserves
+            // the current flag: writing a value while the driver still owns the
+            // control may round-trip intermittently.
+            let candidate = controls.iter().find_map(|c| {
+                let disqualified = c.flag().iter().any(|f| {
+                    matches!(
+                        f,
+                        KnownCameraControlFlag::ReadOnly
+                            | KnownCameraControlFlag::WriteOnly
+                            | KnownCameraControlFlag::Disabled
+                            | KnownCameraControlFlag::Automatic
+                    )
+                });
+                if disqualified {
+                    return None;
+                }
+                match c.description() {
+                    ControlValueDescription::IntegerRange {
+                        min,
+                        max,
+                        value,
+                        step,
+                        ..
+                    } if *max > *min && *step > 0 => Some((c.control(), *min, *max, *step, *value)),
+                    _ => None,
+                }
+            });
+
+            let Some((id, min, max, step, current)) = candidate else {
+                eprintln!(
+                    "control_set_get_round_trip: no writable IntegerRange control in Manual mode \
+                     is exposed by this device; skipping."
+                );
+                return;
+            };
+
+            let target = if current + step <= max {
+                current + step
+            } else if current - step >= min {
+                current - step
+            } else {
+                eprintln!(
+                    "control_set_get_round_trip: {id:?} has no headroom \
+                     (min={min} max={max} step={step} value={current}); skipping."
+                );
+                return;
+            };
+
+            eprintln!(
+                "control_set_get_round_trip: using {id:?} \
+                 (min={min} max={max} step={step} current={current} target={target})"
+            );
+
+            cam.set_control(id, ControlValueSetter::Integer(target))
+                .unwrap_or_else(|e| panic!("set_control({id:?}, {target}): {e}"));
+
+            let after = cam.controls().expect("controls() after set");
+            let updated = after
+                .iter()
+                .find(|c| c.control() == id)
+                .expect("control disappeared after set");
+            match updated.description() {
+                ControlValueDescription::IntegerRange { value, .. } => assert_eq!(
+                    *value, target,
+                    "{id:?} did not round-trip: wanted {target}, got {value}"
+                ),
+                d => panic!("{id:?} changed description variant: {d:?}"),
+            }
+
+            let _ = cam.set_control(id, ControlValueSetter::Integer(current));
+        }};
+    }
+
+    match open_first() {
+        OpenedCamera::Stream(mut cam) => round_trip!(&mut cam),
+        OpenedCamera::Hybrid(mut cam) => round_trip!(&mut cam),
+        OpenedCamera::Shutter(mut cam) => round_trip!(&mut cam),
     }
 }
 

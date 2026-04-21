@@ -10,6 +10,16 @@
   (only `docs-only`) and never enabled `#![feature(doc_cfg)]`, so the
   attribute was a no-op that only produced an `unexpected_cfgs` warning.
 
+### Testing
+
+* Add `control_set_get_round_trip` to `tests/device_tests.rs` (gated behind
+  the `device-test` feature). Picks the first Manual-mode `IntegerRange`
+  control with headroom, writes a stepped value via `set_control`, then
+  re-queries `controls()` and asserts the new value round-trips. Skips
+  gracefully when no writable control is available (e.g. when running
+  against `v4l2loopback`), so it stays safe on the Linux CI job. Verified
+  on a Windows MSMF webcam: `Brightness` 128 → 129.
+
 ### Features
 
 * New `HotplugSource` trait and `HotplugEvent` enum (`Connected(CameraInfo)` /
