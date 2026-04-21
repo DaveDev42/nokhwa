@@ -543,10 +543,16 @@ impl FrameSource for OpenCvCaptureDevice {
                     }),
                 }
             }
-            CameraIndex::String(s) => Err(NokhwaError::OpenDeviceError {
-                device: s.to_string(),
-                error: "String index not supported (try NetworkCamera instead)".to_string(),
-            }),
+            CameraIndex::String(s) => match VideoCapture::from_file(s.as_str(), CAP_ANY) {
+                Ok(vc) => {
+                    self.video_capture = vc;
+                    return Ok(());
+                }
+                Err(why) => Err(NokhwaError::OpenDeviceError {
+                    device: s.to_string(),
+                    error: format!("Failed to open IP camera: {why}"),
+                }),
+            },
         }?;
 
         match self.video_capture.is_opened() {

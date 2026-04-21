@@ -4,7 +4,7 @@
 (None)
 
 ## Medium Priority
-- [ ] **OpenCV backend: re-open path for `CameraIndex::String` (IP cameras).** The constructor in `src/backends/capture/opencv_backend.rs` builds an already-open `VideoCapture` via `VideoCapture::from_file(ip, api_pref)` at line 169, but `FrameSource::open()` at line 546 errors on `CameraIndex::String` with `"String index not supported (try NetworkCamera instead)"`. Consequences: (a) `close()` followed by `open()` breaks for IP cameras; (b) the error message references the removed `NetworkCamera` type. Likely fix: replace the `Err(...)` arm with a call through the Rust opencv crate's filename-overload open (either `VideoCapture::from_file` reconstructing `self.video_capture` or `open_file(&str, i32)` if the binding exposes it). Requires testing against an actual IP/RTSP stream — no hardware available on the current dev box.
+(None)
 
 ## Low Priority
 - [ ] Expand platform integration tests (requires physical camera, gated behind `device-test` feature). Port in `tests/device_tests.rs` covers query, multi-frame streaming, control enumeration, and `CameraRunner` smoke.
@@ -19,5 +19,5 @@
 ## Backlog
 - [ ] Re-implement GStreamer backend (cross-platform, previously ~839 lines). Would live in a new `nokhwa-bindings-gstreamer` crate alongside the existing per-OS binding crates. Significant scope — not a one-session task.
 - [ ] Re-implement UVC backend (cross-platform via libusb, previously ~561 lines). Needs a new `nokhwa-bindings-uvc` crate with `libusb`/`rusb` + UVC protocol decode. Significant scope.
-- [x] ~~Re-implement Network/IP camera backend~~ — **already supported**. The OpenCV backend at `src/backends/capture/opencv_backend.rs:167-170` accepts an IP/RTSP URL as `CameraIndex::String` and opens it via `VideoCapture::from_file`. The old deprecated `NetworkCamera` wrapper was removed intentionally in favour of this path. Documented on the feature table in `README.md`. (A related re-open bug is tracked under Medium Priority.)
+- [x] ~~Re-implement Network/IP camera backend~~ — **already supported**. The OpenCV backend accepts an IP/RTSP URL as `CameraIndex::String` and opens it via `VideoCapture::from_file`. The old deprecated `NetworkCamera` wrapper was removed intentionally in favour of this path. Documented on the feature table in `README.md`.
 - [ ] Re-implement WASM/browser backend — requires resolving `wasm-bindgen` non-C enum limitation. Consider `tsify` or `serde-wasm-bindgen`.
