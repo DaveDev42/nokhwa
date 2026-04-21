@@ -82,12 +82,15 @@ Runnable examples live in the `examples/` directory
 | AVFoundation (`input-avfoundation`) | ✅ | ✅    | ✅           | macOS               |
 | OpenCV (`input-opencv`)^        | ✅    | ❌    | ❌           | Linux, Windows, Mac |
 | UVC (`input-uvc`)†              | ❌    | ✅    | ❌           | Linux, Windows, Mac |
+| GStreamer (`input-gstreamer`)‡  | ❌    | ✅    | ❌           | Linux, Windows, Mac |
 
 ✅ Working  ❌ Not Supported
 
 ^ = May be bugged. Also supports IP Cameras.
 
 † = Session 1 ships device enumeration only. Streaming, format negotiation, and controls land in follow-up releases. See `TODO.md`.
+
+‡ = Session 1 ships device enumeration only (via `DeviceMonitor` filtered to `Video/Source`). Streaming, format negotiation, and controls land in follow-up releases. See `TODO.md`.
 
 ## Features
 
@@ -100,6 +103,7 @@ The default feature set enables only `mjpeg`. You **must** additionally enable a
 - `input-msmf`: Windows Media Foundation backend
 - `input-opencv`: Cross-platform OpenCV backend (requires a system OpenCV install). Also the supported path for **IP / RTSP cameras**: pass the URL as `CameraIndex::String` and open with `input-opencv`. The old `NetworkCamera` wrapper was removed in 0.10.0.
 - `input-uvc`: Cross-platform UVC (USB Video Class) backend via libusb / `rusb`. *Session 1 (current): device enumeration only — `query(ApiBackend::UniversalVideoClass)` returns one `CameraInfo` per UVC device. Opening a camera via this backend is not yet wired up; use a native backend or OpenCV to stream while streaming support is implemented in follow-up sessions.* On Linux, requires `libusb-1.0-0-dev` at build time.
+- `input-gstreamer`: Cross-platform GStreamer backend via `gstreamer-rs`. Requires a system GStreamer install (`libgstreamer1.0-dev` + `gstreamer1.0-plugins-base` on Ubuntu; upstream installer on macOS / Windows). *Session 1 (current): device enumeration only — `query(ApiBackend::GStreamer)` walks `DeviceMonitor` filtered to `Video/Source` and returns one `CameraInfo` per source.* Opening a camera via this backend is not yet wired up.
 
 **Output features:**
 - `output-wgpu`: Copy frames directly into a `wgpu` texture

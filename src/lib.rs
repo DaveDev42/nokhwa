@@ -105,12 +105,13 @@
     feature = "input-v4l",
     feature = "input-msmf",
     feature = "input-opencv",
-    feature = "input-uvc"
+    feature = "input-uvc",
+    feature = "input-gstreamer"
 )))]
 compile_error!(
     "nokhwa requires at least one input-* feature to be enabled \
      (e.g. input-native / input-auto, input-avfoundation, input-v4l, input-msmf, \
-     input-opencv, input-uvc)"
+     input-opencv, input-uvc, input-gstreamer)"
 );
 
 /// Raw access to each of Nokhwa's backends.

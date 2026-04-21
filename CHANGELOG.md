@@ -23,6 +23,30 @@
   Brio (046d:0944). CI: new `Feature check (input-uvc)` job in
   `.github/workflows/test-core.yml`.
 
+* **New cross-platform GStreamer backend (session 1).** Introduces a
+  new workspace crate `nokhwa-bindings-gstreamer` built on
+  `gstreamer-rs`, gated behind `input-gstreamer`. This release ships
+  **device enumeration only**: `query(ApiBackend::GStreamer)` returns
+  one `CameraInfo` per `Video/Source` element that the GStreamer
+  `DeviceMonitor` reports with `video/x-raw` caps. `CameraInfo.human_name`
+  carries the device's display name; `description` carries the element
+  class (e.g. `Video/Source`); `misc` is reserved for session-2 code to
+  populate with pipeline-reconstruction data.
+  `GStreamerCaptureDevice::new()` and every `FrameSource` /
+  `CameraDevice` method currently error with `NotImplementedError` /
+  `UnsupportedOperationError(GStreamer)` so the feature flag,
+  `nokhwa_backend!` registration, and CI coverage can land ahead of the
+  streaming surface. Streaming, format negotiation, and controls are
+  tracked in `TODO.md` as sessions 2–4. Pinned to `gstreamer = "0.23"`
+  because 0.25+ requires rustc 1.92 while the workspace targets rustc
+  1.89. The bindings crate also exposes an internal `backend` cargo
+  feature so `cargo check -p nokhwa-bindings-gstreamer` compiles the
+  stub path on machines without a system GStreamer install; the
+  top-level `input-gstreamer` feature enables `backend`. CI: new
+  `Feature check (input-gstreamer)` job in
+  `.github/workflows/test-core.yml` installs `libgstreamer1.0-dev` +
+  `gstreamer1.0-plugins-base`.
+
 ### Bug Fixes
 
 * `OpenCvCaptureDevice::open()` now re-opens `CameraIndex::String` (IP /
