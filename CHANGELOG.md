@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Cleanup
+
+* Remove a dead `#[cfg_attr(feature = "docs-features", doc(cfg(...)))]`
+  annotation on `MediaFoundationCaptureDevice` in
+  `nokhwa-bindings-windows-msmf`. The crate never declared `docs-features`
+  (only `docs-only`) and never enabled `#![feature(doc_cfg)]`, so the
+  attribute was a no-op that only produced an `unexpected_cfgs` warning.
+
 ### Features
 
 * New `HotplugSource` trait and `HotplugEvent` enum (`Connected(CameraInfo)` /
