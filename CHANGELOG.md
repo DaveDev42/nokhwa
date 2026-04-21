@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+### Features
+
+* **GStreamer session 3 — controls on Linux.** Platform-asymmetric
+  camera-control support through GStreamer source elements.
+  - **Linux `v4l2src`**: `controls()` enumerates the 4 `controllable`
+    GObject properties (`brightness` / `contrast` / `hue` /
+    `saturation`) with current values + pspec ranges. `set_control()`
+    on those 4 writes immediately at any pipeline state via
+    `source.set_property()`. For the rest of the V4L2 CID namespace
+    (exposure / zoom / focus / pan / tilt / gain / sharpness / gamma
+    / white-balance / backlight-comp) `set_control()` stages the
+    value in a pending map and applies it via v4l2src's write-only
+    `extra-controls` `GstStructure` on the next pipeline open
+    (automatic pipeline restart if open when called).
+  - **Windows `mfvideosrc` / `ksvideosrc`**: no camera-control
+    properties exist on the source elements. `controls()` returns an
+    empty list; `set_control()` errors for handle-less IDs. Windows
+    users should use `input-msmf` for full control support.
+  - **macOS `avfvideosrc`**: treated the same as Windows until
+    verified on real hardware.
+  - Hardware-verified on a Logitech MX Brio via WSL + `usbipd`: all
+    4 live controls enumerate with their current values and
+    `Brightness` 128 → 129 round-trips correctly. Known limitation:
+    v4l2src's pspec reports the full `i32` range for the live-
+    property ranges rather than the actual V4L2 driver range
+    (MX Brio's brightness is 0–255 in V4L2). Use `input-v4l` if the
+    true range matters.
+  - New module `nokhwa-bindings-gstreamer::controls`;
+    `examples/gstreamer_probe.rs` now lists controls + round-trips
+    brightness.
+
 > **Note on the UVC backend in this release.** Commits under the
 > `feat(uvc):` prefix (sessions 1 and 2a) added a new
 > `nokhwa-bindings-uvc` crate with libusb-based enumeration + UVC
