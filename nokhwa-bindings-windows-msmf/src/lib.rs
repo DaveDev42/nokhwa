@@ -1387,6 +1387,9 @@ mod capture;
 #[cfg(all(windows, not(feature = "docs-only")))]
 pub use capture::MediaFoundationCaptureDevice;
 
+mod hotplug;
+pub use hotplug::MediaFoundationHotplugContext;
+
 /// Non-Windows stub for `MediaFoundationCaptureDevice`.
 ///
 /// Exists so that cross-platform documentation builds (`cargo doc

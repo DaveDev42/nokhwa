@@ -19,6 +19,18 @@
 ## Performance
 (None)
 
+## Follow-ups on shipped features
+- [ ] Event-driven MSMF hotplug. Current impl polls `wmf::query()`
+  every 500ms, which is simple and reliable but wakes up 2× per
+  second. If the extra thread wake-ups become a concern, port to
+  `RegisterDeviceNotification(KSCATEGORY_VIDEO_CAMERA)` with a
+  hidden window + message pump; the hotplug API surface doesn't
+  change. Tracked as a perf optimisation, not a correctness gap.
+- [ ] Hotplug impls on the other backends. V4L could use `inotify`
+  on `/dev/video*`; AVFoundation could use `IOKit` matching
+  notifications. The `HotplugSource` trait surface is identical
+  across backends — pattern-match on the MSMF impl.
+
 ## Backlog
 - [ ] Re-implement GStreamer backend (cross-platform, previously ~839 lines). Multi-session rollout in progress:
   - [x] **Session 1** (2026-04-20, this release): New `nokhwa-bindings-gstreamer` workspace crate pinned to `gstreamer = "0.23"` (0.25+ requires rustc 1.92 which exceeds our 1.89 toolchain). `query(ApiBackend::GStreamer)` uses `DeviceMonitor` filtered to `Video/Source` with `video/x-raw` caps; each `Device` becomes a `CameraInfo` with `display_name` + `device_class`. `GStreamerCaptureDevice::new()` and every `FrameSource` method currently error — streaming lands in session 2. CI: `.github/workflows/test-core.yml::check-gstreamer` installs `libgstreamer1.0-dev` + `gstreamer1.0-plugins-base`. The bindings crate has an optional `backend` cargo feature so `cargo check` without GStreamer installed still compiles the stub path; the top-level `input-gstreamer` feature flips `backend` on.

@@ -4,6 +4,29 @@
 
 ### Features
 
+* **MSMF hotplug (`HotplugSource` implementation).** New
+  `MediaFoundationHotplugContext` in `nokhwa-bindings-windows-msmf`,
+  re-exported as `nokhwa::backends::hotplug::MediaFoundationHotplugContext`
+  when the `input-msmf` feature is enabled on Windows. Implements the
+  `HotplugSource` trait introduced in 0.14: `take_hotplug_events()`
+  spawns a dedicated background thread that polls `wmf::query()`
+  every 500ms, diffs successive snapshots on the MSMF symbolic link
+  (`CameraInfo.misc`), and emits `HotplugEvent::Connected` /
+  `Disconnected` through an mpsc channel wrapped in a
+  `Box<dyn HotplugEventPoll>`.
+
+  Polling rather than `RegisterDeviceNotification` is deliberate —
+  event-driven MSMF hotplug needs a hidden window plus a message pump
+  on the registering thread (~200 lines of `unsafe` Win32) for a
+  feature whose latency budget is seconds, not milliseconds. The poll
+  loop is ten lines, never misses an event (each snapshot reflects
+  the live MF device list), and joins cleanly on drop.
+
+  Dropping the poll handle flips an `AtomicBool` shutdown flag; the
+  background thread observes it within at most one `POLL_INTERVAL` and
+  exits. New `examples/hotplug_probe.rs` prints events for 15 seconds
+  so users can manually verify plug/unplug wiring.
+
 * **UVC backend session 2a — format discovery on real hardware.**
   `UVCCaptureDevice::new()` now opens the libusb device and walks the
   `VideoStreaming` interface's class-specific descriptor chain

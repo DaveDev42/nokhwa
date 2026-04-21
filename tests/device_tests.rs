@@ -100,6 +100,39 @@ fn uvc_new_exposes_compatible_formats() {
     eprintln!("expected session-2a open() error: {err}");
 }
 
+/// MSMF hotplug plumbing: `take_hotplug_events()` succeeds once and
+/// errors on the second call, the returned poller stays quiet under a
+/// steady-state device set, and dropping the poller joins the
+/// background thread cleanly (the test would hang if the Drop impl
+/// regressed). A manual plug/unplug observation is out of scope for
+/// the automated suite but the plumbing is fully exercised here.
+#[cfg(all(feature = "input-msmf", target_os = "windows"))]
+#[test]
+fn msmf_hotplug_take_and_steady_state() {
+    use nokhwa::backends::hotplug::MediaFoundationHotplugContext;
+    use nokhwa_core::traits::HotplugSource;
+    use std::time::Duration;
+
+    let mut ctx = MediaFoundationHotplugContext::new();
+    let mut poll = ctx
+        .take_hotplug_events()
+        .expect("first take_hotplug_events must succeed");
+
+    assert!(
+        ctx.take_hotplug_events().is_err(),
+        "second take_hotplug_events must error per the trait contract"
+    );
+
+    // Three poll windows (~1.5s) with no plug/unplug → no events.
+    let evt = poll.next_timeout(Duration::from_millis(1500));
+    assert!(
+        evt.is_none(),
+        "expected no hotplug event on steady state, got {evt:?}"
+    );
+
+    drop(poll);
+}
+
 #[test]
 fn query_reports_at_least_one_device() {
     let devices = query(native_backend()).expect("query() returned an error");
