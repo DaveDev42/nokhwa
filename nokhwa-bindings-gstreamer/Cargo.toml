@@ -1,0 +1,38 @@
+[package]
+name        = "nokhwa-bindings-gstreamer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Cross-platform GStreamer bindings for `nokhwa`, via gstreamer-rs"
+keywords    = [ "gstreamer", "capture", "webcam", "pipeline" ]
+
+[features]
+# Pulls in the gstreamer-rs dependency and switches the crate over to
+# the real `DeviceMonitor`-based implementation. Without this feature
+# the crate only compiles the cross-platform stub, which is what docs
+# builds and feature-less consumers want. The top-level `nokhwa` crate
+# toggles this feature via `input-gstreamer`.
+backend = [ "dep:gstreamer" ]
+# Alias that downstream docs builds pass to force the stub path
+# regardless of target. Symmetric with the other bindings crates.
+docs-only = [  ]
+
+[dependencies]
+
+[dependencies.nokhwa-core]
+path    = "../nokhwa-core"
+
+# Optional so that `cargo check` on this crate compiles on any host
+# without a system GStreamer install. Enabled by the `backend` feature
+# above, which is gated in turn by the top-level `input-gstreamer`
+# feature.
+# Pinned to 0.23 because 0.25+ requires rustc 1.92 while the rest of
+# this workspace targets the stable 1.89 toolchain used by the `nightly`
+# toolchain action in CI.
+[dependencies.gstreamer]
+version  = "0.23"
+optional = true
+
+[package.metadata.docs.rs]
+features = [ "docs-only" ]

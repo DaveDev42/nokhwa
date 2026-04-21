@@ -89,3 +89,37 @@ jobs:
       # that does not set `-D warnings`.
       - run: cargo check --features input-uvc
       - run: cargo test -p nokhwa-bindings-uvc
+
+  # Verifies the cross-platform GStreamer backend (session 1: enumeration
+  # only) compiles on the canonical Linux path. gstreamer-rs links against
+  # the system GStreamer install at build time.
+  check-gstreamer:
+    name: Feature check (input-gstreamer)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - name: Install GStreamer
+        # `libgstreamer1.0-dev` ships the pkg-config files the Rust
+        # bindings' sys crate looks for. `gstreamer1.0-plugins-base` is
+        # needed for the `video/x-raw` caps negotiation used by our
+        # DeviceMonitor filter. Skip Recommends to avoid pulling in the
+        # full plugin set.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgstreamer1.0-dev \
+            gstreamer1.0-plugins-base \
+            pkg-config
+      - uses: Swatinem/rust-cache@v2
+      # Check `input-gstreamer` standalone — not paired with `input-v4l` —
+      # so `-D warnings` only applies to the gstreamer crate and the
+      # top-level crate. Pre-existing warnings in the v4l bindings crate
+      # (e.g. an unused `Stream` import) are intentionally out of scope
+      # for this job; they surface under the `check-features` matrix
+      # which does not set `-D warnings`.
+      - run: cargo check --features input-gstreamer
+      - run: cargo test -p nokhwa-bindings-gstreamer --features backend

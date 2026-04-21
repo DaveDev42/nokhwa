@@ -102,6 +102,7 @@ pub fn query(api: ApiBackend) -> Result<Vec<CameraInfo>, NokhwaError> {
         ApiBackend::Video4Linux => query_v4l(),
         ApiBackend::MediaFoundation => query_msmf(),
         ApiBackend::UniversalVideoClass => query_uvc(),
+        ApiBackend::GStreamer => query_gstreamer(),
         ApiBackend::OpenCv | ApiBackend::Network => {
             Err(NokhwaError::UnsupportedOperationError(api))
         }
@@ -136,74 +137,23 @@ fn query_uvc() -> Result<Vec<CameraInfo>, NokhwaError> {
     ))
 }
 
-// #[cfg(feature = "input-gst")]
-// fn query_gstreamer() -> Result<Vec<CameraInfo>, NokhwaError> {
-//     use gstreamer::{
-//         prelude::{DeviceExt, DeviceMonitorExt, DeviceMonitorExtManual},
-//         Caps, DeviceMonitor,
-//     };
-//     use nokhwa_core::types::CameraIndex;
-//     use std::str::FromStr;
-//
-//     if let Err(why) = gstreamer::init() {
-//         return Err(NokhwaError::general(format!(
-//             "Failed to init gstreamer: {}",
-//             why
-//         )));
-//     }
-//     let device_monitor = DeviceMonitor::new();
-//     let video_caps = match Caps::from_str("video/x-raw") {
-//         Ok(cap) => cap,
-//         Err(why) => {
-//             return Err(NokhwaError::general(format!(
-//                 "Failed to generate caps: {}",
-//                 why
-//             )))
-//         }
-//     };
-//     let _video_filter_id = match device_monitor.add_filter(Some("Video/Source"), Some(&video_caps))
-//     {
-//         Some(id) => id,
-//         None => {
-//             return Err(NokhwaError::StructureError {
-//                 structure: "Video Filter ID Video/Source".to_string(),
-//                 error: "Null".to_string(),
-//             })
-//         }
-//     };
-//     if let Err(why) = device_monitor.start() {
-//         return Err(NokhwaError::general(format!(
-//             "Failed to start device monitor: {}",
-//             why
-//         )));
-//     }
-//     let mut counter = 0;
-//     let devices: Vec<CameraInfo> = device_monitor
-//         .devices()
-//         .iter_mut()
-//         .map(|gst_dev| {
-//             let name = DeviceExt::display_name(gst_dev);
-//             let class = DeviceExt::device_class(gst_dev);
-//             counter += 1;
-//             CameraInfo::new(&name, &class, "", CameraIndex::Index(counter - 1))
-//         })
-//         .collect();
-//     device_monitor.stop();
-//     Ok(devices)
-// }
-//
-// #[cfg(not(feature = "input-gst"))]
-// #[allow(deprecated)]
-// fn query_gstreamer() -> Result<Vec<CameraInfo>, NokhwaError> {
-//     Err(NokhwaError::UnsupportedOperationError(
-//         ApiBackend::GStreamer,
-//     ))
-// }
 
 // please refer to https://docs.microsoft.com/en-us/windows/win32/medfound/enumerating-video-capture-devices
 #[cfg(all(feature = "input-msmf", target_os = "windows"))]
 fn query_msmf() -> Result<Vec<CameraInfo>, NokhwaError> {
     nokhwa_bindings_windows_msmf::wmf::query()
+}
+
+#[cfg(feature = "input-gstreamer")]
+fn query_gstreamer() -> Result<Vec<CameraInfo>, NokhwaError> {
+    nokhwa_bindings_gstreamer::query()
+}
+
+#[cfg(not(feature = "input-gstreamer"))]
+fn query_gstreamer() -> Result<Vec<CameraInfo>, NokhwaError> {
+    Err(NokhwaError::UnsupportedOperationError(
+        ApiBackend::GStreamer,
+    ))
 }
 
 #[cfg(any(not(feature = "input-msmf"), not(target_os = "windows")))]

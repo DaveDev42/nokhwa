@@ -67,6 +67,13 @@ pub use nokhwa_bindings_uvc::UVCCaptureDevice;
 #[cfg(feature = "input-uvc")]
 crate::nokhwa_backend!(nokhwa_bindings_uvc::UVCCaptureDevice: FrameSource);
 
+#[cfg(feature = "input-gstreamer")]
+#[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-gstreamer")))]
+pub use nokhwa_bindings_gstreamer::GStreamerCaptureDevice;
+
+#[cfg(feature = "input-gstreamer")]
+crate::nokhwa_backend!(nokhwa_bindings_gstreamer::GStreamerCaptureDevice: FrameSource);
+
 #[cfg(feature = "input-opencv")]
 mod opencv_backend;
 #[cfg(feature = "input-opencv")]

@@ -15,6 +15,7 @@ members = [
     "nokhwa-bindings-windows-msmf",
     "nokhwa-bindings-linux-v4l",
     "nokhwa-bindings-uvc",
+    "nokhwa-bindings-gstreamer",
     "nokhwa-core",
     "nokhwa-tokio",
 ]
@@ -51,6 +52,12 @@ input-v4l          = [ "nokhwa-bindings-linux-v4l" ]
 # works; streaming, format negotiation, and the control surface land in
 # follow-up PRs. See `TODO.md`.
 input-uvc          = [ "nokhwa-bindings-uvc" ]
+# Cross-platform GStreamer backend (requires a system GStreamer install
+# with `libgstreamer1.0-dev` on Linux or the upstream installer on
+# macOS / Windows). Session 1 ships device enumeration only —
+# `query(ApiBackend::GStreamer)` works; streaming lands in follow-up
+# PRs. See `TODO.md`.
+input-gstreamer    = [ "nokhwa-bindings-gstreamer", "nokhwa-bindings-gstreamer/backend" ]
 # Disable arena buffer on v4l.
 # This should fix crashes on Raspberry Pis that have a faulty v4l driver.
 # WARNING: This creates a performance regression — half of the frames will be dropped.
@@ -142,6 +149,10 @@ optional = true
 
 [dependencies.nokhwa-bindings-uvc]
 path     = "nokhwa-bindings-uvc"
+optional = true
+
+[dependencies.nokhwa-bindings-gstreamer]
+path     = "nokhwa-bindings-gstreamer"
 optional = true
 
 [dependencies.log]
