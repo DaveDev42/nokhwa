@@ -30,10 +30,19 @@
   `RegisterDeviceNotification(KSCATEGORY_VIDEO_CAMERA)` with a
   hidden window + message pump; the hotplug API surface doesn't
   change. Tracked as a perf optimisation, not a correctness gap.
-- [ ] Hotplug impls on the other backends. V4L could use `inotify`
-  on `/dev/video*`; AVFoundation could use `IOKit` matching
-  notifications. The `HotplugSource` trait surface is identical
-  across backends — pattern-match on the MSMF impl.
+- [ ] Hotplug impls on the other backends. AVFoundation could use
+  `IOKit` matching notifications. The `HotplugSource` trait surface is
+  identical across backends — pattern-match on the MSMF / V4L polling
+  impl.
+  - [x] **V4L** polling impl (2026-04-21): `V4LHotplugContext` in
+    `nokhwa-bindings-linux-v4l::hotplug` mirrors MSMF — 500ms poll of
+    `v4l::context::enum_devices()` keyed on `CameraIndex`. CI coverage
+    lands via `.github/workflows/v4l-loopback.yml::V4L hotplug smoke
+    test` which dynamically adds + removes `/dev/video1` via
+    `v4l2loopback-ctl` and asserts the probe observed `Connected(` +
+    `Disconnected(` events. `inotify`-based event-driven impl is a
+    follow-up if the 2×/sec wake becomes a concern — same perf-only
+    gap the MSMF impl has.
 
 ## Backlog
 - [ ] Re-implement GStreamer backend (cross-platform, previously ~839 lines). Multi-session rollout in progress:

@@ -24,3 +24,7 @@
 #[cfg(all(feature = "input-msmf", target_os = "windows"))]
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-msmf")))]
 pub use nokhwa_bindings_windows_msmf::MediaFoundationHotplugContext;
+
+#[cfg(all(feature = "input-v4l", target_os = "linux"))]
+#[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-v4l")))]
+pub use nokhwa_bindings_linux_v4l::V4LHotplugContext;

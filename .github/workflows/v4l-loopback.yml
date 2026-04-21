@@ -60,6 +60,11 @@ jobs:
             echo "apt-get install failed after 3 attempts"
             exit 1
           fi
+          # v4l2loopback-ctl is in a separate package and is used by the
+          # hotplug step below to dynamically add/remove a second device.
+          # Failure is non-fatal here — the hotplug step gates on the
+          # binary being present and skips gracefully otherwise.
+          sudo apt-get install -y v4l2loopback-utils || true
 
       - name: Load v4l2loopback module
         run: |
@@ -134,6 +139,51 @@ jobs:
         run: |
           cargo test --features input-v4l,device-test,runner --test device_tests \
             -- --test-threads=1 --nocapture
+
+      - name: V4L hotplug smoke test
+        # Boots the `hotplug_probe` example, dynamically adds then
+        # removes a second v4l2loopback node via `v4l2loopback-ctl`, and
+        # asserts the probe observed both a `Connected` and a
+        # `Disconnected` event. Gates on `v4l2loopback-ctl` being
+        # installed — on runner images where the utility package is
+        # unavailable the step skips rather than failing the whole job.
+        # `continue-on-error: true` covers kernel/DKMS flakiness the
+        # same way the surrounding steps do.
+        continue-on-error: true
+        run: |
+          set -e
+          if ! command -v v4l2loopback-ctl >/dev/null 2>&1; then
+            echo "v4l2loopback-ctl not installed — skipping hotplug smoke"
+            exit 0
+          fi
+          # hotplug_probe runs for 15s, long enough to span
+          # settle → add → settle → delete → settle.
+          cargo build --features input-v4l --example hotplug_probe
+          (target/debug/examples/hotplug_probe \
+              > /tmp/hotplug_probe.log 2>&1) &
+          PROBE_PID=$!
+          sleep 2  # let the poll loop seed its snapshot
+          sudo v4l2loopback-ctl add /dev/video1 || {
+            echo "v4l2loopback-ctl add failed — skipping hotplug smoke"
+            kill "$PROBE_PID" 2>/dev/null || true
+            exit 0
+          }
+          sleep 2  # one full POLL_INTERVAL (500ms) + margin
+          sudo v4l2loopback-ctl delete /dev/video1 || true
+          sleep 2
+          # Probe self-exits at 15s; `wait` returns immediately if it's
+          # already gone.
+          wait "$PROBE_PID" 2>/dev/null || true
+          echo "=== hotplug probe log ==="
+          cat /tmp/hotplug_probe.log
+          grep -q "Connected(" /tmp/hotplug_probe.log || {
+            echo "FAIL: no Connected event observed"
+            exit 1
+          }
+          grep -q "Disconnected(" /tmp/hotplug_probe.log || {
+            echo "FAIL: no Disconnected event observed"
+            exit 1
+          }
 
       - name: Device status (post-test)
         if: always()

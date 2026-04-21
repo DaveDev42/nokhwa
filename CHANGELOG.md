@@ -18,6 +18,22 @@
 
 ### Features
 
+* **V4L hotplug (`HotplugSource` implementation).** New
+  `V4LHotplugContext` in `nokhwa-bindings-linux-v4l`, re-exported as
+  `nokhwa::backends::hotplug::V4LHotplugContext` when the `input-v4l`
+  feature is enabled on Linux. Mirrors the MSMF polling impl: a
+  dedicated background thread calls `query()` every 500ms, diffs
+  successive snapshots keyed on `CameraIndex` (which maps 1:1 to
+  `/dev/videoN`), and emits `HotplugEvent::Connected` / `Disconnected`
+  through an mpsc channel wrapped in `Box<dyn HotplugEventPoll>`.
+  Dropping the poll flips an `AtomicBool` shutdown flag; the thread
+  observes it within one `POLL_INTERVAL` and joins. CI coverage lands
+  via `.github/workflows/v4l-loopback.yml::V4L hotplug smoke test`
+  which dynamically adds + removes `/dev/video1` with
+  `v4l2loopback-ctl` and asserts the probe observed both event
+  variants. `examples/hotplug_probe.rs` now picks the right backend at
+  compile time (`input-msmf` on Windows, `input-v4l` on Linux).
+
 * **MSMF hotplug (`HotplugSource` implementation).** New
   `MediaFoundationHotplugContext` in `nokhwa-bindings-windows-msmf`,
   re-exported as `nokhwa::backends::hotplug::MediaFoundationHotplugContext`

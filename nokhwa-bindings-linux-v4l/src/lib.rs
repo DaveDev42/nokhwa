@@ -1109,3 +1109,6 @@ mod internal {
 }
 
 pub use internal::*;
+
+mod hotplug;
+pub use hotplug::V4LHotplugContext;
