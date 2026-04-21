@@ -89,7 +89,7 @@ pub(crate) fn caps_to_camera_formats(caps: &Caps) -> Vec<CameraFormat> {
 }
 
 fn collect_framerates(structure: &gstreamer::structure::StructureRef) -> Vec<u32> {
-    use gstreamer::Fraction;
+    use gstreamer::{Fraction, FractionRange};
 
     if let Ok(single) = structure.get::<Fraction>("framerate") {
         return fraction_to_fps(single).into_iter().collect();
@@ -105,10 +105,41 @@ fn collect_framerates(structure: &gstreamer::structure::StructureRef) -> Vec<u32
         }
         return rates;
     }
-    // `FractionRange` appears on some virtual sources (`videotestsrc`
-    // advertises `[ 0/1, 2147483647/1 ]`). We can't enumerate a range
-    // sensibly here, so skip.
+    // `FractionRange` is how Windows `mfvideosrc` (and some other
+    // sources) advertise supported framerates — e.g. `[5/1, 60/1]`
+    // means "any integer fps between 5 and 60 inclusive." We enumerate
+    // a curated set of common rates that fall within the range rather
+    // than exposing every integer, which would explode
+    // `compatible_formats()` into hundreds of near-duplicates.
+    if let Ok(range) = structure.get::<FractionRange>("framerate") {
+        return enumerate_range(range);
+    }
+    // Silly ranges like `videotestsrc`'s `[0/1, 2147483647/1]` fall
+    // through to an empty vec — we don't want to pretend those are
+    // real options.
     Vec::new()
+}
+
+/// Common user-facing framerates that fall within a GStreamer
+/// [`FractionRange`]. Keeps `compatible_formats()` lists tractable
+/// (Windows mfvideosrc advertises 5–60 as a range, which would be 56
+/// entries per resolution if we emitted every integer).
+fn enumerate_range(range: gstreamer::FractionRange) -> Vec<u32> {
+    const COMMON_FPS: &[u32] = &[5, 10, 15, 20, 24, 25, 30, 48, 50, 60, 90, 100, 120];
+    let Some(min) = fraction_to_fps(range.min()) else {
+        return Vec::new();
+    };
+    let Some(max) = fraction_to_fps(range.max()) else {
+        return Vec::new();
+    };
+    if min > max {
+        return Vec::new();
+    }
+    COMMON_FPS
+        .iter()
+        .copied()
+        .filter(|fps| *fps >= min && *fps <= max)
+        .collect()
 }
 
 /// Reject non-integer framerates — they are lossy for `CameraFormat`'s
@@ -175,5 +206,30 @@ mod tests {
     #[test]
     fn integer_30fps_accepted() {
         assert_eq!(fraction_to_fps(gstreamer::Fraction::new(30, 1)), Some(30));
+    }
+
+    #[test]
+    fn range_5_to_60_enumerates_common_rates() {
+        // Matches Windows `mfvideosrc`'s `[5/1, 60/1]` advertisement.
+        let range = gstreamer::FractionRange::new(
+            gstreamer::Fraction::new(5, 1),
+            gstreamer::Fraction::new(60, 1),
+        );
+        let rates = enumerate_range(range);
+        assert!(rates.contains(&30), "should include 30fps: {rates:?}");
+        assert!(rates.contains(&60), "should include 60fps: {rates:?}");
+        assert!(!rates.contains(&120), "should exclude 120fps: {rates:?}");
+    }
+
+    #[test]
+    fn absurd_range_returns_empty() {
+        // `videotestsrc` advertises `[0/1, 2147483647/1]` — we'd
+        // rather return nothing than expose garbage options.
+        let range = gstreamer::FractionRange::new(
+            gstreamer::Fraction::new(0, 1),
+            gstreamer::Fraction::new(i32::MAX, 1),
+        );
+        // min=0 → fraction_to_fps returns None → empty.
+        assert_eq!(enumerate_range(range), Vec::<u32>::new());
     }
 }

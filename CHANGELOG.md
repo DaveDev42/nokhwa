@@ -51,14 +51,21 @@
   `AppSink` serves frames via `try_pull_sample` with
   `max_buffers=1 drop=true sync=false` for "latest frame" semantics.
   Format enumeration walks `Device::caps()` for `video/x-raw` (YUY2 /
-  NV12 / GRAY8) structures and their framerate lists. New module
-  layout: `src/format.rs` (caps ↔ `CameraFormat` mapping, 6 unit
-  tests) and `src/pipeline.rs` (`PipelineHandle` lifecycle).
-  Hardware-verified on a Logitech MX Brio (046d:0944) forwarded to
-  WSL2 Ubuntu 24.04 via `usbipd-win 5.3.0` + GStreamer 1.24.2:
-  5 frames at 640x480 NV12 30fps, 460800 bytes each. Higher
-  resolutions may hit usbip bandwidth caps in WSL but work on direct
-  USB. New `examples/gstreamer_probe.rs` demonstrates end-to-end use.
+  NV12 / GRAY8) structures and handles all three framerate shapes
+  GStreamer uses: single `Fraction` (rare), `FractionList` (Linux
+  `v4l2src`), and `FractionRange` (Windows `mfvideosrc` /
+  `ksvideosrc` advertise e.g. `[5/1, 60/1]`). For ranges, a curated
+  common-FPS list (5, 10, 15, 20, 24, 25, 30, 48, 50, 60, 90, 100,
+  120) is filtered to values that fall within the advertised bounds,
+  keeping `compatible_formats()` tractable instead of enumerating
+  every integer fps. New module layout: `src/format.rs` (caps ↔
+  `CameraFormat` mapping, 8 unit tests) and `src/pipeline.rs`
+  (`PipelineHandle` lifecycle). Hardware-verified on a Logitech
+  MX Brio (046d:0944) on two platforms: (a) Linux via `usbipd-win`
+  forward to WSL2 Ubuntu 24.04 + GStreamer 1.24.2 (`v4l2src`) and
+  (b) native Windows 11 + GStreamer 1.28.2 (`ksvideosrc`) — both
+  pull 5 frames at 640x480 NV12 30fps, 460800 bytes each. New
+  `examples/gstreamer_probe.rs` demonstrates end-to-end use.
 
 * **AVFoundation hotplug (`HotplugSource` implementation).** New
   `AVFoundationHotplugContext` in `nokhwa-bindings-macos-avfoundation`,
