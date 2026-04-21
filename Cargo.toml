@@ -172,3 +172,8 @@ path = "examples/hotplug_probe.rs"
 [[example]]
 name = "msmf_probe"
 path = "examples/msmf_probe.rs"
+
+[[example]]
+name = "gstreamer_probe"
+path = "examples/gstreamer_probe.rs"
+required-features = [ "input-gstreamer" ]

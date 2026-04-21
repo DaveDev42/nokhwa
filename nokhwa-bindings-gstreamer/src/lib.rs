@@ -30,9 +30,18 @@
 //! Do not depend on it directly.
 
 #[cfg(all(feature = "backend", not(feature = "docs-only")))]
+mod format;
+#[cfg(all(feature = "backend", not(feature = "docs-only")))]
+mod pipeline;
+
+#[cfg(all(feature = "backend", not(feature = "docs-only")))]
 mod internal {
+    use crate::pipeline::{
+        compatible_formats as caps_for_device, compatible_fourcc as fourcc_for_device, find_device,
+        resolve_format, PipelineHandle,
+    };
     use gstreamer::prelude::*;
-    use gstreamer::{Caps, DeviceMonitor};
+    use gstreamer::{Caps, Device, DeviceMonitor};
     use nokhwa_core::{
         buffer::Buffer,
         error::NokhwaError,
@@ -53,9 +62,11 @@ mod internal {
     /// [`CameraInfo`] with:
     /// - `human_name` from `device.display_name()`.
     /// - `description` from `device.device_class()` (e.g. `"Video/Source"`).
-    /// - `misc` left empty — session-2 code will populate it with the
-    ///   element factory + properties needed to reconstruct a playable
-    ///   pipeline.
+    /// - `misc` holds the display name as a stable re-identification
+    ///   key for `GStreamerCaptureDevice::new()` to rediscover the
+    ///   underlying [`Device`] across successive `DeviceMonitor`
+    ///   invocations. Two cameras that share a display name fall back
+    ///   to positional index.
     /// - `index` as a monotonic `CameraIndex::Index(n)`.
     pub fn query() -> Result<Vec<CameraInfo>, NokhwaError> {
         gstreamer::init()
@@ -94,34 +105,58 @@ mod internal {
             cameras.push(CameraInfo::new(
                 &name,
                 &class,
-                "",
+                &name,
                 CameraIndex::Index(u32::try_from(idx).unwrap_or(u32::MAX)),
             ));
         }
         Ok(cameras)
     }
 
-    /// Cross-platform `GStreamer` capture device. **Stream support is
-    /// unimplemented in this release.** `query()` is fully functional;
-    /// `new()` and every `FrameSource` / `CameraDevice` method currently
-    /// returns [`NokhwaError::NotImplementedError`] so the backend can
-    /// already be compiled, feature-gated, and registered with
-    /// `nokhwa_backend!` while the streaming surface is iterated in
-    /// follow-up work.
+    /// Cross-platform `GStreamer` capture device.
     ///
-    /// Track progress against the `GStreamer` backlog item in the project
-    /// `TODO.md`.
+    /// Session 2 (this release) implements streaming via a
+    /// `source ! capsfilter ! videoconvert ! appsink` pipeline. The
+    /// source element is the one `Device::create_element()` hands us —
+    /// `v4l2src` on Linux, `mfvideosrc` on Windows, `avfvideosrc` on
+    /// macOS — so format enumeration and actual negotiation happen
+    /// against the real device caps rather than a hardcoded element
+    /// name.
+    ///
+    /// Not yet implemented: controls (`controls()` / `set_control()`)
+    /// and `nokhwa::open()` dispatch integration. See root `TODO.md`.
     pub struct GStreamerCaptureDevice {
         info: CameraInfo,
+        device: Device,
+        formats: Vec<CameraFormat>,
+        negotiated: CameraFormat,
+        pipeline: Option<PipelineHandle>,
     }
 
     impl GStreamerCaptureDevice {
-        pub fn new(_index: &CameraIndex, _cam_fmt: RequestedFormat) -> Result<Self, NokhwaError> {
-            Err(NokhwaError::NotImplementedError(
-                "GStreamer streaming not yet implemented — query() is available; \
-                 see TODO.md for the session roadmap"
-                    .to_string(),
-            ))
+        pub fn new(index: &CameraIndex, cam_fmt: RequestedFormat) -> Result<Self, NokhwaError> {
+            gstreamer::init()
+                .map_err(|e| NokhwaError::general(format!("gstreamer init failed: {e}")))?;
+
+            let (display_name, positional) = match index {
+                CameraIndex::Index(i) => (String::new(), *i),
+                CameraIndex::String(s) => (s.clone(), 0),
+            };
+            let device = find_device(&display_name, positional)?;
+
+            let formats = caps_for_device(&device);
+            let negotiated = resolve_format(&formats, &cam_fmt)?;
+
+            let name = device.display_name().to_string();
+            let class = device.device_class().to_string();
+            let info = CameraInfo::new(&name, &class, &name, index.clone());
+
+            Ok(Self {
+                info,
+                device,
+                formats,
+                negotiated,
+                pipeline: None,
+            })
         }
     }
 
@@ -135,6 +170,12 @@ mod internal {
         }
 
         fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+            // Session 3 lands controls via `gst-properties` on the
+            // source element. Until then `controls()` has to error
+            // rather than silently returning an empty list — nokhwa's
+            // `open()` dispatch checks `controls()` to detect stream
+            // support, and an empty-list response would be ambiguous
+            // with a device that genuinely has no controls.
             Err(NokhwaError::UnsupportedOperationError(
                 ApiBackend::GStreamer,
             ))
@@ -153,53 +194,70 @@ mod internal {
 
     impl FrameSource for GStreamerCaptureDevice {
         fn negotiated_format(&self) -> CameraFormat {
-            CameraFormat::default()
+            self.negotiated
         }
 
-        fn set_format(&mut self, _f: CameraFormat) -> Result<(), NokhwaError> {
-            Err(NokhwaError::UnsupportedOperationError(
-                ApiBackend::GStreamer,
-            ))
+        fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
+            if !self.formats.contains(&f) {
+                return Err(NokhwaError::SetPropertyError {
+                    property: "CameraFormat".to_string(),
+                    value: format!("{f:?}"),
+                    error: "not in the device's compatible format list".to_string(),
+                });
+            }
+            // Tear down the live pipeline before swapping formats;
+            // rebuilding with the new caps is the cleanest way to
+            // flush any in-flight buffers negotiated against the old
+            // format.
+            let was_open = self.pipeline.is_some();
+            self.pipeline = None;
+            self.negotiated = f;
+            if was_open {
+                self.pipeline = Some(PipelineHandle::start(&self.device, self.negotiated)?);
+            }
+            Ok(())
         }
 
         fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
-            Err(NokhwaError::UnsupportedOperationError(
-                ApiBackend::GStreamer,
-            ))
+            Ok(self.formats.clone())
         }
 
         fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
-            Err(NokhwaError::UnsupportedOperationError(
-                ApiBackend::GStreamer,
-            ))
+            Ok(fourcc_for_device(&self.formats))
         }
 
         fn open(&mut self) -> Result<(), NokhwaError> {
-            Err(NokhwaError::UnsupportedOperationError(
-                ApiBackend::GStreamer,
-            ))
+            if self.pipeline.is_none() {
+                self.pipeline = Some(PipelineHandle::start(&self.device, self.negotiated)?);
+            }
+            Ok(())
         }
 
         fn is_open(&self) -> bool {
-            false
+            self.pipeline.is_some()
         }
 
         fn frame(&mut self) -> Result<Buffer, NokhwaError> {
-            Err(NokhwaError::UnsupportedOperationError(
-                ApiBackend::GStreamer,
-            ))
+            match &self.pipeline {
+                Some(p) => p.pull_frame(),
+                None => Err(NokhwaError::ReadFrameError {
+                    message: "pipeline not open — call open() first".to_string(),
+                    format: Some(self.negotiated.format()),
+                }),
+            }
         }
 
         fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
-            Err(NokhwaError::UnsupportedOperationError(
-                ApiBackend::GStreamer,
-            ))
+            // Cow::Owned wrap of the pulled frame's bytes. A borrowed
+            // variant isn't safe here because the AppSink sample's
+            // memory mapping is scoped to the pull call.
+            let buf = self.frame()?;
+            Ok(Cow::Owned(buf.buffer().to_vec()))
         }
 
         fn close(&mut self) -> Result<(), NokhwaError> {
-            Err(NokhwaError::UnsupportedOperationError(
-                ApiBackend::GStreamer,
-            ))
+            self.pipeline = None;
+            Ok(())
         }
     }
 }
