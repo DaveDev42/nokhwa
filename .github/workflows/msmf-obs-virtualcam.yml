@@ -1,17 +1,34 @@
 name: MSMF Virtual Camera Device Tests
 
+# ⚠️  SPIKE STATUS: this workflow is kept for diagnostic / reproduction
+# purposes only. The current approach will not go green and should not
+# be promoted to `pull_request`. See the finding below.
+#
 # Windows-only hardware-gated tests. Installs OBS Studio via chocolatey
 # on `windows-latest`, launches `obs64.exe --startvirtualcam` as a
-# background process, and runs the `device-test` suite against the
-# resulting Media Foundation source.
+# background process, and runs the `device-test` suite against what we
+# hoped would be an MSMF-visible virtual camera.
 #
-# **This is a spike.** MSMF's enumeration surface on GitHub-hosted
-# runners is unproven, OBS first-run behaviour may or may not seed a
-# default profile without a UI, and `--startvirtualcam` may fail if the
-# virtual-camera module cannot register cleanly. `workflow_dispatch`
-# trigger only — once the workflow proves stable, a follow-up PR can
-# promote it to `pull_request` alongside V4L loopback. See TODO.md
-# "MSMF CI coverage on a GitHub-hosted windows-latest runner (spike)".
+# First run (run 24714382006, 2026-04-21) failed because OBS exited
+# before writing its log. That was initially attributed to the
+# first-run setup blocker (no `%APPDATA%\obs-studio\basic\profiles\`
+# seeded ahead of `-WindowStyle Hidden`). Local reproduction on
+# 2026-04-21 ruled that out: with a fully seeded profile +
+# scene-collection + `global.ini`, OBS starts cleanly, writes its log,
+# and runs `--startvirtualcam` — but the OBS virtual camera is a
+# **DirectShow filter**, and `MFEnumDeviceSources` (the API nokhwa's
+# MSMF backend uses) does **not** see DShow filters. `msmf_probe`
+# confirmed this: with OBS running + virtualcam active, MSMF
+# enumeration still returns exactly one device, the physical webcam.
+#
+# This is a structural incompatibility, not a configuration gap. No
+# OBS-side tweak will bridge DShow into MSMF. See TODO.md session 3
+# for the candidate paths forward (Windows 11 Camera Extension
+# sample, ship-a-Rust-MF-source in the test harness, or a self-hosted
+# Windows runner with real hardware).
+#
+# Trigger is `workflow_dispatch`-only + `continue-on-error: true` so
+# this never blocks a PR.
 
 on:
   workflow_dispatch:

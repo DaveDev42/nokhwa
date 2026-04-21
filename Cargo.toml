@@ -178,3 +178,7 @@ required-features = [ "runner" ]
 [[example]]
 name = "hotplug_probe"
 path = "examples/hotplug_probe.rs"
+
+[[example]]
+name = "msmf_probe"
+path = "examples/msmf_probe.rs"
