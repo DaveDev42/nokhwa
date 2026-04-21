@@ -1,25 +1,38 @@
-//! Live hotplug probe for the MediaFoundation backend.
+//! Live hotplug probe.
 //!
 //! Run with:
 //!
 //! ```text
-//! cargo run --features input-msmf --example hotplug_probe
+//! cargo run --features input-msmf --example hotplug_probe    # Windows
+//! cargo run --features input-v4l  --example hotplug_probe    # Linux
 //! ```
 //!
-//! Listens for fifteen seconds on the MSMF hotplug source, printing
+//! Listens for fifteen seconds on the native hotplug source, printing
 //! every `Connected` / `Disconnected` event that arrives. Unplug and
-//! re-plug a webcam while the probe is running to verify the poll loop
-//! is picking up device-change signals.
+//! re-plug a webcam (or `modprobe -r v4l2loopback` + re-add on Linux)
+//! while the probe is running to verify the poll loop is picking up
+//! device-change signals.
+
+use std::time::Duration;
 
 #[cfg(all(feature = "input-msmf", target_os = "windows"))]
-fn main() {
-    use nokhwa::backends::hotplug::MediaFoundationHotplugContext;
-    use nokhwa_core::traits::HotplugSource;
-    use std::time::Duration;
+fn backend_context() -> Box<dyn nokhwa_core::traits::HotplugSource> {
+    Box::new(nokhwa::backends::hotplug::MediaFoundationHotplugContext::new())
+}
 
-    let mut ctx = MediaFoundationHotplugContext::new();
+#[cfg(all(feature = "input-v4l", target_os = "linux"))]
+fn backend_context() -> Box<dyn nokhwa_core::traits::HotplugSource> {
+    Box::new(nokhwa::backends::hotplug::V4LHotplugContext::new())
+}
+
+#[cfg(any(
+    all(feature = "input-msmf", target_os = "windows"),
+    all(feature = "input-v4l", target_os = "linux"),
+))]
+fn main() {
+    let mut ctx = backend_context();
     let mut poll = ctx.take_hotplug_events().expect("take_hotplug_events");
-    println!("Listening for 15 seconds — unplug + replug a webcam to see events.");
+    println!("Listening for 15 seconds — unplug + replug a camera to see events.");
     for i in 0..30 {
         if let Some(evt) = poll.next_timeout(Duration::from_millis(500)) {
             println!("  [{:5}ms] {evt:?}", i * 500);
@@ -28,10 +41,15 @@ fn main() {
     println!("Done.");
 }
 
-#[cfg(not(all(feature = "input-msmf", target_os = "windows")))]
+#[cfg(not(any(
+    all(feature = "input-msmf", target_os = "windows"),
+    all(feature = "input-v4l", target_os = "linux"),
+)))]
 fn main() {
     eprintln!(
-        "This example requires the `input-msmf` feature on a Windows host.\n\
-         Try: cargo run --features input-msmf --example hotplug_probe"
+        "This example requires a hotplug-capable backend for the current OS.\n\
+         Try one of:\n\
+           cargo run --features input-msmf --example hotplug_probe   # Windows\n\
+           cargo run --features input-v4l  --example hotplug_probe   # Linux"
     );
 }
