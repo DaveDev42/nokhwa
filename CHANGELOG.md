@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Bug Fixes
+
+* `OpenCvCaptureDevice::open()` now re-opens `CameraIndex::String` (IP /
+  RTSP) cameras correctly. Previously it returned a hard error referencing
+  the long-removed `NetworkCamera` type, so any `close()` + `open()` cycle
+  on an IP camera failed even though the constructor supported it. The
+  fix rebuilds `self.video_capture` via `VideoCapture::from_file(url,
+  CAP_ANY)`, mirroring the constructor.
+
 ### Cleanup
 
 * Remove a dead `#[cfg_attr(feature = "docs-features", doc(cfg(...)))]`
