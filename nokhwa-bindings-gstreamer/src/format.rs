@@ -153,8 +153,8 @@ mod tests {
 
     #[test]
     fn nv12_round_trips() {
-        let rt = frame_format_to_video_format(FrameFormat::NV12)
-            .and_then(video_format_to_frame_format);
+        let rt =
+            frame_format_to_video_format(FrameFormat::NV12).and_then(video_format_to_frame_format);
         assert_eq!(rt, Some(FrameFormat::NV12));
     }
 
@@ -165,7 +165,10 @@ mod tests {
 
     #[test]
     fn non_integer_framerate_rejected() {
-        assert_eq!(fraction_to_fps(gstreamer::Fraction::new(30_000, 1001)), None);
+        assert_eq!(
+            fraction_to_fps(gstreamer::Fraction::new(30_000, 1001)),
+            None
+        );
     }
 
     #[test]

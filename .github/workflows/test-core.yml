@@ -75,15 +75,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
       - name: Install GStreamer
-        # `libgstreamer1.0-dev` ships the pkg-config files the Rust
-        # bindings' sys crate looks for. `gstreamer1.0-plugins-base` is
-        # needed for the `video/x-raw` caps negotiation used by our
-        # DeviceMonitor filter. Skip Recommends to avoid pulling in the
+        # `libgstreamer1.0-dev` ships the pkg-config files for the core
+        # sys crate. `libgstreamer-plugins-base1.0-dev` supplies the
+        # `gstreamer-app-1.0.pc` + `gstreamer-video-1.0.pc` that
+        # `gstreamer-app-sys` / `gstreamer-video-sys` need (session-2
+        # streaming). `gstreamer1.0-plugins-base` provides the
+        # `videoconvert` element our pipeline relies on. Skip Recommends
+        # to avoid pulling in the
         # full plugin set.
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libgstreamer1.0-dev \
+            libgstreamer-plugins-base1.0-dev \
             gstreamer1.0-plugins-base \
             pkg-config
       - uses: Swatinem/rust-cache@v2

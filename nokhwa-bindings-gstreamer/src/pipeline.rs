@@ -64,12 +64,12 @@ impl PipelineHandle {
 
         let caps_value = caps_for(format, video_format);
 
-        let source = device.create_element(None).map_err(|e| {
-            NokhwaError::OpenDeviceError {
+        let source = device
+            .create_element(None)
+            .map_err(|e| NokhwaError::OpenDeviceError {
                 device: device.display_name().to_string(),
                 error: format!("Device::create_element failed: {e}"),
-            }
-        })?;
+            })?;
 
         let capsfilter = gstreamer::ElementFactory::make("capsfilter")
             .property("caps", caps_value.clone())
@@ -115,12 +115,13 @@ impl PipelineHandle {
             .link(&sink_element)
             .map_err(|err| element_err("link convert->appsink", &err.to_string()))?;
 
-        let state_change = pipeline.set_state(State::Playing).map_err(|e| {
-            NokhwaError::OpenStreamError {
-                message: format!("set_state(Playing): {e}"),
-                backend: Some(nokhwa_core::types::ApiBackend::GStreamer),
-            }
-        })?;
+        let state_change =
+            pipeline
+                .set_state(State::Playing)
+                .map_err(|e| NokhwaError::OpenStreamError {
+                    message: format!("set_state(Playing): {e}"),
+                    backend: Some(nokhwa_core::types::ApiBackend::GStreamer),
+                })?;
         if state_change == gstreamer::StateChangeSuccess::Async {
             let (res, _, _) = pipeline.state(gstreamer::ClockTime::from_seconds(5));
             res.map_err(|e| NokhwaError::OpenStreamError {
@@ -150,12 +151,10 @@ impl PipelineHandle {
                 format: Some(self.format.format()),
             })?;
 
-        let buffer = sample
-            .buffer()
-            .ok_or_else(|| NokhwaError::ReadFrameError {
-                message: "Sample carried no GstBuffer".to_string(),
-                format: Some(self.format.format()),
-            })?;
+        let buffer = sample.buffer().ok_or_else(|| NokhwaError::ReadFrameError {
+            message: "Sample carried no GstBuffer".to_string(),
+            format: Some(self.format.format()),
+        })?;
 
         let map = buffer
             .map_readable()
@@ -170,7 +169,6 @@ impl PipelineHandle {
             self.format.format(),
         ))
     }
-
 }
 
 impl Drop for PipelineHandle {
@@ -213,8 +211,7 @@ pub(crate) fn find_device(
 ) -> Result<Device, NokhwaError> {
     use gstreamer::DeviceMonitor;
 
-    gstreamer::init()
-        .map_err(|e| NokhwaError::general(format!("gstreamer init failed: {e}")))?;
+    gstreamer::init().map_err(|e| NokhwaError::general(format!("gstreamer init failed: {e}")))?;
 
     let monitor = DeviceMonitor::new();
     let caps = Caps::builder("video/x-raw").build();
@@ -272,10 +269,11 @@ pub(crate) fn resolve_format(
             error: "no compatible formats".to_string(),
         });
     }
-    req.fulfill(candidates).ok_or_else(|| NokhwaError::OpenDeviceError {
-        device: "GStreamer device".to_string(),
-        error: format!("no format in the device's caps satisfied the request: {candidates:?}"),
-    })
+    req.fulfill(candidates)
+        .ok_or_else(|| NokhwaError::OpenDeviceError {
+            device: "GStreamer device".to_string(),
+            error: format!("no format in the device's caps satisfied the request: {candidates:?}"),
+        })
 }
 
 /// Distinct `FrameFormat`s across a candidate list, preserving
@@ -289,4 +287,3 @@ pub(crate) fn compatible_fourcc(candidates: &[CameraFormat]) -> Vec<FrameFormat>
     }
     out
 }
-
