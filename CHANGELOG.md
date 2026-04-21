@@ -4,6 +4,27 @@
 
 ### Features
 
+* **UVC backend session 2a — format discovery on real hardware.**
+  `UVCCaptureDevice::new()` now opens the libusb device and walks the
+  `VideoStreaming` interface's class-specific descriptor chain
+  (`VS_FORMAT_MJPEG`, `VS_FORMAT_UNCOMPRESSED` with YUY2 / NV12 GUIDs,
+  `VS_FRAME_*`) to populate a cached `Vec<CameraFormat>`. New module
+  `nokhwa-bindings-uvc::descriptors` parses the bytes with a small
+  state machine + unit-tested fixtures. `compatible_formats()`,
+  `compatible_fourcc()`, `negotiated_format()`, and `set_format()` are
+  now functional; `CameraIndex::String("<bus>:<addr> <vid>:<pid>")` is
+  accepted as a re-open key. Verified on a Logitech MX Brio — the
+  parser surfaced 339 distinct `(resolution, format, fps)` tuples
+  across MJPEG / YUYV / NV12 in under a second.
+
+  `open()` / `frame()` / `frame_raw()` still error, but now with a
+  *platform-aware* diagnostic: on Windows the message spells out that
+  `usbvideo.sys` prevents `rusb::DeviceHandle::claim_interface` and
+  directs users at `input-msmf`; on Linux / macOS it points at the
+  session-2b streaming work still tracked in `TODO.md`. The Windows
+  block is structural — the UVC backend on Windows is enumeration-only
+  by design; streaming will land on Linux / macOS only.
+
 * **New cross-platform UVC backend (session 1).** Introduces a new
   workspace crate `nokhwa-bindings-uvc` built on `rusb` / libusb, gated
   behind `input-uvc`. This release ships **device enumeration only**:

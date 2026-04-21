@@ -81,14 +81,14 @@ Runnable examples live in the `examples/` directory
 | MSMF (`input-msmf`)             | ✅    | ✅    | ✅           | Windows             |
 | AVFoundation (`input-avfoundation`) | ✅ | ✅    | ✅           | macOS               |
 | OpenCV (`input-opencv`)^        | ✅    | ❌    | ❌           | Linux, Windows, Mac |
-| UVC (`input-uvc`)†              | ❌    | ✅    | ❌           | Linux, Windows, Mac |
+| UVC (`input-uvc`)†              | ❌    | ✅    | ✅           | Linux, Windows, Mac |
 | GStreamer (`input-gstreamer`)‡  | ❌    | ✅    | ❌           | Linux, Windows, Mac |
 
 ✅ Working  ❌ Not Supported
 
 ^ = May be bugged. Also supports IP Cameras.
 
-† = Session 1 ships device enumeration only. Streaming, format negotiation, and controls land in follow-up releases. See `TODO.md`.
+† = Enumeration + format discovery (session 2a). Streaming is not yet implemented on Linux / macOS; on Windows it is structurally blocked by `usbvideo.sys` and will not ship — use `input-msmf` for streaming on Windows. See `TODO.md`.
 
 ‡ = Session 1 ships device enumeration only (via `DeviceMonitor` filtered to `Video/Source`). Streaming, format negotiation, and controls land in follow-up releases. See `TODO.md`.
 

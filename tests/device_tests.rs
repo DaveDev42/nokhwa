@@ -43,6 +43,63 @@ fn uvc_query_enumerates_devices() {
     }
 }
 
+/// Session-2a hardware check: `UVCCaptureDevice::new()` must open the
+/// first UVC device via libusb and expose a non-empty
+/// `compatible_formats()`. Streaming is intentionally *not* tested —
+/// `open()` is expected to error on Windows (usbvideo.sys owns the
+/// interface) and on Linux/macOS (session 2b unimplemented). See
+/// `TODO.md`.
+#[cfg(feature = "input-uvc")]
+#[test]
+fn uvc_new_exposes_compatible_formats() {
+    use nokhwa::backends::capture::UVCCaptureDevice;
+    use nokhwa::utils::{RequestedFormat, RequestedFormatType};
+    use nokhwa_core::traits::FrameSource;
+    use nokhwa_core::types::color_frame_formats;
+
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::AbsoluteHighestResolution,
+        color_frame_formats(),
+    );
+    let mut cam = UVCCaptureDevice::new(&CameraIndex::Index(0), req)
+        .expect("UVCCaptureDevice::new(Index(0)) — is a UVC webcam attached?");
+    let formats = cam
+        .compatible_formats()
+        .expect("compatible_formats() errored");
+    assert!(
+        !formats.is_empty(),
+        "compatible_formats() returned empty list — descriptor parse bug?"
+    );
+    let fourcc = cam
+        .compatible_fourcc()
+        .expect("compatible_fourcc() errored");
+    assert!(
+        !fourcc.is_empty(),
+        "compatible_fourcc() returned empty list"
+    );
+    eprintln!(
+        "uvc_new_exposes_compatible_formats: {} formats across {} fourcc variants, \
+         negotiated={:?}",
+        formats.len(),
+        fourcc.len(),
+        cam.negotiated_format()
+    );
+    for (i, f) in formats.iter().enumerate().take(5) {
+        eprintln!(
+            "  [{i}] {}x{} {:?} @ {}fps",
+            f.width(),
+            f.height(),
+            f.format(),
+            f.frame_rate()
+        );
+    }
+    // open() must error on Windows (and until session 2b on Linux/macOS).
+    let err = cam
+        .open()
+        .expect_err("UVCCaptureDevice::open() unexpectedly succeeded — session 2b already?");
+    eprintln!("expected session-2a open() error: {err}");
+}
+
 #[test]
 fn query_reports_at_least_one_device() {
     let devices = query(native_backend()).expect("query() returned an error");
