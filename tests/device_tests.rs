@@ -21,6 +21,28 @@ fn open_first() -> OpenedCamera {
         .expect("open(CameraIndex::Index(0)) failed — is a camera attached?")
 }
 
+#[cfg(feature = "input-uvc")]
+#[test]
+fn uvc_query_enumerates_devices() {
+    use nokhwa::query;
+    let cameras = query(ApiBackend::UniversalVideoClass)
+        .expect("query(UniversalVideoClass) returned an error");
+    assert!(
+        !cameras.is_empty(),
+        "UVC enumeration returned zero devices — expected at least one UVC webcam"
+    );
+    for cam in &cameras {
+        assert!(
+            !cam.human_name().is_empty(),
+            "UVC CameraInfo.human_name empty"
+        );
+        assert!(
+            !cam.misc().is_empty(),
+            "UVC CameraInfo.misc (bus:addr vid:pid) empty"
+        );
+    }
+}
+
 #[test]
 fn query_reports_at_least_one_device() {
     let devices = query(native_backend()).expect("query() returned an error");

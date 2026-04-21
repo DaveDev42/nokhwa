@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Features
+
+* **New cross-platform UVC backend (session 1).** Introduces a new
+  workspace crate `nokhwa-bindings-uvc` built on `rusb` / libusb, gated
+  behind `input-uvc`. This release ships **device enumeration only**:
+  `query(ApiBackend::UniversalVideoClass)` returns one `CameraInfo` per
+  attached UVC device by walking USB config descriptors for an interface
+  with class `0x0E` (Video) / subclass `0x01` (VideoControl). `CameraInfo`
+  carries the `iProduct` string as `human_name`, `iManufacturer` as
+  `description`, and `"<bus>:<addr> <vid>:<pid>"` in `misc` so follow-up
+  streaming code can re-open the device without re-scanning.
+  `UVCCaptureDevice::new()` and every `FrameSource` / `CameraDevice`
+  method currently error with `NotImplementedError` /
+  `UnsupportedOperationError` so the feature flag, `nokhwa_backend!`
+  registration, and CI coverage can land ahead of the streaming surface.
+  Streaming, format negotiation, and controls are tracked in `TODO.md`
+  as sessions 2–4. Linux builds need `libusb-1.0-0-dev`; macOS and
+  Windows ship the bundled libusb via rusb. Verified on a Logitech MX
+  Brio (046d:0944). CI: new `Feature check (input-uvc)` job in
+  `.github/workflows/test-core.yml`.
+
 ### Bug Fixes
 
 * `OpenCvCaptureDevice::open()` now re-opens `CameraIndex::String` (IP /
