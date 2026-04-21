@@ -14,6 +14,7 @@ members = [
     "nokhwa-bindings-macos-avfoundation",
     "nokhwa-bindings-windows-msmf",
     "nokhwa-bindings-linux-v4l",
+    "nokhwa-bindings-uvc",
     "nokhwa-core",
     "nokhwa-tokio",
 ]
@@ -45,6 +46,11 @@ input-avfoundation = [ "nokhwa-bindings-macos-avfoundation" ]
 input-msmf         = [ "nokhwa-bindings-windows-msmf" ]
 # Linux Video4Linux2 backend
 input-v4l          = [ "nokhwa-bindings-linux-v4l" ]
+# Cross-platform UVC (USB Video Class) backend via libusb/rusb. Session 1
+# ships device enumeration only — `query(ApiBackend::UniversalVideoClass)`
+# works; streaming, format negotiation, and the control surface land in
+# follow-up PRs. See `TODO.md`.
+input-uvc          = [ "nokhwa-bindings-uvc" ]
 # Disable arena buffer on v4l.
 # This should fix crashes on Raspberry Pis that have a faulty v4l driver.
 # WARNING: This creates a performance regression — half of the frames will be dropped.
@@ -132,6 +138,10 @@ optional = true
 
 [dependencies.nokhwa-bindings-linux-v4l]
 path     = "nokhwa-bindings-linux-v4l"
+optional = true
+
+[dependencies.nokhwa-bindings-uvc]
+path     = "nokhwa-bindings-uvc"
 optional = true
 
 [dependencies.log]
