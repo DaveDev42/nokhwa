@@ -4,6 +4,23 @@
 
 ### Features
 
+* **GStreamer session 4 — `nokhwa::open()` dispatch integration.**
+  `open(CameraIndex::String("rtsp://..."), _)` /
+  `open(CameraIndex::String("http://..."), _)` /
+  `open(CameraIndex::String("file://..."), _)` now short-circuit to
+  the GStreamer backend regardless of which native backend is
+  compiled in for the host. Native-device fast paths (V4L on Linux,
+  MSMF on Windows, AVFoundation on macOS) are unchanged for
+  `CameraIndex::Index(_)` and non-URL strings. GStreamer also sits
+  between the native branches and OpenCV as a cross-platform
+  fallback, so a build with only `input-gstreamer` enabled can still
+  `open()` a local camera via `uridecodebin`'s device enumeration
+  path. Hardware-verified via WSL with both `input-v4l` and
+  `input-gstreamer` compiled together: `stream_camera file:///tmp/test.mp4`
+  routes through GStreamer and pulls 10 frames; `stream_camera 0`
+  reaches V4L native. `examples/stream_camera.rs` now accepts either
+  an integer index or a URL on the CLI.
+
 * **GStreamer session 5 — RTSP / IP / URL sources.** Passing a
   `CameraIndex::String` whose value starts with one of the known URL
   schemes (`rtsp://` / `rtsps://` / `rtmp://` / `rtmps://` / `http://`
