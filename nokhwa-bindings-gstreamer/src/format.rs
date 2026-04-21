@@ -111,13 +111,14 @@ fn collect_framerates(structure: &gstreamer::structure::StructureRef) -> Vec<u32
     Vec::new()
 }
 
-/// Reject non-integer framerates and fractions whose denominator is
-/// zero — the former is lossy for `CameraFormat`'s `u32 fps` field,
-/// the latter crashes libgstreamer internally.
+/// Reject non-integer framerates — they are lossy for `CameraFormat`'s
+/// `u32 fps` field. `gstreamer::Fraction`'s own invariant guarantees
+/// a positive denominator (the constructor panics on 0), so we only
+/// need to gate on the numerator and the integer-division remainder.
 fn fraction_to_fps(frac: gstreamer::Fraction) -> Option<u32> {
     let num = frac.numer();
     let den = frac.denom();
-    if den <= 0 || num <= 0 {
+    if num <= 0 {
         return None;
     }
     if num % den != 0 {
@@ -169,11 +170,6 @@ mod tests {
             fraction_to_fps(gstreamer::Fraction::new(30_000, 1001)),
             None
         );
-    }
-
-    #[test]
-    fn zero_denom_rejected() {
-        assert_eq!(fraction_to_fps(gstreamer::Fraction::new(30, 0)), None);
     }
 
     #[test]
