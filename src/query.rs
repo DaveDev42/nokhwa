@@ -137,7 +137,6 @@ fn query_uvc() -> Result<Vec<CameraInfo>, NokhwaError> {
     ))
 }
 
-
 // please refer to https://docs.microsoft.com/en-us/windows/win32/medfound/enumerating-video-capture-devices
 #[cfg(all(feature = "input-msmf", target_os = "windows"))]
 fn query_msmf() -> Result<Vec<CameraInfo>, NokhwaError> {
