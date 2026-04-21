@@ -60,11 +60,6 @@ jobs:
             echo "apt-get install failed after 3 attempts"
             exit 1
           fi
-          # v4l2loopback-ctl is in a separate package and is used by the
-          # hotplug step below to dynamically add/remove a second device.
-          # Failure is non-fatal here — the hotplug step gates on the
-          # binary being present and skips gracefully otherwise.
-          sudo apt-get install -y v4l2loopback-utils || true
 
       - name: Load v4l2loopback module
         run: |
@@ -154,8 +149,11 @@ jobs:
         # done with /dev/video0 at this point; we kill it first so
         # `modprobe -r` isn't blocked by an open handle.
         #
-        # `continue-on-error: true` covers kernel/DKMS flakiness the
-        # same way the surrounding steps do.
+        # Every failure mode is a hard `exit 1` (no silent skips): if
+        # anything regresses we want the step visibly red. Job-level
+        # `continue-on-error: true` still prevents a red hotplug step
+        # from blocking merges the same way the surrounding steps
+        # handle kernel/DKMS flakiness.
         continue-on-error: true
         run: |
           set -e
@@ -175,8 +173,13 @@ jobs:
             sleep 0.5
           done
           if [ ! -e /dev/video1 ]; then
-            echo "v4l2loopback reload did not expose /dev/video1 — skipping hotplug smoke"
-            exit 0
+            # Hard-fail rather than silent-skip: if devices=2 reload
+            # doesn't produce /dev/video1 we want the step red so the
+            # regression is visible. Job-level `continue-on-error: true`
+            # still prevents this from blocking merges.
+            echo "FAIL: v4l2loopback devices=2 reload did not expose /dev/video1"
+            sudo dmesg | tail -40 || true
+            exit 1
           fi
           sudo chown "$(id -un)" /dev/video0 /dev/video1
 
