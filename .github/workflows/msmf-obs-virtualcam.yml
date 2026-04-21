@@ -1,0 +1,138 @@
+name: MSMF Virtual Camera Device Tests
+
+# Windows-only hardware-gated tests. Installs OBS Studio via chocolatey
+# on `windows-latest`, launches `obs64.exe --startvirtualcam` as a
+# background process, and runs the `device-test` suite against the
+# resulting Media Foundation source.
+#
+# **This is a spike.** MSMF's enumeration surface on GitHub-hosted
+# runners is unproven, OBS first-run behaviour may or may not seed a
+# default profile without a UI, and `--startvirtualcam` may fail if the
+# virtual-camera module cannot register cleanly. `workflow_dispatch`
+# trigger only — once the workflow proves stable, a follow-up PR can
+# promote it to `pull_request` alongside V4L loopback. See TODO.md
+# "MSMF CI coverage on a GitHub-hosted windows-latest runner (spike)".
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  msmf-obs-virtualcam:
+    name: MSMF OBS virtual-camera device tests (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install OBS Studio
+        # `windows-latest` ships chocolatey preinstalled. Pinning the OBS
+        # version keeps the workflow reproducible — bump deliberately.
+        # `--no-progress` keeps the log legible.
+        run: |
+          choco install -y obs-studio --no-progress
+          $obs = 'C:\Program Files\obs-studio\bin\64bit\obs64.exe'
+          if (-not (Test-Path $obs)) {
+            throw "obs64.exe not found at expected path: $obs"
+          }
+          Write-Host "OBS installed at $obs"
+          & $obs --version
+
+      - name: Launch OBS with virtual camera
+        # `--startvirtualcam` begins the virtual-camera output immediately.
+        # `--minimize-to-tray` / `--disable-shutdown-check` keep OBS from
+        # prompting the user in a non-interactive session. Backgrounded
+        # via Start-Process so the step doesn't hold the job open.
+        #
+        # Known unknowns the workflow run will surface:
+        #   * whether OBS's first-run profile/scene-collection setup needs
+        #     seeding in %APPDATA%\obs-studio to avoid a UI prompt
+        #   * whether `--startvirtualcam` registers cleanly when no output
+        #     source is configured (expected behaviour: outputs a black
+        #     frame at 1920x1080, which is fine for the capture smoke test)
+        run: |
+          $obs = 'C:\Program Files\obs-studio\bin\64bit\obs64.exe'
+          $obsDir = Split-Path $obs
+          Start-Process -FilePath $obs `
+            -ArgumentList '--startvirtualcam','--minimize-to-tray','--disable-shutdown-check' `
+            -WorkingDirectory $obsDir `
+            -PassThru `
+            -WindowStyle Hidden `
+            | Tee-Object -Variable obsProc | Out-Null
+          Write-Host "OBS started (pid=$($obsProc.Id)); waiting for virtual camera to register..."
+          Start-Sleep -Seconds 10
+          # Surface the process status for the log.
+          Get-Process -Id $obsProc.Id -ErrorAction SilentlyContinue |
+            Select-Object Id,ProcessName,StartTime
+
+      - name: List visible cameras (pre-test)
+        # Dump the PnP camera view so the job log shows whether OBS's
+        # virtual device registered before cargo test runs. If no entries
+        # appear here, the subsequent `cargo test` will fail with
+        # "no cameras found" which is the expected diagnostic.
+        if: always()
+        run: |
+          Write-Host "=== Get-PnpDevice -Class Camera ==="
+          Get-PnpDevice -Class Camera -Status OK -ErrorAction SilentlyContinue |
+            Select-Object FriendlyName,InstanceId,Status |
+            Format-Table -AutoSize
+          Write-Host "=== Get-PnpDevice -Class Image (fallback) ==="
+          Get-PnpDevice -Class Image -Status OK -ErrorAction SilentlyContinue |
+            Select-Object FriendlyName,InstanceId,Status |
+            Format-Table -AutoSize
+
+      - name: Build device tests
+        run: cargo test --features "input-msmf,device-test,runner" --test device_tests --no-run
+
+      - name: Run device tests
+        # --test-threads=1 keeps MSMF device contention deterministic.
+        # --nocapture surfaces the skip-path eprintln from
+        # control_set_get_round_trip (OBS's virtual cam exposes no
+        # writable IntegerRange controls, so that test should skip rather
+        # than fail).
+        run: |
+          cargo test --features "input-msmf,device-test,runner" --test device_tests `
+            -- --test-threads=1 --nocapture
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          Write-Host "=== OBS processes still running ==="
+          Get-Process obs64 -ErrorAction SilentlyContinue |
+            Select-Object Id,ProcessName,StartTime |
+            Format-Table -AutoSize
+          Write-Host "=== Get-PnpDevice -Class Camera (post-failure) ==="
+          Get-PnpDevice -Class Camera -ErrorAction SilentlyContinue |
+            Select-Object FriendlyName,InstanceId,Status,Problem |
+            Format-Table -AutoSize
+          Write-Host "=== OBS log tail ==="
+          $logDir = "$env:APPDATA\obs-studio\logs"
+          if (Test-Path $logDir) {
+            Get-ChildItem $logDir -Filter *.txt |
+              Sort-Object LastWriteTime -Descending |
+              Select-Object -First 1 |
+              ForEach-Object { Get-Content $_.FullName -Tail 80 }
+          } else {
+            Write-Host "(no OBS log directory at $logDir)"
+          }
+
+      - name: Cleanup
+        if: always()
+        # Shut down OBS regardless of test outcome. Named-process match
+        # is fine — the workflow owns its runner so there is no other
+        # obs64 to worry about.
+        run: |
+          Stop-Process -Name obs64 -Force -ErrorAction SilentlyContinue

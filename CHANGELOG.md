@@ -10,6 +10,16 @@
   (only `docs-only`) and never enabled `#![feature(doc_cfg)]`, so the
   attribute was a no-op that only produced an `unexpected_cfgs` warning.
 
+### Infrastructure
+
+* New `.github/workflows/msmf-obs-virtualcam.yml` — Windows-only spike
+  workflow that installs OBS Studio on `windows-latest`, launches
+  `obs64.exe --startvirtualcam` as a background process, and runs the
+  `device-test` suite against the resulting Media Foundation source.
+  Trigger is `workflow_dispatch`-only with `continue-on-error: true`
+  pending first successful run; once stable the trigger will be
+  promoted to `pull_request` alongside the V4L loopback job.
+
 ### Testing
 
 * Add `control_set_get_round_trip` to `tests/device_tests.rs` (gated behind
