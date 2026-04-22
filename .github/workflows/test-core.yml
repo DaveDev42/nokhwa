@@ -107,12 +107,17 @@ jobs:
         if: steps.cache-gstreamer-win.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          # The MSI lives on gstreamer.freedesktop.org; chocolatey's
-          # ``gstreamer`` package pins to 0.10.x and is unusable, so we
-          # download the MSVC installer directly and run it with
-          # ``msiexec /quiet ADDLOCAL=ALL`` to get both runtime + dev
-          # headers. ``--UseBasicParsing`` avoids loading IE's
-          # script-host on bare GH runners.
+          # CLAUDE.md preference is ``winget > choco > direct MSI``,
+          # but neither covers what we need here:
+          # - chocolatey's ``gstreamer`` pins to 0.10.x (2013) — unusable
+          # - ``winget install gstreamerproject.gstreamer`` gives runtime
+          #   only; it does NOT ship the ``-devel`` MSI that has the
+          #   ``.pc`` files pkg-config needs to build the crate
+          # So we download both MSIs directly from gstreamer.freedesktop.org
+          # and run them with ``msiexec /quiet ADDLOCAL=ALL`` to get the
+          # "Complete" variant (runtime + headers + full plugin set).
+          # ``-UseBasicParsing`` avoids loading IE's script-host on bare
+          # GH runners.
           $ver = '1.26.0'
           $urlRuntime = "https://gstreamer.freedesktop.org/data/pkg/windows/$ver/msvc/gstreamer-1.0-msvc-x86_64-$ver.msi"
           $urlDevel   = "https://gstreamer.freedesktop.org/data/pkg/windows/$ver/msvc/gstreamer-1.0-devel-msvc-x86_64-$ver.msi"

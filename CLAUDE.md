@@ -6,6 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Nokhwa (녹화, "to record") is a cross-platform Rust webcam capture library. It provides capability-split wrappers (`StreamCamera` / `ShutterCamera` / `HybridCamera`) dispatched from the top-level `open()` function, with platform-specific backends: V4L2 on Linux, Media Foundation on Windows, AVFoundation on macOS, plus a cross-platform GStreamer backend that also handles RTSP / HTTP / file URL sources via `uridecodebin`.
 
+## Windows package management
+
+**Always prefer `winget` over `chocolatey` (choco).** winget is the modern Microsoft-native package manager, ships with Windows 10+, and has up-to-date packages where choco's community catalog often pins to ancient versions (e.g. chocolatey's `gstreamer` is still 0.10.x from 2013). Only fall back to choco if the software genuinely does not have a winget manifest.
+
+**Direct MSI download + `msiexec /quiet ADDLOCAL=ALL`** is the right choice when winget doesn't cover the package variant we need (e.g. GStreamer's `-devel` MSI isn't on winget — only the runtime variant). Document this choice in the CI step comment so future contributors don't "fix" it back to winget.
+
 ## Build Commands
 
 ```bash
