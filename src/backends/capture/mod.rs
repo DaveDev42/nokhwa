@@ -66,12 +66,3 @@ pub use nokhwa_bindings_gstreamer::GStreamerCaptureDevice;
 
 #[cfg(feature = "input-gstreamer")]
 crate::nokhwa_backend!(nokhwa_bindings_gstreamer::GStreamerCaptureDevice: FrameSource);
-
-#[cfg(feature = "input-opencv")]
-mod opencv_backend;
-#[cfg(feature = "input-opencv")]
-#[cfg_attr(feature = "docs-features", doc(cfg(feature = "input-opencv")))]
-pub use opencv_backend::OpenCvCaptureDevice;
-
-#[cfg(feature = "input-opencv")]
-crate::nokhwa_backend!(OpenCvCaptureDevice: FrameSource);

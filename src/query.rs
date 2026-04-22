@@ -50,8 +50,8 @@ pub fn query(api: ApiBackend) -> Result<Vec<CameraInfo>, NokhwaError> {
                 "linux" => {
                     if cfg!(feature = "input-v4l") && cfg!(target_os = "linux") {
                         query(ApiBackend::Video4Linux)
-                    } else if cfg!(feature = "input-opencv") {
-                        query(ApiBackend::OpenCv)
+                    } else if cfg!(feature = "input-gstreamer") {
+                        query(ApiBackend::GStreamer)
                     } else {
                         #[cfg(feature = "logging")]
                         log::warn!("No suitable backends available on Linux. Perhaps you meant to enable one of the backends such as `input-v4l`? (Please read the docs.)");
@@ -61,8 +61,8 @@ pub fn query(api: ApiBackend) -> Result<Vec<CameraInfo>, NokhwaError> {
                 "windows" => {
                     if cfg!(feature = "input-msmf") && cfg!(target_os = "windows") {
                         query(ApiBackend::MediaFoundation)
-                    } else if cfg!(feature = "input-opencv") {
-                        query(ApiBackend::OpenCv)
+                    } else if cfg!(feature = "input-gstreamer") {
+                        query(ApiBackend::GStreamer)
                     } else {
                         #[cfg(feature = "logging")]
                         log::warn!("No suitable backends available on Windows. Perhaps you meant to enable one of the backends such as `input-msmf`? (Please read the docs.)");
@@ -72,8 +72,8 @@ pub fn query(api: ApiBackend) -> Result<Vec<CameraInfo>, NokhwaError> {
                 "macos" => {
                     if cfg!(feature = "input-avfoundation") {
                         query(ApiBackend::AVFoundation)
-                    } else if cfg!(feature = "input-opencv") {
-                        query(ApiBackend::OpenCv)
+                    } else if cfg!(feature = "input-gstreamer") {
+                        query(ApiBackend::GStreamer)
                     } else {
                         #[cfg(feature = "logging")]
                         log::warn!("No suitable backends available on macOS. Perhaps you meant to enable one of the backends such as `input-avfoundation`? (Please read the docs.)");
@@ -102,9 +102,6 @@ pub fn query(api: ApiBackend) -> Result<Vec<CameraInfo>, NokhwaError> {
         ApiBackend::Video4Linux => query_v4l(),
         ApiBackend::MediaFoundation => query_msmf(),
         ApiBackend::GStreamer => query_gstreamer(),
-        ApiBackend::OpenCv | ApiBackend::Network => {
-            Err(NokhwaError::UnsupportedOperationError(api))
-        }
         ApiBackend::Browser => query_wasm(),
         _ => Err(NokhwaError::UnsupportedOperationError(api)),
     }

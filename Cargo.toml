@@ -68,17 +68,6 @@ logging = [ "log" ]
 input-native              = [ "input-avfoundation", "input-v4l", "input-msmf" ]
 # Convenience alias for input-native
 input-auto                = [ "input-native" ]
-# Cross-platform OpenCV backend (requires OpenCV system library).
-# `nokhwa::open` dispatches to this backend only when no native input-* backend
-# matches the current target/feature configuration.
-input-opencv = [
-    "opencv",
-    "opencv/videoio",
-    "opencv/rgb",
-    "opencv/clang-runtime",
-    "nokhwa-core/opencv-mat",
-]
-
 # ── Output features ───────────────────────────────────────────────────
 # Copy frames directly into wgpu textures
 output-wgpu = [ "wgpu", "nokhwa-core/wgpu-types" ]
@@ -119,15 +108,6 @@ default-features = false
 version          = "27"
 default-features = false
 optional         = true
-
-[dependencies.opencv]
-version          = "0.97"
-default-features = false
-optional         = true
-
-[dependencies.rgb]
-version  = "0.8"
-optional = true
 
 [dependencies.nokhwa-bindings-windows-msmf]
 path     = "nokhwa-bindings-windows-msmf"

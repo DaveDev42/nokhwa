@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+### Removed
+
+* **OpenCV capture backend (`input-opencv`,
+  `ApiBackend::OpenCv`, `ApiBackend::Network`,
+  `src/backends/capture/opencv_backend.rs`).** The GStreamer backend
+  reached parity with OpenCV's video-I/O coverage across sessions 2–5:
+  local capture (session 2), controls on Linux (session 3),
+  `nokhwa::open` dispatch integration (session 4), and — the
+  critical prerequisite — IP / RTSP / HTTP / file URL sources via
+  `uridecodebin` (session 5). OpenCV's only unique value in nokhwa
+  was `VideoCapture::from_file`'s URL support, now covered
+  first-class.
+
+  Removing `input-opencv` drops the `opencv` +
+  `opencv/videoio` + `opencv/rgb` + `opencv/clang-runtime`
+  system-dependency chain, shrinks build surface on Windows / macOS
+  (no more system OpenCV install), and eliminates the ambiguous
+  "which backend did I open?" situation where both the native backend
+  and OpenCV would end up wrapping the same device.
+
+  **`opencv-mat` (the separate `nokhwa-core` feature exposing
+  `to_opencv_mat()` / `write_to_opencv_mat()` for CV-ecosystem
+  interop) is unchanged.** Users who want to hand frames into
+  `cv::Mat` for downstream image processing still enable that feature
+  directly.
+
+  **Migration.** Replace `input-opencv` with `input-gstreamer`.
+  `CameraIndex::String("rtsp://...")` / `https://...` / `file://...`
+  routing works identically; local-camera enumeration now goes
+  through GStreamer's `DeviceMonitor` instead of OpenCV's
+  backend-specific `VideoCapture(index)`. On Windows / macOS install
+  GStreamer's **Complete** variant (so `mfvideosrc` / `avfvideosrc` /
+  `uridecodebin` / `videoconvert` are available); on Linux install
+  `libgstreamer1.0-dev` + `libgstreamer-plugins-base1.0-dev` +
+  `gstreamer1.0-plugins-base` + `gstreamer1.0-libav` (for decoders)
+  + `gstreamer1.0-plugins-good`.
+
 ### Features
 
 * **GStreamer session 4 — `nokhwa::open()` dispatch integration.**
