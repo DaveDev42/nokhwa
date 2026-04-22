@@ -398,6 +398,29 @@
   backends that override these `ShutterCapture` methods, must rename their
   usages. Backends that use the default no-op impls are unaffected.
 
+## [0.14.4](https://github.com/DaveDev42/nokhwa/compare/v0.14.3...v0.14.4) (2026-04-22)
+
+
+### Performance
+
+* **msmf:** event-driven hotplug via RegisterDeviceNotificationW ([#173](https://github.com/DaveDev42/nokhwa/issues/173)) ([714c7dd](https://github.com/DaveDev42/nokhwa/commit/714c7dd6614415cc2926b42086619f513fdc6ed1))
+
+
+### Infrastructure
+
+* **clippy:** v4l Stream import + pedantic cleanup across workspace ([#169](https://github.com/DaveDev42/nokhwa/issues/169)) ([b9a9e52](https://github.com/DaveDev42/nokhwa/commit/b9a9e52b5675f6a7be0912c767353b9c5ec78457))
+* **test-core:** cache GStreamer apt packages in check-gstreamer job ([#176](https://github.com/DaveDev42/nokhwa/issues/176)) ([667ab50](https://github.com/DaveDev42/nokhwa/commit/667ab50be5aa7d3d3249c307be70415a3025d27f))
+* **v4l-loopback:** cache apt archives keyed on kernel version ([#175](https://github.com/DaveDev42/nokhwa/issues/175)) ([b248591](https://github.com/DaveDev42/nokhwa/commit/b2485914149a938d72608eacb04d2f8b3d44baf5))
+* **v4l:** fix two pedantic clippy warnings ([#170](https://github.com/DaveDev42/nokhwa/issues/170)) ([c4cc193](https://github.com/DaveDev42/nokhwa/commit/c4cc1935a9799fe3107571c2b72153a5371606cc))
+
+
+### Documentation
+
+* **claude:** document that this fork never publishes to crates.io ([#172](https://github.com/DaveDev42/nokhwa/issues/172)) ([d40e3b1](https://github.com/DaveDev42/nokhwa/commit/d40e3b10414caf8c708368dee35c084e32ea56c9))
+* **claude:** refresh CLAUDE.md for 0.14.x state ([#171](https://github.com/DaveDev42/nokhwa/issues/171)) ([68d1eab](https://github.com/DaveDev42/nokhwa/commit/68d1eabe275f2e3396ab955cc44a7f25212418e0))
+* **todo:** close GStreamer top-level item (shipped in 0.14.3) ([#167](https://github.com/DaveDev42/nokhwa/issues/167)) ([3d7b7a2](https://github.com/DaveDev42/nokhwa/commit/3d7b7a2fa8c2c4df0d7624bcb25a8c2bd5dff147))
+* **todo:** restructure to Open/Closed/Shipped ([#177](https://github.com/DaveDev42/nokhwa/issues/177)) ([d3cac32](https://github.com/DaveDev42/nokhwa/commit/d3cac320a0119f2d6c2f945745109ae4640942ef))
+
 ## [0.14.3](https://github.com/DaveDev42/nokhwa/compare/v0.14.2...v0.14.3) (2026-04-22)
 
 
