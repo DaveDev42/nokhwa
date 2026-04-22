@@ -1,112 +1,109 @@
 # TODO
 
-## High Priority
-(None)
+Working list. Short lines only — rationale + implementation notes live
+in `CHANGELOG.md`, PR descriptions, and commit messages.
 
-## Medium Priority
-(None)
+## Open
 
-## Low Priority
-- [ ] Expand platform integration tests (requires physical camera, gated behind `device-test` feature). Port in `tests/device_tests.rs` covers query, multi-frame streaming, control enumeration, and `CameraRunner` smoke.
-  - Linux is now auto-covered on every PR via `v4l2loopback` (see `.github/workflows/v4l-loopback.yml`) — the V4L `nokhwa::open` dispatch regression is CI-guarded.
-  - [x] Camera control round-trip on real hardware (set → get value verification). `tests/device_tests.rs::control_set_get_round_trip` picks the first Manual-mode `IntegerRange` control with headroom, writes a stepped value, re-reads, and asserts. Verified on a Windows MSMF webcam (2026-04-20) against `Brightness` 128 → 129. Skips gracefully on devices that only expose Automatic/ReadOnly controls (e.g. `v4l2loopback`).
-  - [ ] **MSMF** CI coverage on a GitHub-hosted `windows-latest` runner (spike). Drafted in `.github/workflows/msmf-obs-virtualcam.yml` (trigger: `workflow_dispatch`-only, `continue-on-error: true`). MSMF manually verified on a Windows dev box 2026-04-20 (4/4 device tests pass).
-    - [x] **Session 1** — workflow drafted (#148): `choco install obs-studio` + `Start-Process obs64.exe --startvirtualcam --minimize-to-tray --disable-shutdown-check` + `Get-PnpDevice` diagnostics + device-tests + failure-log dump.
-    - [x] ~~**Session 2** — seed OBS profile to skip first-run blocker~~ — **abandoned.** Local reproduction on 2026-04-21 proved the first-run hypothesis wrong *and* surfaced a deeper structural blocker. With a fully seeded `%APPDATA%\obs-studio\basic\profiles\Untitled\` + `basic\scenes\Untitled.json` + `global.ini (FirstRun=false, Profile=Untitled, SceneCollection=Untitled)`, OBS on a stock `winget install OBSProject.OBSStudio` install *does* complete startup (`==== Startup complete ====` observed in the log) and *does* run `--startvirtualcam` — but the OBS virtual camera is a **DirectShow filter** registered by `obs-virtualcam-module64.dll` (CLSID `{A3FCE0F5-3493-419F-958A-ABA1250EC20B}` under `HKLM\SOFTWARE\Classes\CLSID`), and **does not surface via `MFEnumDeviceSources`**. Confirmed with a local `msmf_probe` example: with OBS running + virtual camera active, `query(ApiBackend::MediaFoundation)` still returns exactly one device — the physical MX Brio. `MediaFoundation` and `DirectShow` are disjoint enumeration namespaces on modern Windows; OBS's DShow filter is invisible to the MF path nokhwa takes. No amount of OBS configuration changes that.
-    - [ ] **Session 3** — find an MF-native virtual camera for GH-hosted CI. Candidates:
-      - **Windows 11 Camera Extension sample** (smourier/VCamSample) — registers as a native MF source. Blocker: requires a code-signing certificate that GH Actions cannot provide without secrets.
-      - **Ship a minimal Rust MF source** in the test harness — feasible but nontrivial (~500 LOC of `windows` crate FFI).
-      - **Self-hosted Windows runner** with a real USB webcam — the same path `macos-camera` takes for AVFoundation. Most pragmatic if the team has the hardware.
-      - **Accept the gap.** The `workflow_dispatch`-only + `continue-on-error: true` existing workflow stays as a diagnostic harness (comment header updated to reflect the DShow/MF finding) but MSMF CI coverage remains the documented gap it was before the spike started.
-  - [x] ~~macOS GH-hosted virtual camera~~ — **not feasible**. Modern virtual cameras require system extensions that must be codesigned + notarized + installed from `/Applications`, which GitHub-hosted macOS runners cannot supply (no Apple Developer credentials). AVFoundation CI coverage remains the responsibility of the self-hosted `macos-camera` runner.
+### Runtime verification pending (compile-verified only)
 
-## Performance
-(None)
+- [ ] **Event-driven MSMF hotplug (#173)** — reconnect the MX Brio over
+  USB and run `cargo run --features input-msmf --example hotplug_probe`;
+  unplug/replug should print `Connected(…)` / `Disconnected(…)` in real
+  time.
+- [ ] **AVFoundation backends (0.14.1–0.14.3 window)** — hotplug + open +
+  frame-pull have only the `Build (macos)` compile check. Needs a run on
+  the self-hosted `macos-camera` runner.
+- [ ] **Windows GStreamer local-camera path (session 2)** — Windows
+  runtime exercised with `file://` URLs via `uridecodebin` only;
+  `DeviceMonitor` + `ksvideosrc`/`mfvideosrc` against a live USB camera
+  still needs a manual run.
+- [ ] **MSMF control round-trip** verified 2026-04-20 on MX Brio; re-run
+  if the trait surface changes.
 
-## Untested runtime paths (compile-verified only)
+### Infrastructure / CI
 
-Several recent changes ship with compile + code-review confidence but
-not with live hardware verification. Each is straightforward to close
-once the relevant rig is available.
+- [ ] **Windows GStreamer CI** blocked on `gstreamer.freedesktop.org`'s
+  `go-away` JS challenge (PR #174 closed). Paths forward: (a) private
+  artifact mirror the CI can pull from, (b) wait for `winget` to gain a
+  `-devel` manifest, (c) self-hosted Windows runner with GStreamer
+  pre-installed. `Build (windows)` matrix still exercises `input-msmf`
+  so no regression.
+- [ ] **MSMF device-test coverage on a GH-hosted `windows-latest`**
+  runner. OBS virtualcam spike (`msmf-obs-virtualcam.yml`) is abandoned
+  — OBS is a DirectShow filter, invisible to `MFEnumDeviceSources`.
+  Remaining candidate paths:
+  - Windows 11 Camera Extension sample (smourier/VCamSample) — requires
+    a code-signing certificate GH Actions can't provide.
+  - Ship a minimal Rust MF source in the test harness — feasible but
+    ~500 LOC `unsafe` `windows` FFI; feasibility of userspace
+    `IMFActivate` appearing in `MFEnumDeviceSources` is unverified.
+  - Self-hosted Windows runner with a USB webcam (same pattern as
+    `macos-camera`).
+  - Accept the gap — current state; `msmf-obs-virtualcam.yml` stays as
+    a diagnostic harness (`workflow_dispatch`-only,
+    `continue-on-error: true`).
 
-- [ ] **Event-driven MSMF hotplug (#173) runtime test.** Current
-  verification is compile-clean + `examples/hotplug_probe` builds. The
-  MX Brio was physically disconnected during an earlier `usbipd
-  detach` sequence (state `Persisted`). Reconnect the MX Brio over
-  USB, run `cargo run --features input-msmf --example hotplug_probe`,
-  then unplug + replug to confirm `Connected(…)` / `Disconnected(…)`
-  events print in real time.
-- [ ] **AVFoundation backend runtime tests (all sessions).** Backend
-  compiles via the `Build (macos)` CI matrix but has no live-hardware
-  exercise on a macOS runner — self-hosted `macos-camera` is the
-  intended target. Blocks the AVF hotplug + camera open + frame pull
-  verification from the 0.14.1 → 0.14.3 window.
-- [ ] **Windows GStreamer local-camera path (session 2).** Windows
-  runtime was only verified with URL sources (`file:///…/*.mp4` via
-  `uridecodebin`). `DeviceMonitor` + `ksvideosrc` / `mfvideosrc` path
-  against a live USB camera has been tested only through WSL's
-  `v4l2src` route.
+### Perf follow-ups (correctness already fine)
 
-## Infrastructure blockers
+- [ ] V4L event-driven hotplug via `inotify` on `/dev/video*`. Current
+  impl polls `v4l::context::enum_devices()` every 500ms. Same
+  perf-only trade-off the MSMF impl used to have before #173.
+- [ ] AVFoundation event-driven hotplug via `IOKit` matching
+  notifications. Current impl is 500ms polling.
 
-- [ ] **Windows GStreamer CI is blocked on upstream bot protection.**
-  Attempted in PR #174 (closed). `gstreamer.freedesktop.org` serves
-  MSIs behind a "go-away" JS challenge that rejects both default and
-  browser-User-Agent `Invoke-WebRequest`s on headless GH runners.
-  Neither `winget` nor Chocolatey has a modern (≥ 1.22) GStreamer
-  MSVC package with the `-devel` variant that supplies pkg-config
-  `.pc` files. Viable future paths: (a) host the MSIs on a private
-  artifact mirror the CI can pull from, (b) wait for winget to gain a
-  `-devel` manifest, (c) spin up a self-hosted Windows runner with
-  GStreamer pre-installed. Until then, the separate `Build (windows)`
-  matrix job exercises `input-msmf` unchanged — no regression of
-  existing coverage.
+### Backlog
 
-## Follow-ups on shipped features
-- [x] ~~Event-driven MSMF hotplug.~~ **Implemented (2026-04-22).**
-  Replaced the 500ms polling worker with a
-  `RegisterDeviceNotificationW(KSCATEGORY_VIDEO_CAMERA)`-backed
-  worker thread that owns a hidden message-only window
-  (`HWND_MESSAGE` parent) and pumps `WM_DEVICECHANGE` through a
-  static `WndProc`. On `DBT_DEVICEARRIVAL` / `DBT_DEVICEREMOVECOMPLETE`
-  the proc re-snapshots via `wmf::query()` and emits
-  `HotplugEvent::Connected` / `Disconnected` diffs over the same mpsc
-  channel — identical `HotplugSource` trait surface. `Drop` posts
-  `WM_QUIT` to the worker thread id to break the `GetMessageW` loop.
-  Zero wake-ups in the steady state; immediate (no 500ms poll
-  latency) notification on arrival/unplug.
-- [x] ~~Hotplug impls on the other backends.~~ All three native
-  backends now ship `HotplugSource`:
-  - [x] **V4L** polling impl (2026-04-21): `V4LHotplugContext` in
-    `nokhwa-bindings-linux-v4l::hotplug` mirrors MSMF — 500ms poll of
-    `v4l::context::enum_devices()` keyed on `CameraIndex`. CI coverage
-    lands via `.github/workflows/v4l-loopback.yml::V4L hotplug smoke
-    test` which reloads `v4l2loopback` with `devices=2` → `devices=1`
-    → `devices=2` via `modprobe -r` + `modprobe` (Ubuntu's packaged
-    `v4l2loopback-ctl` lacks `add`/`delete`) and asserts the probe
-    observed `Connected(` + `Disconnected(` events. `inotify`-based
-    event-driven impl is a follow-up if the 2×/sec wake becomes a
-    concern — same perf-only gap the MSMF impl has.
-  - [x] **AVFoundation** polling impl (2026-04-21):
-    `AVFoundationHotplugContext` in
-    `nokhwa-bindings-macos-avfoundation::hotplug` mirrors MSMF/V4L —
-    500ms poll of `device::query()` keyed on
-    `AVCaptureDevice.uniqueID` (stored in `CameraInfo.misc`).
-    Compilation verified on macOS via the `Build (macos)` CI job.
-    End-to-end hardware verification awaits the self-hosted
-    `macos-camera` runner or a manual `hotplug_probe` run. `IOKit`
-    matching-notification event-driven impl is a follow-up if the
-    2×/sec wake becomes a concern — same perf-only gap as MSMF/V4L.
+- [ ] **WASM / browser backend.** Blocked on five design decisions, no
+  active consumer:
+  - interop library (`tsify` vs `serde-wasm-bindgen` vs hand-rolled)
+  - `ApiBackend::Custom(String)` representation in JS
+  - frame transport (`Uint8Array` / `OffscreenCanvas` / `ImageBitmap`)
+  - `NokhwaError` → JS Error translation
+  - browser capture API (`getUserMedia` + `MediaStreamTrackProcessor` vs
+    `ImageCapture`)
+- [ ] Expand platform integration tests in `tests/device_tests.rs`.
+  Already covers query, multi-frame streaming, control enumeration,
+  `CameraRunner` smoke, control round-trip. Linux is auto-covered on
+  every PR via `v4l2loopback`.
 
-## Backlog
-- [x] ~~Re-implement GStreamer backend~~ **(complete, shipped in 0.14.3 — 2026-04-22).** Rolled out in sessions 1/2/3/4/5. Windows runtime also verified (local file URL through `uridecodebin` via `nokhwa::open` dispatch, 10 frames at 640x480 NV12). The only piece not shipped is the optional `inotify`/event-driven control surface improvements; those live under "Follow-ups on shipped features" (perf-only). History below:
-  - [x] **Session 1** (2026-04-20): `nokhwa-bindings-gstreamer` workspace crate pinned to `gstreamer = "0.23"` (0.25+ requires rustc 1.92 which exceeds our 1.89 toolchain). `query(ApiBackend::GStreamer)` uses `DeviceMonitor` filtered to `Video/Source` with `video/x-raw` caps; each `Device` becomes a `CameraInfo` with `display_name` + `device_class`. `GStreamerCaptureDevice::new()` and every `FrameSource` method currently error — streaming lands in session 2. CI: `.github/workflows/test-core.yml::check-gstreamer` installs `libgstreamer1.0-dev` + `gstreamer1.0-plugins-base`. The bindings crate has an optional `backend` cargo feature so `cargo check` without GStreamer installed still compiles the stub path; the top-level `input-gstreamer` feature flips `backend` on.
-  - [x] **Session 2 prerequisites** (2026-04-21): Windows dev-box prep for the streaming session. Installed `usbipd-win 5.3.0` via `winget install dorssel.usbipd-win` (requires UAC). WSL2 Ubuntu 24.04 already available. Inside WSL installed `libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good pkg-config build-essential` (GStreamer 1.24.2) plus `rustup default stable` (rustc 1.95.0). Verified `cargo check -p nokhwa-bindings-gstreamer --features backend` links against the system GStreamer and `cargo test -p nokhwa-bindings-gstreamer --features backend` passes the smoke test in WSL. MX Brio bus ID on this box is `7-4`; `usbipd list` recognises it. Remaining steps for a future session: `usbipd bind --busid 7-4` (one-time, admin) then `usbipd attach --wsl --busid 7-4` (no admin needed once bound) to forward the webcam to WSL for end-to-end streaming tests, and `usbipd detach --busid 7-4` to return it to Windows.
-  - [x] **Session 2 — Streaming** (2026-04-22): `GStreamerCaptureDevice` now owns a live `source ! capsfilter ! videoconvert ! appsink` pipeline. `Device::create_element(None)` picks the platform-native source (`v4l2src` / `mfvideosrc` / `avfvideosrc`); `capsfilter` locks the negotiated `video/x-raw` format + resolution + framerate; `videoconvert` handles the I420 ↔ NV12 ↔ YUY2 conversions transparently; `AppSink` serves frames through `try_pull_sample` with `max_buffers=1 drop=true sync=false` for "latest frame" semantics. Format enumeration walks `Device::caps()` for `video/x-raw` structures (YUY2 / NV12 / GRAY8) with framerate lists. `open()` / `frame()` / `frame_raw()` / `close()` / `set_format()` are live; `compatible_formats()` / `compatible_fourcc()` return real data. New modules `src/format.rs` (caps ↔ `CameraFormat` mapping + 6 unit tests) and `src/pipeline.rs` (`PipelineHandle` lifecycle). New `examples/gstreamer_probe.rs` verifies the end-to-end path; hardware-verified on an MX Brio forwarded via `usbipd attach --wsl --busid 7-4` (WSL2 Ubuntu 24.04, GStreamer 1.24.2): 5 frames at 640x480 NV12 30fps, 460800 bytes each. Higher resolutions may hit usbip bandwidth caps in WSL — that's an environment limit, not a code bug, and direct USB on the host is unaffected.
-  - [x] **Session 3** (2026-04-22): Controls via `gst-properties` on the source element. Linux `v4l2src` exposes 4 `controllable` GObject properties (`brightness` / `contrast` / `hue` / `saturation`) — live readable + writable at any pipeline state. Other V4L2 CIDs (exposure / zoom / focus / pan / tilt / gain / sharpness / gamma / white-balance / backlight-comp) go through the write-only `extra-controls` `GstStructure`, applied during the transition to PAUSED; `set_control` on those CIDs is immediate when the pipeline is already open (pipeline teardown + restart with the accumulated pending map). Windows `mfvideosrc` / `ksvideosrc` and macOS `avfvideosrc` expose no camera-control properties — `controls()` returns an empty list there and `set_control` errors. Users on Windows / macOS should use native backends (`input-msmf` / `input-avfoundation`) for full control. Hardware-verified on MX Brio via WSL: `Brightness` round-trip 128 → 129 → verified.
-  - [x] **Session 4** (2026-04-22): `nokhwa::open()` dispatch integration. Two new routing rules in `src/session.rs::open`: (1) `CameraIndex::String` whose value starts with a URL scheme (`rtsp://`/`rtsps://`/`rtmp://`/`rtmps://`/`http://`/`https://`/`file://`/`srt://`/`udp://`/`tcp://`) short-circuits to the GStreamer backend regardless of which native backend is compiled in, and (2) GStreamer sits between the native branches and OpenCV as a cross-platform fallback when no native backend matched the target/feature combo. Hardware-verified via WSL with both `input-v4l` and `input-gstreamer` compiled together: `stream_camera file:///tmp/test.mp4` routes through GStreamer and pulls 10 frames, while `stream_camera 0` correctly reaches the V4L native path (local-device fast path preserved).
-  - [x] **Session 5 — RTSP/URL path** (2026-04-22): `CameraIndex::String` matching `rtsp://` / `rtsps://` / `rtmp://` / `rtmps://` / `http://` / `https://` / `file://` / `srt://` / `udp://` / `tcp://` dispatches through a new `uridecodebin uri=... ! videoconvert ! appsink` pipeline instead of the `DeviceMonitor` lookup. One pipeline covers every scheme — GStreamer's `uridecodebin` element auto-detects the right source + decoder. `new()` parks the URI; `open()` builds the pipeline, waits for the first sample, learns the format from its caps. `compatible_formats()` / `compatible_fourcc()` return empty until the first open (no pre-flight probe possible) and then the single format the stream delivers. Controls error — URL streams have no V4L-style control surface. `set_format()` errors — URL streams negotiate their own format. New module `nokhwa-bindings-gstreamer::uri`; new example `examples/gstreamer_url_probe.rs`. Hardware-verified via WSL: local `file:///tmp/test.mp4` (640x480 NV12 30fps) and remote `https://download.blender.org/durian/trailer/sintel_trailer-480p.mp4` (854x480 NV12 24fps) — 5 frames each. This was the critical prerequisite for evaluating OpenCV backend removal.
-- [x] ~~Re-implement UVC backend (cross-platform via libusb).~~ **Removed before 0.14.2 release (2026-04-22).** The three native backends (MSMF / V4L / AVFoundation) are now feature-complete including hotplug, which eliminates the original cross-platform motivation. The libusb path is also blocked or redundant on every platform: Windows's `usbvideo.sys` owns the interface (rusb `claim_interface` returns `NotSupported`); Linux's kernel `uvcvideo` driver does the same job via V4L2 with better integration (DMABUF, mmap); macOS's IOUSBHost policy restricts userspace USB; and isochronous transfers — UVC streaming's core primitive — aren't exposed in either `rusb 0.9` or `nusb 0.2`'s public API, which would require dropping to raw `libusb-sys` FFI for ~500-800 LOC of unsafe transfer lifecycle management. The enumeration + descriptor parser (session 2a) worked on real hardware but had no downstream consumer that the native backends don't serve better. Future niche needs (industrial / IR / UVC Processing Unit extensions, embedded Linux without a kernel UVC driver) are better addressed by purpose-built backends rather than resurrecting a generic libusb-UVC path.
-- [x] ~~Re-implement Network/IP camera backend~~ — **already supported** through the GStreamer backend's URL path (session 5, 2026-04-22). Passing a `CameraIndex::String` starting with `rtsp://` / `http://` / `file://` etc. dispatches through a `uridecodebin` pipeline. Supersedes the OpenCV-backed path that handled this pre-removal.
-- [x] ~~OpenCV capture backend.~~ **Removed (2026-04-22).** GStreamer backend's sessions 2–5 reached parity: local capture (session 2), controls on Linux (session 3), `nokhwa::open` dispatch integration (session 4), IP / RTSP / HTTP / file URL sources (session 5). OpenCV's only remaining unique value was `VideoCapture::from_file` for URL cameras, now covered first-class by GStreamer's `uridecodebin`. Removing `input-opencv` drops the `opencv` / `opencv/videoio` / `opencv/rgb` / `opencv/clang-runtime` system dependency chain and the `OpenCv` / `Network` variants of `ApiBackend`. **`opencv-mat` (the independent `nokhwa-core` feature that exposes `to_opencv_mat()` / `write_to_opencv_mat()` for CV-ecosystem interop) is unchanged** — users who want to hand frames into `cv::Mat` for image processing still enable that feature directly.
-- [ ] Re-implement WASM/browser backend — requires resolving `wasm-bindgen` non-C enum limitation. Consider `tsify` or `serde-wasm-bindgen`.
+## Closed — not returning
+
+- **UVC backend** (removed 2026-04-22, before first release) — rationale
+  in `CHANGELOG.md`. Windows `usbvideo.sys` owns the interface;
+  Linux/macOS have better native paths; no `rusb`/`nusb` public iso
+  API. Future niche needs get purpose-built backends, not a generic
+  libusb-UVC resurrection.
+- **OpenCV capture backend** (removed 2026-04-22 / 0.14.3) — GStreamer
+  covers local capture + controls + URL sources first-class now.
+  `opencv-mat` (`nokhwa-core` feature for `cv::Mat` interop) is
+  unchanged; enable directly if you want the conversion helpers.
+- **OBS virtualcam MSMF CI spike** (abandoned 2026-04-21) — OBS
+  virtualcam is a DirectShow filter; `MFEnumDeviceSources` and
+  DirectShow are disjoint enumeration namespaces. No amount of OBS
+  configuration bridges that. `msmf-obs-virtualcam.yml` kept as a
+  diagnostic harness, `workflow_dispatch`-only.
+- **macOS GH-hosted virtual camera** — not feasible. Modern vcams need
+  system extensions codesigned + notarized + installed from
+  `/Applications`; GH-hosted macOS runners have no Apple Developer
+  credentials. AVFoundation CI coverage = self-hosted `macos-camera`.
+- **Network/IP camera backend** — superseded by GStreamer session 5's
+  URL path. `CameraIndex::String("rtsp://…")` / `https://…` / `file://…`
+  dispatches through `uridecodebin`.
+
+## Shipped recently (for context)
+
+- **0.14.3** (2026-04-22) — GStreamer sessions 3/4/5 + OpenCV removal.
+- **0.14.2** (2026-04-21) — MSMF / V4L / AVFoundation hotplug, OpenCV
+  IP-camera re-open fix, MSMF OBS spike docs, GStreamer session 1/2,
+  UVC session 1/2a then pre-release removal.
+- **Event-driven MSMF hotplug** (#173, post-0.14.3) —
+  `RegisterDeviceNotificationW(KSCATEGORY_VIDEO_CAMERA)` + hidden
+  `HWND_MESSAGE` window + `WM_DEVICECHANGE` pump. Zero steady-state
+  wake-ups.
+- **V4L + test-core apt caches** (#175, #176) — cache `.deb` archives
+  across CI runs; ~90 s → ~10 s on v4l-loopback, ~30 s → ~5 s on
+  check-gstreamer.
+- **CLAUDE.md rules**: (1) never `cargo publish` to crates.io (fork);
+  (2) prefer `winget` over `choco`, direct MSI only where winget lacks
+  the variant (e.g. GStreamer `-devel`).
