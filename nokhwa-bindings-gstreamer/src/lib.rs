@@ -35,6 +35,8 @@ mod controls;
 mod format;
 #[cfg(all(feature = "backend", not(feature = "docs-only")))]
 mod pipeline;
+#[cfg(all(feature = "backend", not(feature = "docs-only")))]
+mod uri;
 
 #[cfg(all(feature = "backend", not(feature = "docs-only")))]
 mod internal {
@@ -46,6 +48,7 @@ mod internal {
         compatible_formats as caps_for_device, compatible_fourcc as fourcc_for_device, find_device,
         resolve_format, PipelineHandle,
     };
+    use crate::uri::{compatible_fourcc_from_negotiated, looks_like_uri, UriPipelineHandle};
     use gstreamer::prelude::*;
     use gstreamer::{Caps, Device, DeviceMonitor};
     use nokhwa_core::{
@@ -142,12 +145,12 @@ mod internal {
     ///
     /// Not yet implemented: `nokhwa::open()` dispatch integration
     /// (session 4).
-    pub struct GStreamerCaptureDevice {
-        info: CameraInfo,
+    /// Local-device source metadata: what `DeviceMonitor` + `Device`
+    /// gave us at `new()` time. Lives inside [`BackendSource::Local`].
+    struct LocalSource {
         device: Device,
         formats: Vec<CameraFormat>,
         negotiated: CameraFormat,
-        pipeline: Option<PipelineHandle>,
         /// V4L2 CIDs to apply via `extra-controls` on the next
         /// pipeline open. Keyed by the CID name (e.g. `"zoom_absolute"`).
         /// Accumulates across `set_control` calls until the next
@@ -155,11 +158,74 @@ mod internal {
         pending_extra_controls: BTreeMap<String, i64>,
     }
 
+    /// URL-based source metadata: the URI we build a pipeline around.
+    /// `negotiated` is populated after the first successful `open()`
+    /// because URL streams don't advertise caps before we connect.
+    /// Session-5 added this branch for `rtsp://` / `http://` /
+    /// `file://` etc.
+    struct UriSource {
+        uri: String,
+        /// `None` until the first successful `open()` — no pre-flight
+        /// probe API exists for URL streams short of fully connecting,
+        /// so `compatible_formats()` and `negotiated_format()` return
+        /// empty / default until we've actually opened.
+        negotiated: Option<CameraFormat>,
+    }
+
+    enum BackendSource {
+        Local(LocalSource),
+        Uri(UriSource),
+    }
+
+    /// Runtime-active pipeline. The variant mirrors [`BackendSource`]
+    /// so we can pattern-match for source-element access.
+    enum ActivePipeline {
+        Local(PipelineHandle),
+        Uri(UriPipelineHandle),
+    }
+
+    impl ActivePipeline {
+        fn source_element(&self) -> &gstreamer::Element {
+            match self {
+                Self::Local(p) => p.source(),
+                Self::Uri(p) => p.source(),
+            }
+        }
+        fn pull_frame(&self) -> Result<Buffer, NokhwaError> {
+            match self {
+                Self::Local(p) => p.pull_frame(),
+                Self::Uri(p) => p.pull_frame(),
+            }
+        }
+    }
+
+    pub struct GStreamerCaptureDevice {
+        info: CameraInfo,
+        source: BackendSource,
+        pipeline: Option<ActivePipeline>,
+    }
+
     impl GStreamerCaptureDevice {
         pub fn new(index: &CameraIndex, cam_fmt: RequestedFormat) -> Result<Self, NokhwaError> {
             gstreamer::init()
                 .map_err(|e| NokhwaError::general(format!("gstreamer init failed: {e}")))?;
 
+            // Branch 1: URL-like string → uridecodebin pipeline.
+            if let CameraIndex::String(s) = index {
+                if looks_like_uri(s) {
+                    let info = CameraInfo::new(s, "URL", s, index.clone());
+                    return Ok(Self {
+                        info,
+                        source: BackendSource::Uri(UriSource {
+                            uri: s.clone(),
+                            negotiated: None,
+                        }),
+                        pipeline: None,
+                    });
+                }
+            }
+
+            // Branch 2: local device lookup via DeviceMonitor.
             let (display_name, positional) = match index {
                 CameraIndex::Index(i) => (String::new(), *i),
                 CameraIndex::String(s) => (s.clone(), 0),
@@ -175,11 +241,13 @@ mod internal {
 
             Ok(Self {
                 info,
-                device,
-                formats,
-                negotiated,
+                source: BackendSource::Local(LocalSource {
+                    device,
+                    formats,
+                    negotiated,
+                    pending_extra_controls: BTreeMap::new(),
+                }),
                 pipeline: None,
-                pending_extra_controls: BTreeMap::new(),
             })
         }
     }
@@ -205,7 +273,12 @@ mod internal {
                     format: None,
                 });
             };
-            Ok(list_controls(pipeline.source()))
+            // URL sources have an `uridecodebin` source element that
+            // exposes none of the v4l2-style control properties;
+            // `list_controls` returns an empty Vec for it, which is
+            // the right answer ("there are no live controls on this
+            // stream") rather than an error.
+            Ok(list_controls(pipeline.source_element()))
         }
 
         fn set_control(
@@ -213,6 +286,16 @@ mod internal {
             id: KnownCameraControl,
             value: ControlValueSetter,
         ) -> Result<(), NokhwaError> {
+            let BackendSource::Local(local) = &mut self.source else {
+                // URL-mode sources don't have controls — errors cleanly
+                // rather than silently accepting a write that would
+                // never be applied.
+                return Err(NokhwaError::SetPropertyError {
+                    property: id.to_string(),
+                    value: value.to_string(),
+                    error: "GStreamer URL-mode sources do not support controls".to_string(),
+                });
+            };
             let handle = control_handle(id).ok_or_else(|| NokhwaError::SetPropertyError {
                 property: id.to_string(),
                 value: value.to_string(),
@@ -221,10 +304,7 @@ mod internal {
             })?;
             match handle {
                 GstControlHandle::Property(name) => {
-                    // Live path — the four `controllable` v4l2src
-                    // properties can be set at any pipeline state, but
-                    // we still need the source element to exist.
-                    let Some(pipeline) = &self.pipeline else {
+                    let Some(ActivePipeline::Local(pipeline)) = &self.pipeline else {
                         return Err(NokhwaError::SetPropertyError {
                             property: name.to_string(),
                             value: value.to_string(),
@@ -242,15 +322,16 @@ mod internal {
                     // change lands immediately; matches what the MSMF
                     // backend does for non-live property writes.
                     let int_value = v4l2_cid_value(cid, &value)?;
-                    self.pending_extra_controls
+                    local
+                        .pending_extra_controls
                         .insert(cid.to_string(), int_value);
-                    if self.pipeline.is_some() {
+                    if matches!(self.pipeline, Some(ActivePipeline::Local(_))) {
                         self.pipeline = None;
-                        self.pipeline = Some(PipelineHandle::start(
-                            &self.device,
-                            self.negotiated,
-                            build_extra_controls(&self.pending_extra_controls),
-                        )?);
+                        self.pipeline = Some(ActivePipeline::Local(PipelineHandle::start(
+                            &local.device,
+                            local.negotiated,
+                            build_extra_controls(&local.pending_extra_controls),
+                        )?));
                     }
                     Ok(())
                 }
@@ -268,49 +349,88 @@ mod internal {
 
     impl FrameSource for GStreamerCaptureDevice {
         fn negotiated_format(&self) -> CameraFormat {
-            self.negotiated
+            match &self.source {
+                BackendSource::Local(l) => l.negotiated,
+                // URL mode: prefer the live pipeline's current
+                // format (set from the first sample) over the
+                // not-yet-known default.
+                BackendSource::Uri(u) => match (&self.pipeline, u.negotiated) {
+                    (Some(ActivePipeline::Uri(p)), _) => p.format(),
+                    (_, Some(f)) => f,
+                    (_, None) => CameraFormat::default(),
+                },
+            }
         }
 
         fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
-            if !self.formats.contains(&f) {
+            let BackendSource::Local(local) = &mut self.source else {
+                return Err(NokhwaError::SetPropertyError {
+                    property: "CameraFormat".to_string(),
+                    value: format!("{f:?}"),
+                    error: "GStreamer URL-mode sources negotiate format from the stream; \
+                            set_format is not meaningful"
+                        .to_string(),
+                });
+            };
+            if !local.formats.contains(&f) {
                 return Err(NokhwaError::SetPropertyError {
                     property: "CameraFormat".to_string(),
                     value: format!("{f:?}"),
                     error: "not in the device's compatible format list".to_string(),
                 });
             }
-            // Tear down the live pipeline before swapping formats;
-            // rebuilding with the new caps is the cleanest way to
-            // flush any in-flight buffers negotiated against the old
-            // format.
-            let was_open = self.pipeline.is_some();
+            let was_open = matches!(self.pipeline, Some(ActivePipeline::Local(_)));
             self.pipeline = None;
-            self.negotiated = f;
+            local.negotiated = f;
             if was_open {
-                self.pipeline = Some(PipelineHandle::start(
-                    &self.device,
-                    self.negotiated,
-                    build_extra_controls(&self.pending_extra_controls),
-                )?);
+                self.pipeline = Some(ActivePipeline::Local(PipelineHandle::start(
+                    &local.device,
+                    local.negotiated,
+                    build_extra_controls(&local.pending_extra_controls),
+                )?));
             }
             Ok(())
         }
 
         fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
-            Ok(self.formats.clone())
+            match &self.source {
+                BackendSource::Local(l) => Ok(l.formats.clone()),
+                BackendSource::Uri(u) => {
+                    // Once opened, we know the one format the stream
+                    // delivers. Before that, an empty list is the most
+                    // honest answer.
+                    Ok(u.negotiated.map(|f| vec![f]).unwrap_or_default())
+                }
+            }
         }
 
         fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
-            Ok(fourcc_for_device(&self.formats))
+            match &self.source {
+                BackendSource::Local(l) => Ok(fourcc_for_device(&l.formats)),
+                BackendSource::Uri(u) => Ok(u
+                    .negotiated
+                    .map(compatible_fourcc_from_negotiated)
+                    .unwrap_or_default()),
+            }
         }
 
         fn open(&mut self) -> Result<(), NokhwaError> {
-            if self.pipeline.is_none() {
-                self.pipeline = Some(PipelineHandle::start(
-                    &self.device,
-                    self.negotiated,
-                    build_extra_controls(&self.pending_extra_controls),
-                )?);
+            if self.pipeline.is_some() {
+                return Ok(());
+            }
+            match &mut self.source {
+                BackendSource::Local(local) => {
+                    self.pipeline = Some(ActivePipeline::Local(PipelineHandle::start(
+                        &local.device,
+                        local.negotiated,
+                        build_extra_controls(&local.pending_extra_controls),
+                    )?));
+                }
+                BackendSource::Uri(uri) => {
+                    let handle = UriPipelineHandle::start(&uri.uri)?;
+                    uri.negotiated = Some(handle.format());
+                    self.pipeline = Some(ActivePipeline::Uri(handle));
+                }
             }
             Ok(())
         }
@@ -324,7 +444,7 @@ mod internal {
                 Some(p) => p.pull_frame(),
                 None => Err(NokhwaError::ReadFrameError {
                     message: "pipeline not open — call open() first".to_string(),
-                    format: Some(self.negotiated.format()),
+                    format: Some(self.negotiated_format().format()),
                 }),
             }
         }

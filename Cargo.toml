@@ -177,3 +177,8 @@ path = "examples/msmf_probe.rs"
 name = "gstreamer_probe"
 path = "examples/gstreamer_probe.rs"
 required-features = [ "input-gstreamer" ]
+
+[[example]]
+name = "gstreamer_url_probe"
+path = "examples/gstreamer_url_probe.rs"
+required-features = [ "input-gstreamer" ]

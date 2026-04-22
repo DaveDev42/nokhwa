@@ -4,6 +4,41 @@
 
 ### Features
 
+* **GStreamer session 5 — RTSP / IP / URL sources.** Passing a
+  `CameraIndex::String` whose value starts with one of the known URL
+  schemes (`rtsp://` / `rtsps://` / `rtmp://` / `rtmps://` / `http://`
+  / `https://` / `file://` / `srt://` / `udp://` / `tcp://`) now
+  dispatches the GStreamer backend through a new
+  `uridecodebin uri=... ! videoconvert ! appsink` pipeline instead
+  of the `DeviceMonitor` lookup path. One pipeline shape covers every
+  scheme because `uridecodebin` auto-picks the right source plugin
+  (`rtspsrc` / `souphttpsrc` / `filesrc` / ...) and decoder chain.
+  `new()` parks the URI; `open()` builds the pipeline, waits for the
+  first sample, and learns the format from the sample's caps since
+  URL streams don't advertise capabilities before we connect.
+  `compatible_formats()` returns an empty list until the first
+  `open()`, then returns the single negotiated format. `controls()`
+  / `set_control()` error in URL mode — URL streams have no V4L-style
+  control surface. `set_format()` errors in URL mode — URL streams
+  negotiate their own format.
+  New module: `nokhwa-bindings-gstreamer::uri`. New example:
+  `examples/gstreamer_url_probe.rs`. Hardware-verified via WSL
+  (GStreamer 1.24.2 + `gstreamer1.0-libav` + `plugins-bad` /
+  `-ugly` / `-good`):
+  - Local file: `file:///tmp/test.mp4` — 5 frames at 640x480 NV12
+    30fps (H.264 via `mp4mux`, decoded by `uridecodebin` through
+    `avdec_h264`).
+  - Remote HTTPS: `https://download.blender.org/durian/trailer/sintel_trailer-480p.mp4`
+    — 5 frames at 854x480 NV12 24fps.
+  RTSP streams share the same `uridecodebin` dispatch as HTTP, so
+  real RTSP camera URLs work through the same code path with no
+  backend-specific logic.
+
+  **This closes the critical prerequisite for evaluating OpenCV
+  backend removal** — the IP / RTSP / file story is now covered by
+  GStreamer first-class instead of going through OpenCV's
+  FFmpeg-backed `VideoCapture::from_file`.
+
 * **GStreamer session 3 — controls on Linux.** Platform-asymmetric
   camera-control support through GStreamer source elements.
   - **Linux `v4l2src`**: `controls()` enumerates the 4 `controllable`
