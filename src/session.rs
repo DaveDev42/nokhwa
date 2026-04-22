@@ -145,6 +145,23 @@ pub fn open(index: CameraIndex, req: OpenRequest) -> Result<OpenedCamera, Nokhwa
         ),
     };
 
+    // URL-like strings short-circuit to the GStreamer backend. Native
+    // backends can't open `rtsp://` / `http://` / `file://` URIs; OpenCV
+    // can (via its FFmpeg-backed `VideoCapture::from_file`) but GStreamer
+    // is the preferred path because it's first-class cross-platform and
+    // doesn't pull in OpenCV's system dependency. This check runs before
+    // the native branches so plain local cameras keep their fast path
+    // but URL strings route correctly even on hosts with a native
+    // backend compiled in.
+    #[cfg(feature = "input-gstreamer")]
+    if let CameraIndex::String(s) = &index {
+        if looks_like_uri_scheme(s) {
+            use crate::backends::capture::GStreamerCaptureDevice;
+            let dev = GStreamerCaptureDevice::new(&index, requested)?;
+            return Ok(OpenedCamera::from_device(Box::new(dev)));
+        }
+    }
+
     #[cfg(all(target_os = "linux", feature = "input-v4l"))]
     {
         use nokhwa_bindings_linux_v4l::V4LCaptureDevice;
@@ -166,6 +183,17 @@ pub fn open(index: CameraIndex, req: OpenRequest) -> Result<OpenedCamera, Nokhwa
         let dev = MediaFoundationCaptureDevice::new(&index, requested)?;
         return Ok(OpenedCamera::from_device(Box::new(dev)));
     }
+    // Cross-platform GStreamer fallback. Sits before OpenCV because
+    // GStreamer is session-5 feature-complete (streaming + controls +
+    // URL sources) and has a narrower dependency footprint than OpenCV
+    // for the same functional coverage.
+    #[cfg(feature = "input-gstreamer")]
+    #[allow(unreachable_code)]
+    {
+        use crate::backends::capture::GStreamerCaptureDevice;
+        let dev = GStreamerCaptureDevice::new(&index, requested)?;
+        return Ok(OpenedCamera::from_device(Box::new(dev)));
+    }
     // Cross-platform opencv fallback. Reachable only when no native backend
     // matched this target / feature configuration above. The `allow` covers
     // builds that compile both a native backend AND `input-opencv`, where
@@ -185,6 +213,20 @@ pub fn open(index: CameraIndex, req: OpenRequest) -> Result<OpenedCamera, Nokhwa
             "no native backend available for this platform/feature configuration",
         ))
     }
+}
+
+/// Cheap URL-scheme sniff used by [`open`] to route URL-like strings
+/// through the GStreamer backend. Kept in sync with the scheme list in
+/// `nokhwa-bindings-gstreamer::uri::looks_like_uri` — if you add one
+/// there, add it here too.
+#[cfg(feature = "input-gstreamer")]
+fn looks_like_uri_scheme(s: &str) -> bool {
+    const SCHEMES: &[&str] = &[
+        "rtsp://", "rtsps://", "rtmp://", "rtmps://", "http://", "https://", "file://", "srt://",
+        "udp://", "tcp://",
+    ];
+    let lower = s.to_ascii_lowercase();
+    SCHEMES.iter().any(|s| lower.starts_with(s))
 }
 
 /// An opened camera, dispatched by backend capability.
