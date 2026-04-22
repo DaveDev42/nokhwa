@@ -1480,10 +1480,8 @@ impl Display for ControlValueSetter {
 /// - `AUTO` is special - it tells the Camera struct to automatically choose a backend most suited for the current platform.
 /// - `AVFoundation` - Uses `AVFoundation` on `MacOSX`
 /// - `Video4Linux` - `Video4Linux2`, a linux specific backend.
-/// - `MediaFoundation` - Microsoft Media Foundation, Windows only,
-/// - `OpenCv` - Uses `OpenCV` to capture. Platform agnostic.
-/// - `GStreamer` - ***DEPRECATED*** Uses `GStreamer` RTP to capture. Platform agnostic.
-/// - `Network` - Uses `OpenCV` to capture from an IP.
+/// - `MediaFoundation` - Microsoft Media Foundation, Windows only.
+/// - `GStreamer` - Cross-platform `GStreamer` backend. Also handles IP / RTSP / HTTP / file URLs via `CameraIndex::String`.
 /// - `Browser` - Uses browser APIs to capture from a webcam.
 #[derive(Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]
@@ -1492,9 +1490,7 @@ pub enum ApiBackend {
     AVFoundation,
     Video4Linux,
     MediaFoundation,
-    OpenCv,
     GStreamer,
-    Network,
     Browser,
     /// A custom backend not covered by the built-in variants.
     Custom(String),

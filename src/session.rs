@@ -146,13 +146,10 @@ pub fn open(index: CameraIndex, req: OpenRequest) -> Result<OpenedCamera, Nokhwa
     };
 
     // URL-like strings short-circuit to the GStreamer backend. Native
-    // backends can't open `rtsp://` / `http://` / `file://` URIs; OpenCV
-    // can (via its FFmpeg-backed `VideoCapture::from_file`) but GStreamer
-    // is the preferred path because it's first-class cross-platform and
-    // doesn't pull in OpenCV's system dependency. This check runs before
-    // the native branches so plain local cameras keep their fast path
-    // but URL strings route correctly even on hosts with a native
-    // backend compiled in.
+    // backends can't open `rtsp://` / `http://` / `file://` URIs. This
+    // check runs before the native branches so plain local cameras keep
+    // their fast path but URL strings route correctly even on hosts
+    // with a native backend compiled in.
     #[cfg(feature = "input-gstreamer")]
     if let CameraIndex::String(s) = &index {
         if looks_like_uri_scheme(s) {
@@ -183,27 +180,16 @@ pub fn open(index: CameraIndex, req: OpenRequest) -> Result<OpenedCamera, Nokhwa
         let dev = MediaFoundationCaptureDevice::new(&index, requested)?;
         return Ok(OpenedCamera::from_device(Box::new(dev)));
     }
-    // Cross-platform GStreamer fallback. Sits before OpenCV because
-    // GStreamer is session-5 feature-complete (streaming + controls +
-    // URL sources) and has a narrower dependency footprint than OpenCV
-    // for the same functional coverage.
+    // Cross-platform GStreamer fallback — used when no native backend
+    // matched the target / feature configuration above. The `allow`
+    // covers builds that compile both a native backend AND
+    // `input-gstreamer`, where every native branch above returns
+    // unconditionally and this block is statically unreachable.
     #[cfg(feature = "input-gstreamer")]
     #[allow(unreachable_code)]
     {
         use crate::backends::capture::GStreamerCaptureDevice;
         let dev = GStreamerCaptureDevice::new(&index, requested)?;
-        return Ok(OpenedCamera::from_device(Box::new(dev)));
-    }
-    // Cross-platform opencv fallback. Reachable only when no native backend
-    // matched this target / feature configuration above. The `allow` covers
-    // builds that compile both a native backend AND `input-opencv`, where
-    // every native branch above unconditionally returns and this block is
-    // statically unreachable.
-    #[cfg(feature = "input-opencv")]
-    #[allow(unreachable_code)]
-    {
-        use crate::backends::capture::OpenCvCaptureDevice;
-        let dev = OpenCvCaptureDevice::new(&index, requested)?;
         return Ok(OpenedCamera::from_device(Box::new(dev)));
     }
     #[allow(unreachable_code)]

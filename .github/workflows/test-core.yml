@@ -36,32 +36,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --features input-v4l,${{ matrix.features }}
 
-  # Verifies the cross-platform OpenCV backend still compiles. Installs
-  # OpenCV from apt so the `opencv` crate's clang-runtime bindgen pass
-  # can find the system headers.
-  check-opencv:
-    name: Feature check (input-opencv)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      RUSTFLAGS: "-D warnings"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@nightly
-      - name: Install OpenCV
-        # `libopencv-dev` is needed for `OpenCVConfig.cmake` / `opencv4.pc`
-        # (per-module `libopencv-*-dev` don't ship those). Use
-        # `--no-install-recommends` to skip Recommends that pull ~2GB of
-        # ROCm/HIP and GStreamer extras from slow Azure mirrors.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libopencv-dev \
-            libclang-dev \
-            pkg-config
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo check --features input-opencv
-
   # Verifies the cross-platform GStreamer backend (session 1: enumeration
   # only) compiles on the canonical Linux path. gstreamer-rs links against
   # the system GStreamer install at build time.

@@ -80,14 +80,11 @@ Runnable examples live in the `examples/` directory
 | Video4Linux (`input-v4l`)        | ✅    | ✅    | ✅           | Linux               |
 | MSMF (`input-msmf`)             | ✅    | ✅    | ✅           | Windows             |
 | AVFoundation (`input-avfoundation`) | ✅ | ✅    | ✅           | macOS               |
-| OpenCV (`input-opencv`)^        | ✅    | ❌    | ❌           | Linux, Windows, Mac |
-| GStreamer (`input-gstreamer`)‡  | ❌    | ✅    | ❌           | Linux, Windows, Mac |
+| GStreamer (`input-gstreamer`)   | ✅    | ✅    | ✅           | Linux, Windows, Mac |
 
 ✅ Working  ❌ Not Supported
 
-^ = May be bugged. Also supports IP Cameras.
-
-‡ = Session 1 ships device enumeration only (via `DeviceMonitor` filtered to `Video/Source`). Streaming, format negotiation, and controls land in follow-up releases. See `TODO.md`.
+GStreamer also covers **IP / RTSP / HTTP / file URLs**: pass the URL as `CameraIndex::String` (e.g. `rtsp://...`, `https://...`, `file:///...`) and `nokhwa::open` routes it through a `uridecodebin` pipeline.
 
 ## Features
 
@@ -98,8 +95,7 @@ The default feature set enables only `mjpeg`. You **must** additionally enable a
 - `input-avfoundation`: macOS/iOS AVFoundation backend
 - `input-v4l`: Linux Video4Linux2 backend
 - `input-msmf`: Windows Media Foundation backend
-- `input-opencv`: Cross-platform OpenCV backend (requires a system OpenCV install). Also the supported path for **IP / RTSP cameras**: pass the URL as `CameraIndex::String` and open with `input-opencv`. The old `NetworkCamera` wrapper was removed in 0.10.0.
-- `input-gstreamer`: Cross-platform GStreamer backend via `gstreamer-rs`. Requires a system GStreamer install (`libgstreamer1.0-dev` + `gstreamer1.0-plugins-base` on Ubuntu; upstream installer on macOS / Windows). *Session 1 (current): device enumeration only — `query(ApiBackend::GStreamer)` walks `DeviceMonitor` filtered to `Video/Source` and returns one `CameraInfo` per source.* Opening a camera via this backend is not yet wired up.
+- `input-gstreamer`: Cross-platform GStreamer backend via `gstreamer-rs`. Requires a system GStreamer install (`libgstreamer1.0-dev` + `libgstreamer-plugins-base1.0-dev` + `gstreamer1.0-plugins-base` on Ubuntu; upstream installer on macOS / Windows). Handles both local cameras (via `DeviceMonitor`) and URL sources (`rtsp://` / `http://` / `file://` etc. via `uridecodebin`). Windows / macOS need the **Complete** install variant for the `mfvideosrc` / `avfvideosrc` / `videoconvert` / `uridecodebin` plugins.
 
 **Output features:**
 - `output-wgpu`: Copy frames directly into a `wgpu` texture
