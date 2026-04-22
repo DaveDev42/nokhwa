@@ -48,22 +48,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
-      - name: Install GStreamer
-        # `libgstreamer1.0-dev` ships the pkg-config files for the core
-        # sys crate. `libgstreamer-plugins-base1.0-dev` supplies the
-        # `gstreamer-app-1.0.pc` + `gstreamer-video-1.0.pc` that
-        # `gstreamer-app-sys` / `gstreamer-video-sys` need (session-2
-        # streaming). `gstreamer1.0-plugins-base` provides the
-        # `videoconvert` element our pipeline relies on. Skip Recommends
-        # to avoid pulling in the
-        # full plugin set.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev \
-            gstreamer1.0-plugins-base \
+      - name: Install GStreamer (cached)
+        # ``libgstreamer1.0-dev`` ships the pkg-config files for the
+        # core sys crate. ``libgstreamer-plugins-base1.0-dev`` supplies
+        # ``gstreamer-app-1.0.pc`` + ``gstreamer-video-1.0.pc`` that
+        # ``gstreamer-app-sys`` / ``gstreamer-video-sys`` need
+        # (session-2 streaming). ``gstreamer1.0-plugins-base``
+        # provides the ``videoconvert`` element our pipeline relies
+        # on. Cached via ``cache-apt-pkgs-action`` so the ~30 MB
+        # install doesn't run fresh on every PR.
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: >-
+            libgstreamer1.0-dev
+            libgstreamer-plugins-base1.0-dev
+            gstreamer1.0-plugins-base
             pkg-config
+          version: v1
       - uses: Swatinem/rust-cache@v2
       # Check `input-gstreamer` standalone — not paired with `input-v4l` —
       # so `-D warnings` only applies to the gstreamer crate and the
