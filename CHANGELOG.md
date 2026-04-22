@@ -381,6 +381,20 @@
   backends that override these `ShutterCapture` methods, must rename their
   usages. Backends that use the default no-op impls are unaffected.
 
+## [0.14.3](https://github.com/DaveDev42/nokhwa/compare/v0.14.2...v0.14.3) (2026-04-22)
+
+
+### Features
+
+* **gstreamer:** session 3 — controls via gst_properties + extra-controls ([#162](https://github.com/DaveDev42/nokhwa/issues/162)) ([a744c56](https://github.com/DaveDev42/nokhwa/commit/a744c56623b6b216b830c6236da2c959e1af0637))
+* **gstreamer:** session 4 — nokhwa::open() dispatch integration ([#164](https://github.com/DaveDev42/nokhwa/issues/164)) ([06444b3](https://github.com/DaveDev42/nokhwa/commit/06444b388ff7b68ea5062dcb44d6c493399199fe))
+* **gstreamer:** session 5 — RTSP / IP / URL sources via uridecodebin ([#163](https://github.com/DaveDev42/nokhwa/issues/163)) ([6432e3f](https://github.com/DaveDev42/nokhwa/commit/6432e3f2bc8f0fa756adc8ef12f7877716f56ea0))
+
+
+### Refactoring
+
+* remove OpenCV capture backend ([#166](https://github.com/DaveDev42/nokhwa/issues/166)) ([3ed2f65](https://github.com/DaveDev42/nokhwa/commit/3ed2f6540d346e737305e83af562dcbf28eca218))
+
 ## [0.14.2](https://github.com/DaveDev42/nokhwa/compare/v0.14.1...v0.14.2) (2026-04-21)
 
 
