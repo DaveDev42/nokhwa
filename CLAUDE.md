@@ -85,6 +85,10 @@ Almost everything is behind feature flags. A build **must** enable at least one 
 
 ## Commit & Release Convention
 
+- **Never publish to crates.io.** This is a fork — the `nokhwa` crate name on crates.io belongs to the upstream `l1npengtul/nokhwa`. Release-please tags + creates GitHub Releases (fine, reversible) but **do not run `cargo publish`** under any circumstances. Downstream users who want this fork consume it via git dependency:
+  ```toml
+  nokhwa = { git = "https://github.com/DaveDev42/nokhwa", tag = "v0.14.3" }
+  ```
 - **Default to patch version bumps.** Unless the user explicitly asks for a major or minor bump, every change (including API-breaking ones in 0.x) must ship as a patch release. release-please drives version bumps from conventional-commit prefixes.
 - **Never use `feat!`, `fix!`, or a `BREAKING CHANGE:` footer** in PR titles, squash-merge messages, or commit messages. These escalate release-please to major bumps automatically (e.g. 0.x → 1.0.0). Use plain `feat:` / `fix:` / `refactor:` / `chore:` instead, and describe breaking changes in the PR body and `CHANGELOG.md` / `MIGRATING-*.md` rather than the commit prefix.
 - **Manual major/minor bump**: when a major/minor release is explicitly requested, push a commit to `main` with a `Release-As: x.y.z` footer (release-please auto-detects it), or temporarily set `release-as` in `release-please-config.json` via a chore PR, then remove it in a follow-up chore PR after the release ships.
