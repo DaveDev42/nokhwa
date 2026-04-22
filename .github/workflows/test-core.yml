@@ -73,3 +73,57 @@ jobs:
       # which does not set `-D warnings`.
       - run: cargo check --features input-gstreamer
       - run: cargo test -p nokhwa-bindings-gstreamer --features backend
+
+  # Verifies the GStreamer backend also compiles on Windows. The
+  # install is huge (~500 MB from gstreamer.freedesktop.org) so we
+  # cache it aggressively — first cold run costs ~5 min, subsequent
+  # PRs hit the cache and take <30 s. ``continue-on-error: true``
+  # keeps a mirror-flake during install from blocking merges; the
+  # separate ``Build (windows)`` job already exercises the top-level
+  # crate with MSMF.
+  check-gstreamer-windows:
+    name: Feature check (input-gstreamer, windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    env:
+      RUSTFLAGS: "-D warnings"
+      # Match the per-user install path the GStreamer MSVC installer
+      # uses by default so the cache key stays stable across runs.
+      GST_ROOT: C:\gstreamer\1.0\msvc_x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - name: Cache GStreamer SDK
+        id: cache-gstreamer-win
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.GST_ROOT }}
+          # Bump the version segment if we need a newer SDK for a
+          # specific plugin.
+          key: gstreamer-msvc-1.26.0
+      - name: Install GStreamer (MSVC)
+        if: steps.cache-gstreamer-win.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          # Use the official MSVC installer via choco. The
+          # ``--params`` string flips on the dev install so we get
+          # headers + ``.pc`` files for ``pkg-config``.
+          choco install gstreamer -y --no-progress --version=1.26.0
+          choco install gstreamer-devel -y --no-progress --version=1.26.0
+      - name: Expose GStreamer to cargo
+        shell: pwsh
+        run: |
+          $gstBin  = "${env:GST_ROOT}\bin"
+          $gstPkg  = "${env:GST_ROOT}\lib\pkgconfig"
+          Add-Content -Path $env:GITHUB_PATH -Value $gstBin
+          Add-Content -Path $env:GITHUB_ENV  -Value "PKG_CONFIG_PATH=$gstPkg"
+          Write-Output "GStreamer bin   : $gstBin"
+          Write-Output "GStreamer pkgcfg: $gstPkg"
+          if (-not (Test-Path "$gstBin\gst-launch-1.0.exe")) {
+            Write-Error "GStreamer install did not produce gst-launch-1.0.exe — cache or installer broken"
+            exit 1
+          }
+      - run: cargo check --features input-gstreamer
+      - run: cargo test -p nokhwa-bindings-gstreamer --features backend
