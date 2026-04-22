@@ -44,7 +44,17 @@ const PULL_TIMEOUT: Duration = Duration::from_secs(1);
 pub(crate) struct PipelineHandle {
     pipeline: Pipeline,
     appsink: AppSink,
+    source: Element,
     format: CameraFormat,
+}
+
+impl PipelineHandle {
+    /// Access the source element for control introspection + writes.
+    /// On Linux this is `v4l2src`; on Windows `ksvideosrc` /
+    /// `mfvideosrc`; on macOS `avfvideosrc`.
+    pub(crate) fn source(&self) -> &Element {
+        &self.source
+    }
 }
 
 impl PipelineHandle {
@@ -53,7 +63,11 @@ impl PipelineHandle {
     /// Synchronously waits for the `Playing` state change so that the
     /// very first `pull_frame` call sees a live buffer queue rather
     /// than racing a half-initialised pipeline.
-    pub(crate) fn start(device: &Device, format: CameraFormat) -> Result<Self, NokhwaError> {
+    pub(crate) fn start(
+        device: &Device,
+        format: CameraFormat,
+        extra_controls: Option<gstreamer::Structure>,
+    ) -> Result<Self, NokhwaError> {
         let video_format = frame_format_to_video_format(format.format()).ok_or_else(|| {
             NokhwaError::SetPropertyError {
                 property: "FrameFormat".to_string(),
@@ -70,6 +84,19 @@ impl PipelineHandle {
                 device: device.display_name().to_string(),
                 error: format!("Device::create_element failed: {e}"),
             })?;
+
+        // Apply extra-controls before state leaves NULL — v4l2src reads
+        // this property during the transition to READY and dispatches
+        // the corresponding V4L2 VIDIOC_S_CTRL ioctls. Best-effort;
+        // non-v4l2 source elements simply ignore the property.
+        if let Some(structure) = extra_controls {
+            // `find_property` keeps this safe on source elements that
+            // don't know what `extra-controls` is (everything other
+            // than v4l2src): skip silently instead of asserting.
+            if source.find_property("extra-controls").is_some() {
+                source.set_property("extra-controls", &structure);
+            }
+        }
 
         let capsfilter = gstreamer::ElementFactory::make("capsfilter")
             .property("caps", caps_value.clone())
@@ -133,6 +160,7 @@ impl PipelineHandle {
         Ok(Self {
             pipeline,
             appsink,
+            source,
             format,
         })
     }

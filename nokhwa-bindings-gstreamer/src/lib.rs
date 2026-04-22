@@ -30,12 +30,18 @@
 //! Do not depend on it directly.
 
 #[cfg(all(feature = "backend", not(feature = "docs-only")))]
+mod controls;
+#[cfg(all(feature = "backend", not(feature = "docs-only")))]
 mod format;
 #[cfg(all(feature = "backend", not(feature = "docs-only")))]
 mod pipeline;
 
 #[cfg(all(feature = "backend", not(feature = "docs-only")))]
 mod internal {
+    use crate::controls::{
+        build_extra_controls, control_handle, list_controls, set_live_property, unsupported,
+        v4l2_cid_value, GstControlHandle,
+    };
     use crate::pipeline::{
         compatible_formats as caps_for_device, compatible_fourcc as fourcc_for_device, find_device,
         resolve_format, PipelineHandle,
@@ -52,6 +58,7 @@ mod internal {
         },
     };
     use std::borrow::Cow;
+    use std::collections::BTreeMap;
 
     /// Enumerate video sources visible to the `GStreamer` device registry.
     ///
@@ -122,14 +129,30 @@ mod internal {
     /// against the real device caps rather than a hardcoded element
     /// name.
     ///
-    /// Not yet implemented: controls (`controls()` / `set_control()`)
-    /// and `nokhwa::open()` dispatch integration. See root `TODO.md`.
+    /// Controls (session 3) are Linux-only: `v4l2src` exposes four
+    /// `controllable` GObject properties (brightness / contrast / hue
+    /// / saturation) that work at any pipeline state, plus the
+    /// write-only `extra-controls` structure for the rest of the V4L2
+    /// CID namespace (exposure / zoom / focus / pan / tilt etc).
+    /// Windows `mfvideosrc` / `ksvideosrc` and macOS `avfvideosrc`
+    /// expose no camera-control properties — on those platforms
+    /// `controls()` returns an empty list and `set_control()` errors.
+    /// Users who need full control support on Windows / macOS should
+    /// use the native `input-msmf` / `input-avfoundation` backends.
+    ///
+    /// Not yet implemented: `nokhwa::open()` dispatch integration
+    /// (session 4).
     pub struct GStreamerCaptureDevice {
         info: CameraInfo,
         device: Device,
         formats: Vec<CameraFormat>,
         negotiated: CameraFormat,
         pipeline: Option<PipelineHandle>,
+        /// V4L2 CIDs to apply via `extra-controls` on the next
+        /// pipeline open. Keyed by the CID name (e.g. `"zoom_absolute"`).
+        /// Accumulates across `set_control` calls until the next
+        /// `open()` flushes it into the source element.
+        pending_extra_controls: BTreeMap<String, i64>,
     }
 
     impl GStreamerCaptureDevice {
@@ -156,6 +179,7 @@ mod internal {
                 formats,
                 negotiated,
                 pipeline: None,
+                pending_extra_controls: BTreeMap::new(),
             })
         }
     }
@@ -170,26 +194,76 @@ mod internal {
         }
 
         fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
-            // Session 3 lands controls via `gst-properties` on the
-            // source element. Until then `controls()` has to error
-            // rather than silently returning an empty list — nokhwa's
-            // `open()` dispatch checks `controls()` to detect stream
-            // support, and an empty-list response would be ambiguous
-            // with a device that genuinely has no controls.
-            Err(NokhwaError::UnsupportedOperationError(
-                ApiBackend::GStreamer,
-            ))
+            // Without an open pipeline we have no source element to
+            // introspect. Errors rather than returning `Ok(vec![])` so
+            // the distinction between "no controls at all" and "ask
+            // me again after `open()`" stays visible.
+            let Some(pipeline) = &self.pipeline else {
+                return Err(NokhwaError::ReadFrameError {
+                    message: "GStreamer controls() requires an open pipeline; call open() first"
+                        .to_string(),
+                    format: None,
+                });
+            };
+            Ok(list_controls(pipeline.source()))
         }
 
         fn set_control(
             &mut self,
-            _id: KnownCameraControl,
-            _value: ControlValueSetter,
+            id: KnownCameraControl,
+            value: ControlValueSetter,
         ) -> Result<(), NokhwaError> {
-            Err(NokhwaError::UnsupportedOperationError(
-                ApiBackend::GStreamer,
-            ))
+            let handle = control_handle(id).ok_or_else(|| NokhwaError::SetPropertyError {
+                property: id.to_string(),
+                value: value.to_string(),
+                error: "KnownCameraControl::Other is not mapped by the GStreamer backend"
+                    .to_string(),
+            })?;
+            match handle {
+                GstControlHandle::Property(name) => {
+                    // Live path — the four `controllable` v4l2src
+                    // properties can be set at any pipeline state, but
+                    // we still need the source element to exist.
+                    let Some(pipeline) = &self.pipeline else {
+                        return Err(NokhwaError::SetPropertyError {
+                            property: name.to_string(),
+                            value: value.to_string(),
+                            error: "pipeline not open; open() before set_control for live controls"
+                                .to_string(),
+                        });
+                    };
+                    set_live_property(pipeline.source(), name, &value)
+                }
+                GstControlHandle::V4l2Cid(cid) => {
+                    // Stage it in `pending_extra_controls` — it takes
+                    // effect on the next `open()` via v4l2src's
+                    // `extra-controls` property. If the pipeline is
+                    // already open we tear it down and restart so the
+                    // change lands immediately; matches what the MSMF
+                    // backend does for non-live property writes.
+                    let int_value = v4l2_cid_value(cid, &value)?;
+                    self.pending_extra_controls
+                        .insert(cid.to_string(), int_value);
+                    if self.pipeline.is_some() {
+                        self.pipeline = None;
+                        self.pipeline = Some(PipelineHandle::start(
+                            &self.device,
+                            self.negotiated,
+                            build_extra_controls(&self.pending_extra_controls),
+                        )?);
+                    }
+                    Ok(())
+                }
+            }
         }
+    }
+
+    // `unsupported` is a sentinel used by sibling modules on non-Linux
+    // paths. Keep the re-export explicit so clippy's `dead_code` pass
+    // doesn't trip on the import.
+    #[allow(dead_code)]
+    fn _touch_unsupported() -> NokhwaError {
+        unsupported()
     }
 
     impl FrameSource for GStreamerCaptureDevice {
@@ -213,7 +287,11 @@ mod internal {
             self.pipeline = None;
             self.negotiated = f;
             if was_open {
-                self.pipeline = Some(PipelineHandle::start(&self.device, self.negotiated)?);
+                self.pipeline = Some(PipelineHandle::start(
+                    &self.device,
+                    self.negotiated,
+                    build_extra_controls(&self.pending_extra_controls),
+                )?);
             }
             Ok(())
         }
@@ -228,7 +306,11 @@ mod internal {
 
         fn open(&mut self) -> Result<(), NokhwaError> {
             if self.pipeline.is_none() {
-                self.pipeline = Some(PipelineHandle::start(&self.device, self.negotiated)?);
+                self.pipeline = Some(PipelineHandle::start(
+                    &self.device,
+                    self.negotiated,
+                    build_extra_controls(&self.pending_extra_controls),
+                )?);
             }
             Ok(())
         }

@@ -58,6 +58,64 @@ fn main() -> Result<(), nokhwa_core::error::NokhwaError> {
             f.resolution().height()
         );
     }
+
+    // Session-3 smoke: list live controls, round-trip brightness.
+    // Graceful when the source element doesn't expose any (Windows
+    // ksvideosrc, macOS avfvideosrc) — `controls()` returns an empty
+    // list and the round-trip is skipped.
+    {
+        use nokhwa_core::traits::CameraDevice;
+        use nokhwa_core::types::{ControlValueDescription, ControlValueSetter, KnownCameraControl};
+        let ctrls = cam.controls()?;
+        println!("Controls: {} live entries", ctrls.len());
+        for c in &ctrls {
+            println!("  {}: {:?}", c.control(), c.description());
+        }
+        if let Some(brightness) = ctrls
+            .iter()
+            .find(|c| c.control() == KnownCameraControl::Brightness)
+        {
+            if let ControlValueDescription::IntegerRange {
+                min, max, value, ..
+            } = brightness.description()
+            {
+                let target: i64 = if *value + 1 <= *max {
+                    *value + 1
+                } else if *value - 1 >= *min {
+                    *value - 1
+                } else {
+                    *value
+                };
+                if target != *value {
+                    cam.set_control(
+                        KnownCameraControl::Brightness,
+                        ControlValueSetter::Integer(target),
+                    )?;
+                    let after = cam.controls()?;
+                    let updated = after
+                        .iter()
+                        .find(|c| c.control() == KnownCameraControl::Brightness)
+                        .expect("brightness control disappeared after set");
+                    match updated.description() {
+                        ControlValueDescription::IntegerRange { value: v2, .. } => {
+                            assert_eq!(
+                                *v2, target,
+                                "Brightness did not round-trip: wanted {target}, got {v2}"
+                            );
+                            println!("Brightness round-trip OK: {value} -> {target} (verified)");
+                        }
+                        d => panic!("Brightness description variant changed: {d:?}"),
+                    }
+                    // Restore original to be polite to subsequent runs.
+                    let _ = cam.set_control(
+                        KnownCameraControl::Brightness,
+                        ControlValueSetter::Integer(*value),
+                    );
+                }
+            }
+        }
+    }
+
     cam.close()?;
     println!("Done.");
     Ok(())
