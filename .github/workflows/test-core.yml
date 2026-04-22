@@ -123,10 +123,27 @@ jobs:
           $urlDevel   = "https://gstreamer.freedesktop.org/data/pkg/windows/$ver/msvc/gstreamer-1.0-devel-msvc-x86_64-$ver.msi"
           $tmpR = "$env:RUNNER_TEMP\gstreamer-runtime.msi"
           $tmpD = "$env:RUNNER_TEMP\gstreamer-devel.msi"
+          # gstreamer.freedesktop.org serves its downloads through a
+          # ``go-away`` bot-challenge page; Invoke-WebRequest's default
+          # User-Agent gets blocked with "Protected by go-away". Set a
+          # real browser UA so the CDN serves the MSI directly.
+          $ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
           Write-Output "Downloading $urlRuntime"
-          Invoke-WebRequest -Uri $urlRuntime -OutFile $tmpR -UseBasicParsing
+          Invoke-WebRequest -Uri $urlRuntime -OutFile $tmpR -UseBasicParsing -UserAgent $ua
           Write-Output "Downloading $urlDevel"
-          Invoke-WebRequest -Uri $urlDevel -OutFile $tmpD -UseBasicParsing
+          Invoke-WebRequest -Uri $urlDevel -OutFile $tmpD -UseBasicParsing -UserAgent $ua
+          # Verify the downloads are actually MSIs (not HTML challenge
+          # pages) — "go-away" will serve a 200 OK with HTML content
+          # if the UA isn't allow-listed, which would otherwise slip
+          # through Invoke-WebRequest unnoticed.
+          foreach ($p in @($tmpR, $tmpD)) {
+            $size = (Get-Item $p).Length
+            if ($size -lt 10MB) {
+              Write-Error "Downloaded $p is only $size bytes — likely a go-away challenge page, not the MSI"
+              Get-Content $p -Raw -TotalCount 500
+              exit 1
+            }
+          }
           # ADDLOCAL=ALL forces the "Complete" install variant; the
           # default is "Typical" which skips the plugins-bad + libav
           # decoders our tests require.
