@@ -23,6 +23,45 @@
 ## Performance
 (None)
 
+## Untested runtime paths (compile-verified only)
+
+Several recent changes ship with compile + code-review confidence but
+not with live hardware verification. Each is straightforward to close
+once the relevant rig is available.
+
+- [ ] **Event-driven MSMF hotplug (#173) runtime test.** Current
+  verification is compile-clean + `examples/hotplug_probe` builds. The
+  MX Brio was physically disconnected during an earlier `usbipd
+  detach` sequence (state `Persisted`). Reconnect the MX Brio over
+  USB, run `cargo run --features input-msmf --example hotplug_probe`,
+  then unplug + replug to confirm `Connected(…)` / `Disconnected(…)`
+  events print in real time.
+- [ ] **AVFoundation backend runtime tests (all sessions).** Backend
+  compiles via the `Build (macos)` CI matrix but has no live-hardware
+  exercise on a macOS runner — self-hosted `macos-camera` is the
+  intended target. Blocks the AVF hotplug + camera open + frame pull
+  verification from the 0.14.1 → 0.14.3 window.
+- [ ] **Windows GStreamer local-camera path (session 2).** Windows
+  runtime was only verified with URL sources (`file:///…/*.mp4` via
+  `uridecodebin`). `DeviceMonitor` + `ksvideosrc` / `mfvideosrc` path
+  against a live USB camera has been tested only through WSL's
+  `v4l2src` route.
+
+## Infrastructure blockers
+
+- [ ] **Windows GStreamer CI is blocked on upstream bot protection.**
+  Attempted in PR #174 (closed). `gstreamer.freedesktop.org` serves
+  MSIs behind a "go-away" JS challenge that rejects both default and
+  browser-User-Agent `Invoke-WebRequest`s on headless GH runners.
+  Neither `winget` nor Chocolatey has a modern (≥ 1.22) GStreamer
+  MSVC package with the `-devel` variant that supplies pkg-config
+  `.pc` files. Viable future paths: (a) host the MSIs on a private
+  artifact mirror the CI can pull from, (b) wait for winget to gain a
+  `-devel` manifest, (c) spin up a self-hosted Windows runner with
+  GStreamer pre-installed. Until then, the separate `Build (windows)`
+  matrix job exercises `input-msmf` unchanged — no regression of
+  existing coverage.
+
 ## Follow-ups on shipped features
 - [x] ~~Event-driven MSMF hotplug.~~ **Implemented (2026-04-22).**
   Replaced the 500ms polling worker with a

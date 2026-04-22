@@ -32,34 +32,32 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install system dependencies
-        # linux-modules-extra-$(uname -r) is ~50MB and the azure mirror
-        # has been observed to stall on it. `Acquire::Retries=5` plus a
-        # bash retry loop covers both per-package and whole-transaction
-        # flakes without inflating the job timeout further.
+      - name: Probe kernel version
+        # `awalsh128/cache-apt-pkgs-action` needs a deterministic
+        # cache key. Pin the linux-modules-extra package name (which
+        # varies with the runner's kernel) into a step output so the
+        # cache action sees a stable-for-this-kernel key.
+        id: kernel
         run: |
-          set -e
-          sudo apt-get update -o Acquire::Retries=5
-          ok=0
-          for attempt in 1 2 3; do
-            if sudo apt-get install -y \
-                -o Acquire::Retries=5 \
-                -o Acquire::http::Timeout=60 \
-                "linux-modules-extra-$(uname -r)" \
-                libv4l-dev \
-                v4l-utils \
-                v4l2loopback-dkms \
-                ffmpeg; then
-              ok=1
-              break
-            fi
-            echo "apt-get install failed (attempt ${attempt}); retrying"
-            sleep 10
-          done
-          if [ "$ok" -ne 1 ]; then
-            echo "apt-get install failed after 3 attempts"
-            exit 1
-          fi
+          KERNEL="$(uname -r)"
+          echo "version=$KERNEL" >> "$GITHUB_OUTPUT"
+          echo "modules=linux-modules-extra-$KERNEL" >> "$GITHUB_OUTPUT"
+
+      - name: Install system dependencies (cached)
+        # Caches the apt .deb archives + installed files under
+        # ``/var/cache/apt/archives`` keyed on kernel version. Cold
+        # runs on a new kernel still do the full apt-get dance and
+        # pay the 50MB linux-modules-extra cost; every other run
+        # hits the cache and installs in ~10s instead of ~90s.
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: >-
+            ${{ steps.kernel.outputs.modules }}
+            libv4l-dev
+            v4l-utils
+            v4l2loopback-dkms
+            ffmpeg
+          version: kernel-${{ steps.kernel.outputs.version }}
 
       - name: Load v4l2loopback module
         run: |
