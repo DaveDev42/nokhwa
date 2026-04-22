@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Performance
+
+* **MSMF hotplug: event-driven via `RegisterDeviceNotificationW`.**
+  Replaces the 500ms-polling worker with a Win32
+  `RegisterDeviceNotificationW(KSCATEGORY_VIDEO_CAMERA)`-backed
+  implementation: a dedicated worker thread owns a hidden
+  message-only window (`HWND_MESSAGE` parent) and pumps
+  `WM_DEVICECHANGE` notifications through a static `WndProc`. On
+  `DBT_DEVICEARRIVAL` / `DBT_DEVICEREMOVECOMPLETE` it re-snapshots
+  via `wmf::query()` and emits `HotplugEvent::Connected` /
+  `Disconnected` diffs over the same mpsc channel — identical
+  `HotplugSource` trait surface as before; only the internals
+  changed. `Drop` posts `WM_QUIT` to the worker thread id to break
+  the `GetMessageW` loop. Zero wake-ups in the steady state (vs the
+  old 2×/sec poll) and no longer any 500ms detection latency on a
+  plug/unplug event.
+
 ### Removed
 
 * **OpenCV capture backend (`input-opencv`,
