@@ -23,6 +23,12 @@ features = [
     "Win32_Media",
     "Win32",
     "Win32_Media_KernelStreaming",
+    # event-driven hotplug: hidden window + WM_DEVICECHANGE message pump
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_Graphics_Gdi",
 ]
 
 [package.metadata.docs.rs]

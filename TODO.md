@@ -24,12 +24,18 @@
 (None)
 
 ## Follow-ups on shipped features
-- [ ] Event-driven MSMF hotplug. Current impl polls `wmf::query()`
-  every 500ms, which is simple and reliable but wakes up 2× per
-  second. If the extra thread wake-ups become a concern, port to
-  `RegisterDeviceNotification(KSCATEGORY_VIDEO_CAMERA)` with a
-  hidden window + message pump; the hotplug API surface doesn't
-  change. Tracked as a perf optimisation, not a correctness gap.
+- [x] ~~Event-driven MSMF hotplug.~~ **Implemented (2026-04-22).**
+  Replaced the 500ms polling worker with a
+  `RegisterDeviceNotificationW(KSCATEGORY_VIDEO_CAMERA)`-backed
+  worker thread that owns a hidden message-only window
+  (`HWND_MESSAGE` parent) and pumps `WM_DEVICECHANGE` through a
+  static `WndProc`. On `DBT_DEVICEARRIVAL` / `DBT_DEVICEREMOVECOMPLETE`
+  the proc re-snapshots via `wmf::query()` and emits
+  `HotplugEvent::Connected` / `Disconnected` diffs over the same mpsc
+  channel — identical `HotplugSource` trait surface. `Drop` posts
+  `WM_QUIT` to the worker thread id to break the `GetMessageW` loop.
+  Zero wake-ups in the steady state; immediate (no 500ms poll
+  latency) notification on arrival/unplug.
 - [x] ~~Hotplug impls on the other backends.~~ All three native
   backends now ship `HotplugSource`:
   - [x] **V4L** polling impl (2026-04-21): `V4LHotplugContext` in
