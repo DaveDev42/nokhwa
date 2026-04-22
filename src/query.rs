@@ -32,7 +32,7 @@ pub fn native_api_backend() -> Option<ApiBackend> {
 
 // TODO: Update as this goes
 /// Query the system for a list of available devices. Please refer to the API Backends that support `Query`) <br>
-/// Usually the order goes Native -> GStreamer.
+/// Usually the order goes Native -> `GStreamer`.
 /// # Quirks
 /// - `Media Foundation`: The symbolic link for the device is listed in the `misc` attribute of the [`CameraInfo`].
 /// - `Media Foundation`: The names may contain invalid characters since they were converted from UTF16.
@@ -103,7 +103,7 @@ pub fn query(api: ApiBackend) -> Result<Vec<CameraInfo>, NokhwaError> {
         ApiBackend::MediaFoundation => query_msmf(),
         ApiBackend::GStreamer => query_gstreamer(),
         ApiBackend::Browser => query_wasm(),
-        _ => Err(NokhwaError::UnsupportedOperationError(api)),
+        ApiBackend::Custom(_) => Err(NokhwaError::UnsupportedOperationError(api)),
     }
 }
 

@@ -18,6 +18,23 @@
 #![warn(clippy::all)]
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::module_name_repetitions)]
+// Matches the MSMF bindings crate: platform integration code casts
+// small-integer pixel-format / fraction / CID values across i32 / u32
+// / i64 / u32 boundaries constantly; `try_from` would swap real
+// problems for a sea of boilerplate `.unwrap()`s. Keep the lints off
+// at crate scope.
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_possible_wrap)]
+// Long fns in this crate are the pipeline-construction path in
+// `PipelineHandle::start` (sessions 2/5) and the open() routing in
+// `lib.rs::new`. Splitting them by line count alone would harm
+// readability more than it helps.
+#![allow(clippy::too_many_lines)]
+// `doc_markdown` fires on every unbackticked identifier (`GStreamer`,
+// `AppSink`, `DeviceMonitor`, …). Keeping prose readable is worth more
+// than enforcing backticks in every mention.
+#![allow(clippy::doc_markdown)]
 
 //! # nokhwa-bindings-gstreamer
 //!

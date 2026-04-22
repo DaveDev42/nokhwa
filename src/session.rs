@@ -202,7 +202,7 @@ pub fn open(index: CameraIndex, req: OpenRequest) -> Result<OpenedCamera, Nokhwa
 }
 
 /// Cheap URL-scheme sniff used by [`open`] to route URL-like strings
-/// through the GStreamer backend. Kept in sync with the scheme list in
+/// through the `GStreamer` backend. Kept in sync with the scheme list in
 /// `nokhwa-bindings-gstreamer::uri::looks_like_uri` — if you add one
 /// there, add it here too.
 #[cfg(feature = "input-gstreamer")]
