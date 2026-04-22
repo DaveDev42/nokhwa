@@ -146,7 +146,7 @@ mod internal {
 
         // Let's be extra sure, this code should never panic, but maybe will help catch some race condition
         assert!(
-            devices.iter().find(|entry| entry.index == index).is_none(),
+            !devices.iter().any(|entry| entry.index == index),
             "Device {index} should not be in the list"
         );
 
@@ -540,10 +540,12 @@ mod internal {
                             | Type::IntegerMenu,
                             Value::Integer(current),
                         ) => ControlValueDescription::IntegerRange {
-                            min: desc.minimum as i64,
+                            min: desc.minimum,
                             max: desc.maximum,
                             value: current,
-                            step: desc.step as i64,
+                            // desc.step is u64; widen into i64 which is
+                            // what `ControlValueDescription` expects.
+                            step: i64::try_from(desc.step).unwrap_or(i64::MAX),
                             default: desc.default,
                         },
                         (Type::Boolean, Value::Boolean(current)) => {
