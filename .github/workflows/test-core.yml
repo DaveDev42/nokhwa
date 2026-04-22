@@ -107,11 +107,38 @@ jobs:
         if: steps.cache-gstreamer-win.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          # Use the official MSVC installer via choco. The
-          # ``--params`` string flips on the dev install so we get
-          # headers + ``.pc`` files for ``pkg-config``.
-          choco install gstreamer -y --no-progress --version=1.26.0
-          choco install gstreamer-devel -y --no-progress --version=1.26.0
+          # The MSI lives on gstreamer.freedesktop.org; chocolatey's
+          # ``gstreamer`` package pins to 0.10.x and is unusable, so we
+          # download the MSVC installer directly and run it with
+          # ``msiexec /quiet ADDLOCAL=ALL`` to get both runtime + dev
+          # headers. ``--UseBasicParsing`` avoids loading IE's
+          # script-host on bare GH runners.
+          $ver = '1.26.0'
+          $urlRuntime = "https://gstreamer.freedesktop.org/data/pkg/windows/$ver/msvc/gstreamer-1.0-msvc-x86_64-$ver.msi"
+          $urlDevel   = "https://gstreamer.freedesktop.org/data/pkg/windows/$ver/msvc/gstreamer-1.0-devel-msvc-x86_64-$ver.msi"
+          $tmpR = "$env:RUNNER_TEMP\gstreamer-runtime.msi"
+          $tmpD = "$env:RUNNER_TEMP\gstreamer-devel.msi"
+          Write-Output "Downloading $urlRuntime"
+          Invoke-WebRequest -Uri $urlRuntime -OutFile $tmpR -UseBasicParsing
+          Write-Output "Downloading $urlDevel"
+          Invoke-WebRequest -Uri $urlDevel -OutFile $tmpD -UseBasicParsing
+          # ADDLOCAL=ALL forces the "Complete" install variant; the
+          # default is "Typical" which skips the plugins-bad + libav
+          # decoders our tests require.
+          Write-Output "Installing runtime MSI"
+          Start-Process msiexec.exe -ArgumentList "/i `"$tmpR`" /quiet /norestart ADDLOCAL=ALL" -Wait -NoNewWindow
+          Write-Output "Installing devel MSI"
+          Start-Process msiexec.exe -ArgumentList "/i `"$tmpD`" /quiet /norestart ADDLOCAL=ALL" -Wait -NoNewWindow
+          # Verify the install produced the expected binaries + pkgcfg
+          # before we burn a cache entry on an incomplete tree.
+          if (-not (Test-Path "${env:GST_ROOT}\bin\gst-launch-1.0.exe")) {
+            Write-Error "gst-launch-1.0.exe missing after install — MSI install did not land in expected path"
+            exit 1
+          }
+          if (-not (Test-Path "${env:GST_ROOT}\lib\pkgconfig\gstreamer-1.0.pc")) {
+            Write-Error "gstreamer-1.0.pc missing — devel MSI did not install"
+            exit 1
+          }
       - name: Expose GStreamer to cargo
         shell: pwsh
         run: |
