@@ -76,7 +76,7 @@ Almost everything is behind feature flags. A build **must** enable at least one 
 
 - This is a **fork** of `l1npengtul/nokhwa`. Our remote is `origin` (`DaveDev42/nokhwa`).
 - **NEVER create PRs against the upstream repository (`l1npengtul/nokhwa`).** Always use `--repo DaveDev42/nokhwa` with `gh pr create`.
-- `main` branch is protected via GitHub Rulesets (require PR, require signed commits). Do not attempt direct push.
+- `main` branch is protected via GitHub Rulesets (require PR, squash-only, required status checks: Format / Clippy / Build linux+macos+windows / Core unit tests, no force-push, no deletion). Do not attempt direct push. Squash commits are auto-signed by GitHub web-flow on merge, so all `main` commits are verified even though `required_signatures` is intentionally not enforced (it is incompatible with release-please's bot pushes).
 - When using `gh` commands, always specify `--repo DaveDev42/nokhwa` to avoid accidentally targeting upstream.
 - **NEVER commit planning artifacts, spec documents, or skill-generated files (e.g. `docs/superpowers/`, `docs/plans/`) to the repository.** Keep all planning work in local context only.
 - **Keep `CHANGELOG.md` up to date.** When merging feature or fix PRs, add an entry under the current unreleased version section. Group entries by: Features, Performance, Refactoring, Bug Fixes, Infrastructure, Cleanup.
