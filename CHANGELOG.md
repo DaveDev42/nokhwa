@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Infrastructure
+
+* **`.gitattributes` for LF normalization.** `text=auto eol=lf` plus
+  explicit rules for `*.rs` / `*.toml` / `*.md` / `*.yml` / `*.json` /
+  Xcode project files (`*.pbxproj`, `*.xcscheme`, `*.plist`,
+  `*.entitlements`), and binary markers for image / video / `.DS_Store`
+  / `.xcuserstate`. Eliminates the cross-OS CRLF/LF noise that produced
+  100+-file phantom dirty trees on WSL/Windows checkouts. `Cargo.lock`
+  is also marked `linguist-generated=true` so GitHub collapses it in
+  PR diffs.
+* **PreToolUse Bash guards in `.claude/settings.json`** (already
+  shipped via PR #178) — deterministically blocks `feat!` / `fix!` /
+  `BREAKING CHANGE:` in commit/PR titles, `gh` mutation commands
+  without `--repo DaveDev42/nokhwa`, and `cargo publish`. Catches
+  CLAUDE.md release-policy violations at the harness level rather
+  than relying on policy memory.
+
 ### Performance
 
 * **MSMF hotplug: event-driven via `RegisterDeviceNotificationW`.**
