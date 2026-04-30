@@ -415,6 +415,14 @@
   backends that override these `ShutterCapture` methods, must rename their
   usages. Backends that use the default no-op impls are unaffected.
 
+## [0.14.5](https://github.com/DaveDev42/nokhwa/compare/v0.14.4...v0.14.5) (2026-04-30)
+
+
+### Infrastructure
+
+* **claude:** add PreToolUse Bash guards for release/upstream policy ([#178](https://github.com/DaveDev42/nokhwa/issues/178)) ([107f6a3](https://github.com/DaveDev42/nokhwa/commit/107f6a3d68bcf81e1355196fd0e9301bb21e23e9))
+* **repo:** add .gitattributes for LF normalization ([#180](https://github.com/DaveDev42/nokhwa/issues/180)) ([b2c43fe](https://github.com/DaveDev42/nokhwa/commit/b2c43fe82f8d9abb043b72c1eaa12077ee367534))
+
 ## [0.14.4](https://github.com/DaveDev42/nokhwa/compare/v0.14.3...v0.14.4) (2026-04-22)
 
 
