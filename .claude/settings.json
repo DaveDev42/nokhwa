@@ -1,5 +1,18 @@
 {
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd=$(jq -r '.tool_input.command // empty'); if [ -z \"$cmd\" ]; then exit 0; fi; if echo \"$cmd\" | grep -qE '(^|[[:space:]])(git[[:space:]]+commit|gh[[:space:]]+pr[[:space:]]+(create|edit))[[:space:]]' && echo \"$cmd\" | grep -qE -- '-m[[:space:]]*[\"'\\'']*[^\"'\\''\\$]*(feat|fix)!:|--title[[:space:]]+[\"'\\'']*(feat|fix)!:|BREAKING[[:space:]]CHANGE:'; then echo 'BLOCKED: feat!/fix!/BREAKING CHANGE는 release-please 메이저 점프 트리거 (CLAUDE.md L93). 일반 prefix(feat:/fix:/refactor:/chore:) 사용 — breaking 사실은 PR body 또는 CHANGELOG/MIGRATING-*.md 에.' >&2; exit 2; fi; if echo \"$cmd\" | grep -qE '(^|[[:space:]])gh[[:space:]]+(pr[[:space:]]+(create|edit|merge|close|reopen|review)|issue[[:space:]]+(create|edit|close|reopen|delete|comment)|release[[:space:]]+(create|edit|delete|upload)|repo[[:space:]]+(create|edit|delete|archive|unarchive|rename)|workflow[[:space:]]+run|run[[:space:]]+(rerun|cancel|delete))([[:space:]]|$)' && ! echo \"$cmd\" | grep -qE -- '--repo[[:space:]=]+DaveDev42/nokhwa'; then echo 'BLOCKED: gh 변경 명령은 --repo DaveDev42/nokhwa 명시 필요 (CLAUDE.md L80). upstream l1npengtul/nokhwa 보호.' >&2; exit 2; fi; if echo \"$cmd\" | grep -qE '(^|[[:space:]])cargo[[:space:]]+publish([[:space:]]|$)'; then echo 'BLOCKED: cargo publish는 이 fork에서 금지 (CLAUDE.md L88). nokhwa 이름은 upstream l1npengtul/nokhwa 소유 — 다운스트림은 git dependency(tag 기반)로 소비. release-please의 GitHub Release는 OK이나 publish는 X.' >&2; exit 2; fi; exit 0"
+          }
+        ]
+      }
+    ]
   }
 }
