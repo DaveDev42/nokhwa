@@ -496,9 +496,8 @@ pub fn get_raw_device_info(index: CameraIndex, device: &AVCaptureDevice) -> Came
     let lens_aperture = device_lens_aperture(device);
     let device_type = device_device_type(device);
     let model_id = device_model_id(device);
-    let description = format!(
-        "{manufacturer}: {model_id} - {device_type}, {position:?} f{lens_aperture}"
-    );
+    let description =
+        format!("{manufacturer}: {model_id} - {device_type}, {position:?} f{lens_aperture}");
     let misc = device_unique_id(device);
 
     CameraInfo::new(
@@ -657,9 +656,9 @@ impl AVCaptureDeviceWrapper {
         let mut result = Vec::new();
         for i in 0..formats.count() {
             let format = formats.objectAtIndex(i);
-            match AVCaptureDeviceFormatWrapper::try_from_format(&format) {
-                Ok(f) => result.push(f),
-                Err(_) => {} // skip unsupported formats
+            // skip unsupported formats silently
+            if let Ok(f) = AVCaptureDeviceFormatWrapper::try_from_format(&format) {
+                result.push(f);
             }
         }
         Ok(result)
@@ -674,10 +673,7 @@ impl AVCaptureDeviceWrapper {
                 av_fmt.fps_list.iter().map(move |fps_f64| {
                     // fps_f64 comes from AVFrameRateRange (always positive, max ~240 for Apple devices).
                     // width/height come from CMVideoDimensions (always non-negative).
-                    #[allow(
-                        clippy::cast_possible_truncation,
-                        clippy::cast_sign_loss
-                    )]
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                     let fps = *fps_f64 as u32;
                     #[allow(clippy::cast_sign_loss)]
                     let resolution =
