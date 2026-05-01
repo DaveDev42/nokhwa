@@ -123,7 +123,7 @@ impl AVFoundationCaptureDevice {
 }
 
 impl AVFoundationCaptureDevice {
-    /// Refreshes the cached camera format by querying the AVFoundation device.
+    /// Refreshes the cached camera format by querying the `AVFoundation` device.
     /// Kept as an inherent helper after the trait split; used internally by
     /// `open()` and `frame()`.
     fn refresh_camera_format(&mut self) -> Result<(), NokhwaError> {
@@ -169,7 +169,7 @@ impl CameraDevice for AVFoundationCaptureDevice {
         value: ControlValueSetter,
     ) -> Result<(), NokhwaError> {
         self.device.lock()?;
-        let res = self.device.set_control(id, value);
+        let res = self.device.set_control(id, &value);
         self.device.unlock();
         res
     }

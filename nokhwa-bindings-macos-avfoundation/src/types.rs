@@ -23,6 +23,7 @@ pub enum AVCaptureDeviceTypeLocal {
 }
 
 impl AVCaptureDeviceTypeLocal {
+    #[must_use]
     pub fn as_av_capture_device_type(self) -> &'static AVCaptureDeviceType {
         unsafe {
             match self {
@@ -54,6 +55,11 @@ pub enum AVMediaTypeLocal {
 }
 
 impl AVMediaTypeLocal {
+    /// # Panics
+    ///
+    /// Panics if any `AVMediaType` constant is unavailable on the current platform,
+    /// which should not happen on any supported Apple platform.
+    #[must_use]
     pub fn to_av_media_type(self) -> &'static AVMediaType {
         // unwrap(): objc2 wraps extern statics as Option<&T> for weak-linking support,
         // but these AVMediaType constants are always available on supported Apple platforms.

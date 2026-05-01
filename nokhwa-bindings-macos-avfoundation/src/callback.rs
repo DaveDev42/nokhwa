@@ -38,12 +38,122 @@ extern "C" {
 fn mach_absolute_time_nanos() -> u64 {
     static TIMEBASE: LazyLock<(u32, u32)> = LazyLock::new(|| {
         let mut info = MachTimebaseInfo { numer: 0, denom: 0 };
-        unsafe { mach_timebase_info(&mut info) };
+        unsafe { mach_timebase_info(&raw mut info) };
         (info.numer, info.denom)
     });
     let ticks = unsafe { mach_absolute_time() };
     let (numer, denom) = *TIMEBASE;
     ticks.wrapping_mul(u64::from(numer)) / u64::from(denom)
+}
+
+// Hoist all `extern "C" fn` items to the top of the module scope so they
+// are not flagged as items_after_statements inside the LazyLock closure.
+// The functions are still only referenced inside the closure.
+
+// TODO: Migrate to DeclaredClass + Ivar API when get_ivar/get_mut_ivar are removed in a future objc2 release
+#[allow(deprecated)]
+extern "C" fn my_callback_get_arcmutptr(this: *mut AnyObject, _: Sel) -> *const c_void {
+    unsafe { *(*this).get_ivar("_arcmutptr") }
+}
+
+#[allow(deprecated)]
+extern "C" fn my_callback_set_arcmutptr(
+    this: *mut AnyObject,
+    _: Sel,
+    new_arcmutptr: *const c_void,
+) {
+    unsafe {
+        *(*this).get_mut_ivar("_arcmutptr") = new_arcmutptr;
+    }
+}
+
+// Delegate compliance method
+// SAFETY: Reads pixel data from CVPixelBuffer while base address lock is held.
+// The lock guarantees buffer_ptr is valid and buffer_length bytes are readable.
+// cast_possible_truncation, cast_sign_loss: CoreMedia timestamps are i64/i32;
+// u128 arithmetic is safe here because the values are always non-negative in
+// practice (presentation times from a running capture session). The final
+// saturating_sub result is bounded by the session uptime, well within u64::MAX.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#[allow(non_snake_case)]
+#[allow(non_upper_case_globals)]
+extern "C" fn capture_out_callback(
+    this: *mut AnyObject,
+    _: Sel,
+    _: *mut AnyObject,
+    didOutputSampleBuffer: CMSampleBufferRef,
+    _: *mut AnyObject,
+) {
+    let image_buffer: CVImageBufferRef =
+        unsafe { CMSampleBufferGetImageBuffer(didOutputSampleBuffer) };
+
+    if image_buffer.is_null() {
+        return;
+    }
+
+    unsafe {
+        CVPixelBufferLockBaseAddress(image_buffer, 0);
+    };
+
+    let buffer_length = unsafe { CVPixelBufferGetDataSize(image_buffer) };
+    let buffer_ptr = unsafe { CVPixelBufferGetBaseAddress(image_buffer) };
+
+    if buffer_ptr.is_null() || buffer_length == 0 {
+        unsafe { CVPixelBufferUnlockBaseAddress(image_buffer, 0) };
+        return;
+    }
+
+    // CVPixelBufferGetDataSize returns c_ulong (usize on 64-bit Apple platforms).
+    // cast_possible_truncation on usize→usize is a no-op; the allow above covers
+    // the cross-size target warning.
+    let buffer_as_vec = unsafe {
+        std::slice::from_raw_parts(buffer_ptr as *const u8, buffer_length as usize).to_vec()
+    };
+
+    let pixel_format = unsafe { CVPixelBufferGetPixelFormatType(image_buffer) };
+    let frame_format = raw_fcc_to_frameformat(pixel_format).unwrap_or(FrameFormat::YUYV);
+
+    unsafe { CVPixelBufferUnlockBaseAddress(image_buffer, 0) };
+
+    // Compute sensor capture timestamp from CMSampleBuffer presentation time
+    let capture_ts = {
+        let pts = unsafe { CMSampleBufferGetPresentationTimeStamp(didOutputSampleBuffer) };
+        if pts.timescale > 0 {
+            // pts.value is i64 (non-negative during active capture); cast to u128 is safe.
+            // pts.timescale is i32 (always > 0 here); cast to u128 is safe.
+            let pts_nanos =
+                (pts.value as u128).saturating_mul(1_000_000_000) / (pts.timescale as u128);
+            let mono_now_nanos = u128::from(mach_absolute_time_nanos());
+            let wall_now = std::time::SystemTime::now();
+
+            // saturating_sub result ≤ mono_now_nanos ≤ u64::MAX (mach_absolute_time fits u64).
+            let age = Duration::from_nanos(mono_now_nanos.saturating_sub(pts_nanos) as u64);
+            wall_now
+                .duration_since(std::time::UNIX_EPOCH)
+                .ok()
+                .and_then(|wall_dur| wall_dur.checked_sub(age))
+        } else {
+            None
+        }
+    };
+
+    let bufferlck_cv: *const c_void = unsafe { objc2::msg_send![this, bufferPtr] };
+    let buffer_sndr = unsafe {
+        let ptr = bufferlck_cv.cast::<Sender<FrameData>>();
+        Arc::from_raw(ptr)
+    };
+    let _ = buffer_sndr.send((buffer_as_vec, frame_format, capture_ts));
+    std::mem::forget(buffer_sndr);
+}
+
+#[allow(non_snake_case)]
+extern "C" fn capture_drop_callback(
+    _: *mut AnyObject,
+    _: Sel,
+    _: *mut AnyObject,
+    _: *mut AnyObject,
+    _: *mut AnyObject,
+) {
 }
 
 static CALLBACK_CLASS: LazyLock<&'static AnyClass> = LazyLock::new(|| {
@@ -52,100 +162,6 @@ static CALLBACK_CLASS: LazyLock<&'static AnyClass> = LazyLock::new(|| {
 
     // Ivar to hold a type-erased pointer to the Arc<Sender> for frame data
     builder.add_ivar::<*const c_void>(c"_arcmutptr");
-
-    // TODO: Migrate to DeclaredClass + Ivar API when get_ivar/get_mut_ivar are removed in a future objc2 release
-    #[allow(deprecated)]
-    extern "C" fn my_callback_get_arcmutptr(this: *mut AnyObject, _: Sel) -> *const c_void {
-        unsafe { *(*this).get_ivar("_arcmutptr") }
-    }
-    #[allow(deprecated)]
-    extern "C" fn my_callback_set_arcmutptr(
-        this: *mut AnyObject,
-        _: Sel,
-        new_arcmutptr: *const c_void,
-    ) {
-        unsafe {
-            *(*this).get_mut_ivar("_arcmutptr") = new_arcmutptr;
-        }
-    }
-
-    // Delegate compliance method
-    // SAFETY: Reads pixel data from CVPixelBuffer while base address lock is held.
-    // The lock guarantees buffer_ptr is valid and buffer_length bytes are readable.
-    #[allow(non_snake_case)]
-    #[allow(non_upper_case_globals)]
-    extern "C" fn capture_out_callback(
-        this: *mut AnyObject,
-        _: Sel,
-        _: *mut AnyObject,
-        didOutputSampleBuffer: CMSampleBufferRef,
-        _: *mut AnyObject,
-    ) {
-        let image_buffer: CVImageBufferRef =
-            unsafe { CMSampleBufferGetImageBuffer(didOutputSampleBuffer) };
-
-        if image_buffer.is_null() {
-            return;
-        }
-
-        unsafe {
-            CVPixelBufferLockBaseAddress(image_buffer, 0);
-        };
-
-        let buffer_length = unsafe { CVPixelBufferGetDataSize(image_buffer) };
-        let buffer_ptr = unsafe { CVPixelBufferGetBaseAddress(image_buffer) };
-
-        if buffer_ptr.is_null() || buffer_length == 0 {
-            unsafe { CVPixelBufferUnlockBaseAddress(image_buffer, 0) };
-            return;
-        }
-
-        let buffer_as_vec = unsafe {
-            std::slice::from_raw_parts(buffer_ptr as *const u8, buffer_length as usize).to_vec()
-        };
-
-        let pixel_format = unsafe { CVPixelBufferGetPixelFormatType(image_buffer) };
-        let frame_format = raw_fcc_to_frameformat(pixel_format).unwrap_or(FrameFormat::YUYV);
-
-        unsafe { CVPixelBufferUnlockBaseAddress(image_buffer, 0) };
-
-        // Compute sensor capture timestamp from CMSampleBuffer presentation time
-        let capture_ts = {
-            let pts = unsafe { CMSampleBufferGetPresentationTimeStamp(didOutputSampleBuffer) };
-            if pts.timescale > 0 {
-                let pts_nanos =
-                    (pts.value as u128).saturating_mul(1_000_000_000) / (pts.timescale as u128);
-                let mono_now_nanos = u128::from(mach_absolute_time_nanos());
-                let wall_now = std::time::SystemTime::now();
-
-                let age = Duration::from_nanos(mono_now_nanos.saturating_sub(pts_nanos) as u64);
-                wall_now
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .ok()
-                    .and_then(|wall_dur| wall_dur.checked_sub(age))
-            } else {
-                None
-            }
-        };
-
-        let bufferlck_cv: *const c_void = unsafe { objc2::msg_send![this, bufferPtr] };
-        let buffer_sndr = unsafe {
-            let ptr = bufferlck_cv.cast::<Sender<FrameData>>();
-            Arc::from_raw(ptr)
-        };
-        let _ = buffer_sndr.send((buffer_as_vec, frame_format, capture_ts));
-        std::mem::forget(buffer_sndr);
-    }
-
-    #[allow(non_snake_case)]
-    extern "C" fn capture_drop_callback(
-        _: *mut AnyObject,
-        _: Sel,
-        _: *mut AnyObject,
-        _: *mut AnyObject,
-        _: *mut AnyObject,
-    ) {
-    }
 
     unsafe {
         builder.add_method(
@@ -187,6 +203,12 @@ static CALLBACK_CLASS: LazyLock<&'static AnyClass> = LazyLock::new(|| {
     builder.register()
 });
 
+/// Requests camera access permission from the user.
+///
+/// # Panics
+///
+/// Panics if the `AVMediaTypeVideo` constant is unavailable on the current
+/// platform, which should not happen on any supported Apple platform.
 pub fn request_permission_with_callback(callback: impl Fn(bool) + Send + Sync + 'static) {
     let media_type = unsafe { AVMediaTypeVideo.unwrap() };
 
@@ -201,6 +223,7 @@ pub fn request_permission_with_callback(callback: impl Fn(bool) + Send + Sync + 
     }
 }
 
+#[must_use]
 pub fn current_authorization_status() -> AVAuthorizationStatus {
     let media_type = AVMediaTypeLocal::Video.to_av_media_type();
     let status = unsafe { AVCaptureDevice::authorizationStatusForMediaType(media_type) };
@@ -208,7 +231,6 @@ pub fn current_authorization_status() -> AVAuthorizationStatus {
     // Values match Apple's AVAuthorizationStatus enum:
     // https://developer.apple.com/documentation/avfoundation/avauthorizationstatus
     match status.0 {
-        0 => AVAuthorizationStatus::NotDetermined,
         1 => AVAuthorizationStatus::Restricted,
         2 => AVAuthorizationStatus::Denied,
         3 => AVAuthorizationStatus::Authorized,
@@ -219,7 +241,7 @@ pub fn current_authorization_status() -> AVAuthorizationStatus {
 /// Wraps an Objective-C delegate and GCD dispatch queue for receiving video frames.
 ///
 /// # Thread Safety
-/// This type holds raw ObjC pointers (`*mut AnyObject` delegate and `DispatchQueue`).
+/// This type holds raw `ObjC` pointers (`*mut AnyObject` delegate and `DispatchQueue`).
 /// It is `!Send` by default due to the raw pointers, but the containing
 /// `AVFoundationCaptureDevice` implements `Send` because GCD dispatch queues are
 /// thread-safe and the delegate is managed by the session's dispatch queue.
@@ -246,10 +268,12 @@ impl AVCaptureVideoCallback {
         Ok(AVCaptureVideoCallback { delegate, queue })
     }
 
+    #[must_use]
     pub fn inner(&self) -> *mut AnyObject {
         self.delegate
     }
 
+    #[must_use]
     pub fn queue(&self) -> &DispatchQueue {
         &self.queue
     }

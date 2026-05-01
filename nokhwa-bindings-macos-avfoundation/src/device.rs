@@ -354,7 +354,7 @@ fn device_set_white_balance_mode(device: &AVCaptureDevice, mode: AVCaptureWhiteB
 // Caller must lock the device for configuration before calling this.
 fn device_set_white_balance_gains(device: &AVCaptureDevice, gains: AVCaptureWhiteBalanceGains) {
     unsafe {
-        device.setWhiteBalanceModeLockedWithDeviceWhiteBalanceGains_completionHandler(gains, None)
+        device.setWhiteBalanceModeLockedWithDeviceWhiteBalanceGains_completionHandler(gains, None);
     }
 }
 
@@ -459,7 +459,7 @@ fn range_min_frame_duration(range: &AVFrameRateRange) -> CMTime {
 fn cm_video_format_get_dimensions(
     desc: &objc2_core_media::CMFormatDescription,
 ) -> CMVideoDimensions {
-    let ptr = desc as *const _ as CMFormatDescriptionRef;
+    let ptr = std::ptr::from_ref(desc) as CMFormatDescriptionRef;
     unsafe { CMVideoFormatDescriptionGetDimensions(ptr) }
 }
 
@@ -467,7 +467,7 @@ fn cm_video_format_get_dimensions(
 // remains valid for the duration of the call because the borrow on `desc` keeps the
 // underlying `Retained<CMFormatDescription>` alive.
 fn cm_format_get_media_sub_type(desc: &objc2_core_media::CMFormatDescription) -> u32 {
-    let ptr = desc as *const _ as CMFormatDescriptionRef;
+    let ptr = std::ptr::from_ref(desc) as CMFormatDescriptionRef;
     unsafe { CMFormatDescriptionGetMediaSubType(ptr) }
 }
 
@@ -497,8 +497,7 @@ pub fn get_raw_device_info(index: CameraIndex, device: &AVCaptureDevice) -> Came
     let device_type = device_device_type(device);
     let model_id = device_model_id(device);
     let description = format!(
-        "{}: {} - {}, {:?} f{}",
-        manufacturer, model_id, device_type, position, lens_aperture
+        "{manufacturer}: {model_id} - {device_type}, {position:?} f{lens_aperture}"
     );
     let misc = device_unique_id(device);
 
@@ -516,18 +515,22 @@ pub struct AVFrameRateRangeWrapper {
 }
 
 impl AVFrameRateRangeWrapper {
+    #[must_use]
     pub fn new(inner: Retained<AVFrameRateRange>) -> Self {
         Self { inner }
     }
 
+    #[must_use]
     pub fn max(&self) -> f64 {
         range_max_frame_rate(&self.inner)
     }
 
+    #[must_use]
     pub fn min(&self) -> f64 {
         range_min_frame_rate(&self.inner)
     }
 
+    #[must_use]
     pub fn inner(&self) -> &AVFrameRateRange {
         &self.inner
     }
@@ -560,6 +563,10 @@ impl AVCaptureDeviceFormatWrapper {
             let range = frame_rate_ranges.objectAtIndex(i);
             let min_fps = range_min_frame_rate(&range);
             let max_fps = range_max_frame_rate(&range);
+            // Exclude degenerate 0 fps and the sentinel 1 fps minimum that
+            // AVFoundation sometimes reports for variable-rate ranges.
+            // Exact comparison against integer-valued constants is intentional.
+            #[allow(clippy::float_cmp)]
             if min_fps != 0_f64 && min_fps != 1_f64 {
                 fps_list.push(min_fps);
             }
@@ -573,14 +580,11 @@ impl AVCaptureDeviceFormatWrapper {
         let fcc_raw = cm_format_get_media_sub_type(&description_obj);
 
         #[allow(non_upper_case_globals)]
-        let fourcc = match raw_fcc_to_frameformat(fcc_raw) {
-            Some(fcc) => fcc,
-            None => {
-                return Err(NokhwaError::StructureError {
-                    structure: "FourCharCode".to_string(),
-                    error: format!("Unknown FourCharCode {fcc_raw:?}"),
-                })
-            }
+        let Some(fourcc) = raw_fcc_to_frameformat(fcc_raw) else {
+            return Err(NokhwaError::StructureError {
+                structure: "FourCharCode".to_string(),
+                error: format!("Unknown FourCharCode {fcc_raw:?}"),
+            });
         };
 
         Ok(AVCaptureDeviceFormatWrapper {
@@ -599,6 +603,7 @@ pub struct AVCaptureDeviceWrapper {
 }
 
 impl AVCaptureDeviceWrapper {
+    #[must_use]
     pub fn inner(&self) -> &AVCaptureDevice {
         &self.inner
     }
@@ -642,6 +647,7 @@ impl AVCaptureDeviceWrapper {
         })
     }
 
+    #[must_use]
     pub fn info(&self) -> &CameraInfo {
         &self.device
     }
@@ -653,7 +659,7 @@ impl AVCaptureDeviceWrapper {
             let format = formats.objectAtIndex(i);
             match AVCaptureDeviceFormatWrapper::try_from_format(&format) {
                 Ok(f) => result.push(f),
-                Err(_) => continue, // skip unsupported formats
+                Err(_) => {} // skip unsupported formats
             }
         }
         Ok(result)
@@ -666,7 +672,14 @@ impl AVCaptureDeviceWrapper {
             .flat_map(|av_fmt| {
                 let resolution = av_fmt.resolution;
                 av_fmt.fps_list.iter().map(move |fps_f64| {
+                    // fps_f64 comes from AVFrameRateRange (always positive, max ~240 for Apple devices).
+                    // width/height come from CMVideoDimensions (always non-negative).
+                    #[allow(
+                        clippy::cast_possible_truncation,
+                        clippy::cast_sign_loss
+                    )]
                     let fps = *fps_f64 as u32;
+                    #[allow(clippy::cast_sign_loss)]
                     let resolution =
                         Resolution::new(resolution.width as u32, resolution.height as u32);
                     CameraFormat::new(resolution, av_fmt.fourcc, fps)
@@ -676,10 +689,12 @@ impl AVCaptureDeviceWrapper {
             .collect())
     }
 
+    #[must_use]
     pub fn already_in_use(&self) -> bool {
         device_is_in_use_by_another_application(&self.inner)
     }
 
+    #[must_use]
     pub fn is_suspended(&self) -> bool {
         device_is_suspended(&self.inner)
     }
@@ -725,6 +740,9 @@ impl AVCaptureDeviceWrapper {
             let fmt_desc = format_description(&format);
             let dimensions = cm_video_format_get_dimensions(&fmt_desc);
 
+            // Resolution width/height are u32 from nokhwa; CMVideoDimensions uses i32.
+            // Values from real cameras are always non-negative and fit in i32.
+            #[allow(clippy::cast_possible_wrap)]
             if dimensions.height == descriptor.resolution().height() as i32
                 && dimensions.width == descriptor.resolution().width() as i32
             {
@@ -744,15 +762,13 @@ impl AVCaptureDeviceWrapper {
             }
         }
 
-        let (format, min_duration) = match (selected_format, selected_min_frame_duration) {
-            (Some(f), Some(d)) => (f, d),
-            _ => {
-                return Err(NokhwaError::SetPropertyError {
-                    property: "CameraFormat".to_string(),
-                    value: descriptor.to_string(),
-                    error: "Not Found/Rejected/Unsupported".to_string(),
-                });
-            }
+        let (Some(format), Some(min_duration)) = (selected_format, selected_min_frame_duration)
+        else {
+            return Err(NokhwaError::SetPropertyError {
+                property: "CameraFormat".to_string(),
+                value: descriptor.to_string(),
+                error: "Not Found/Rejected/Unsupported".to_string(),
+            });
         };
 
         device_set_active_format(&self.inner, &format);
@@ -762,6 +778,11 @@ impl AVCaptureDeviceWrapper {
         Ok(())
     }
 
+    // get_controls builds the full AVFoundation control set in one pass.
+    // Splitting it into smaller helpers would scatter semantically cohesive
+    // groups (focus / exposure / wb / torch / zoom) across many private fns
+    // without improving readability.
+    #[allow(clippy::too_many_lines)]
     pub fn get_controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
         let active_format = device_active_format(&self.inner);
         let mut controls = vec![];
@@ -776,15 +797,17 @@ impl AVCaptureDeviceWrapper {
         {
             let mut supported_focus_values = vec![];
             if focus_locked {
-                supported_focus_values.push(0)
+                supported_focus_values.push(0);
             }
             if focus_auto {
-                supported_focus_values.push(1)
+                supported_focus_values.push(1);
             }
             if focus_continuous {
-                supported_focus_values.push(2)
+                supported_focus_values.push(2);
             }
 
+            // focus_current.0 is NSInteger (isize); the enum variants fit in i64.
+            #[allow(clippy::cast_possible_truncation)]
             controls.push(CameraControl::new(
                 KnownCameraControl::Focus,
                 "FocusMode".to_string(),
@@ -808,13 +831,13 @@ impl AVCaptureDeviceWrapper {
                 value: (focus_poi.x, focus_poi.y),
                 default: (0.5, 0.5),
             },
-            if !focus_poi_supported {
+            if focus_poi_supported {
+                vec![]
+            } else {
                 vec![
                     KnownCameraControlFlag::Disabled,
                     KnownCameraControlFlag::ReadOnly,
                 ]
-            } else {
-                vec![]
             },
             focus_auto || focus_continuous,
         ));
@@ -828,7 +851,7 @@ impl AVCaptureDeviceWrapper {
             ControlValueDescription::FloatRange {
                 min: 0.0,
                 max: 1.0,
-                value: focus_lenspos as f64,
+                value: f64::from(focus_lenspos),
                 step: f64::MIN_POSITIVE,
                 default: 1.0,
             },
@@ -871,6 +894,8 @@ impl AVCaptureDeviceWrapper {
                 supported_exposure_values.push(3);
             }
 
+            // exposure_current.0 is NSInteger (isize); enum variants fit in i64.
+            #[allow(clippy::cast_possible_truncation)]
             controls.push(CameraControl::new(
                 KnownCameraControl::Exposure,
                 "ExposureMode".to_string(),
@@ -894,13 +919,13 @@ impl AVCaptureDeviceWrapper {
                 value: (exposure_poi.x, exposure_poi.y),
                 default: (0.5, 0.5),
             },
-            if !exposure_poi_supported {
+            if exposure_poi_supported {
+                vec![]
+            } else {
                 vec![
                     KnownCameraControlFlag::Disabled,
                     KnownCameraControlFlag::ReadOnly,
                 ]
-            } else {
-                vec![]
             },
             focus_auto || focus_continuous,
         ));
@@ -917,13 +942,13 @@ impl AVCaptureDeviceWrapper {
                 value: exposure_face_driven,
                 default: false,
             },
-            if !exposure_face_driven_supported {
+            if exposure_face_driven_supported {
+                vec![]
+            } else {
                 vec![
                     KnownCameraControlFlag::Disabled,
                     KnownCameraControlFlag::ReadOnly,
                 ]
-            } else {
-                vec![]
             },
             exposure_poi_supported,
         ));
@@ -936,11 +961,11 @@ impl AVCaptureDeviceWrapper {
             KnownCameraControl::Other(4),
             "ExposureBiasTarget".to_string(),
             ControlValueDescription::FloatRange {
-                min: exposure_bias_min as f64,
-                max: exposure_bias_max as f64,
-                value: exposure_bias as f64,
-                step: f32::MIN_POSITIVE as f64,
-                default: exposure_target_bias_current() as f64,
+                min: f64::from(exposure_bias_min),
+                max: f64::from(exposure_bias_max),
+                value: f64::from(exposure_bias),
+                step: f64::from(f32::MIN_POSITIVE),
+                default: f64::from(exposure_target_bias_current()),
             },
             vec![],
             true,
@@ -979,11 +1004,11 @@ impl AVCaptureDeviceWrapper {
             KnownCameraControl::Brightness,
             "ExposureISO".to_string(),
             ControlValueDescription::FloatRange {
-                min: exposure_iso_min as f64,
-                max: exposure_iso_max as f64,
-                value: exposure_iso as f64,
-                step: f32::MIN_POSITIVE as f64,
-                default: iso_current() as f64,
+                min: f64::from(exposure_iso_min),
+                max: f64::from(exposure_iso_max),
+                value: f64::from(exposure_iso),
+                step: f64::from(f32::MIN_POSITIVE),
+                default: f64::from(iso_current()),
             },
             if exposure_custom {
                 vec![
@@ -1002,9 +1027,9 @@ impl AVCaptureDeviceWrapper {
             KnownCameraControl::Iris,
             "LensAperture".to_string(),
             ControlValueDescription::Float {
-                value: lens_aperture as f64,
-                default: lens_aperture as f64,
-                step: lens_aperture as f64,
+                value: f64::from(lens_aperture),
+                default: f64::from(lens_aperture),
+                step: f64::from(lens_aperture),
             },
             vec![KnownCameraControlFlag::ReadOnly],
             false,
@@ -1035,6 +1060,8 @@ impl AVCaptureDeviceWrapper {
                 possible.push(2);
             }
 
+            // white_balance_current.0 is NSInteger (isize); enum variants fit in i64.
+            #[allow(clippy::cast_possible_truncation)]
             controls.push(CameraControl::new(
                 KnownCameraControl::WhiteBalance,
                 "WhiteBalanceMode".to_string(),
@@ -1064,28 +1091,28 @@ impl AVCaptureDeviceWrapper {
             "WhiteBalanceGain".to_string(),
             ControlValueDescription::RGB {
                 value: (
-                    white_balance_gains.redGain as f64,
-                    white_balance_gains.greenGain as f64,
-                    white_balance_gains.blueGain as f64,
+                    f64::from(white_balance_gains.redGain),
+                    f64::from(white_balance_gains.greenGain),
+                    f64::from(white_balance_gains.blueGain),
                 ),
                 max: (
-                    white_balance_max.redGain as f64,
-                    white_balance_max.greenGain as f64,
-                    white_balance_max.blueGain as f64,
+                    f64::from(white_balance_max.redGain),
+                    f64::from(white_balance_max.greenGain),
+                    f64::from(white_balance_max.blueGain),
                 ),
                 default: (
-                    white_balance_default.redGain as f64,
-                    white_balance_default.greenGain as f64,
-                    white_balance_default.blueGain as f64,
+                    f64::from(white_balance_default.redGain),
+                    f64::from(white_balance_default.greenGain),
+                    f64::from(white_balance_default.blueGain),
                 ),
             },
-            if !white_balance_gain_supported {
+            if white_balance_gain_supported {
+                vec![]
+            } else {
                 vec![
                     KnownCameraControlFlag::Disabled,
                     KnownCameraControlFlag::ReadOnly,
                 ]
-            } else {
-                vec![]
             },
             white_balance_gain_supported,
         ));
@@ -1110,6 +1137,8 @@ impl AVCaptureDeviceWrapper {
 
             let torch_mode_current = device_torch_mode(&self.inner);
 
+            // torch_mode_current.0 is NSInteger (isize); enum variants fit in i64.
+            #[allow(clippy::cast_possible_truncation)]
             controls.push(CameraControl::new(
                 KnownCameraControl::Other(5),
                 "TorchMode".to_string(),
@@ -1118,13 +1147,13 @@ impl AVCaptureDeviceWrapper {
                     possible,
                     default: 0,
                 },
-                if !has_torch {
+                if has_torch {
+                    vec![]
+                } else {
                     vec![
                         KnownCameraControlFlag::Disabled,
                         KnownCameraControlFlag::ReadOnly,
                     ]
-                } else {
-                    vec![]
                 },
                 has_torch,
             ));
@@ -1142,13 +1171,13 @@ impl AVCaptureDeviceWrapper {
                     value: llb_enabled,
                     default: false,
                 },
-                if !has_llb {
+                if has_llb {
+                    vec![]
+                } else {
                     vec![
                         KnownCameraControlFlag::Disabled,
                         KnownCameraControlFlag::ReadOnly,
                     ]
-                } else {
-                    vec![]
                 },
                 has_llb,
             ));
@@ -1166,7 +1195,7 @@ impl AVCaptureDeviceWrapper {
                 min: zoom_min,
                 max: zoom_max,
                 value: zoom_current,
-                step: f32::MIN_POSITIVE as f64,
+                step: f64::from(f32::MIN_POSITIVE),
                 default: 1.0,
             },
             vec![],
@@ -1186,13 +1215,13 @@ impl AVCaptureDeviceWrapper {
                 value: distortion_correction_current_value,
                 default: false,
             },
-            if !distortion_correction_supported {
+            if distortion_correction_supported {
+                vec![]
+            } else {
                 vec![
                     KnownCameraControlFlag::ReadOnly,
                     KnownCameraControlFlag::Disabled,
                 ]
-            } else {
-                vec![]
             },
             distortion_correction_supported,
         ));
@@ -1200,10 +1229,14 @@ impl AVCaptureDeviceWrapper {
         Ok(controls)
     }
 
+    // set_control dispatches to all AVFoundation control arms in one function.
+    // Splitting would fragment semantically cohesive control-arm logic across
+    // many private helpers without improving readability.
+    #[allow(clippy::too_many_lines)]
     pub fn set_control(
         &mut self,
         id: KnownCameraControl,
-        value: ControlValueSetter,
+        value: &ControlValueSetter,
     ) -> Result<(), NokhwaError> {
         let rc = self.get_controls()?;
         let controls = rc
@@ -1211,6 +1244,9 @@ impl AVCaptureDeviceWrapper {
             .map(|cc| (cc.control(), cc))
             .collect::<BTreeMap<_, _>>();
 
+        // setter as isize: i64 enum values from nokhwa controls fit in isize on all Apple targets.
+        // f64 as c_float: user-supplied float values are expected to be within the valid range.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         match id {
             KnownCameraControl::Brightness => {
                 let isoctrl = controls.get(&id).ok_or(NokhwaError::SetPropertyError {
@@ -1219,7 +1255,7 @@ impl AVCaptureDeviceWrapper {
                     error: "Control does not exist".to_string(),
                 })?;
 
-                check_control_flags(isoctrl, &id, &value)?;
+                check_control_flags(isoctrl, &id, value)?;
 
                 let current_duration = exposure_duration_current();
                 let new_iso = *value.as_float().ok_or(NokhwaError::SetPropertyError {
@@ -1228,7 +1264,7 @@ impl AVCaptureDeviceWrapper {
                     error: "Expected float".to_string(),
                 })? as c_float;
 
-                if !isoctrl.description().verify_setter(&value) {
+                if !isoctrl.description().verify_setter(value) {
                     return Err(NokhwaError::SetPropertyError {
                         property: id.to_string(),
                         value: value.to_string(),
@@ -1247,7 +1283,7 @@ impl AVCaptureDeviceWrapper {
                     error: "Control does not exist".to_string(),
                 })?;
 
-                check_control_flags(duration_ctrl, &id, &value)?;
+                check_control_flags(duration_ctrl, &id, value)?;
 
                 let current_duration = device_exposure_duration(&self.inner);
                 let current_iso = iso_current();
@@ -1262,7 +1298,7 @@ impl AVCaptureDeviceWrapper {
                     epoch: current_duration.epoch,
                 };
 
-                if !duration_ctrl.description().verify_setter(&value) {
+                if !duration_ctrl.description().verify_setter(value) {
                     return Err(NokhwaError::SetPropertyError {
                         property: id.to_string(),
                         value: value.to_string(),
@@ -1281,7 +1317,7 @@ impl AVCaptureDeviceWrapper {
                     error: "Control does not exist".to_string(),
                 })?;
 
-                check_control_flags(wb_enum_value, &id, &value)?;
+                check_control_flags(wb_enum_value, &id, value)?;
 
                 let setter = *value.as_enum().ok_or(NokhwaError::SetPropertyError {
                     property: id.to_string(),
@@ -1289,7 +1325,7 @@ impl AVCaptureDeviceWrapper {
                     error: "Expected Enum".to_string(),
                 })?;
 
-                if !wb_enum_value.description().verify_setter(&value) {
+                if !wb_enum_value.description().verify_setter(value) {
                     return Err(NokhwaError::SetPropertyError {
                         property: id.to_string(),
                         value: value.to_string(),
@@ -1311,7 +1347,7 @@ impl AVCaptureDeviceWrapper {
                     error: "Control does not exist".to_string(),
                 })?;
 
-                check_control_flags(ctrlvalue, &id, &value)?;
+                check_control_flags(ctrlvalue, &id, value)?;
 
                 let setter = *value.as_boolean().ok_or(NokhwaError::SetPropertyError {
                     property: id.to_string(),
@@ -1319,7 +1355,7 @@ impl AVCaptureDeviceWrapper {
                     error: "Expected Boolean".to_string(),
                 })?;
 
-                if !ctrlvalue.description().verify_setter(&value) {
+                if !ctrlvalue.description().verify_setter(value) {
                     return Err(NokhwaError::SetPropertyError {
                         property: id.to_string(),
                         value: value.to_string(),
@@ -1338,7 +1374,7 @@ impl AVCaptureDeviceWrapper {
                     error: "Control does not exist".to_string(),
                 })?;
 
-                check_control_flags(ctrlvalue, &id, &value)?;
+                check_control_flags(ctrlvalue, &id, value)?;
 
                 let (r, g, b) = value.as_rgb().ok_or(NokhwaError::SetPropertyError {
                     property: id.to_string(),
@@ -1346,7 +1382,7 @@ impl AVCaptureDeviceWrapper {
                     error: "Expected RGB".to_string(),
                 })?;
 
-                if !ctrlvalue.description().verify_setter(&value) {
+                if !ctrlvalue.description().verify_setter(value) {
                     return Err(NokhwaError::SetPropertyError {
                         property: id.to_string(),
                         value: value.to_string(),
@@ -1370,7 +1406,7 @@ impl AVCaptureDeviceWrapper {
                     error: "Control does not exist".to_string(),
                 })?;
 
-                check_control_flags(ctrlvalue, &id, &value)?;
+                check_control_flags(ctrlvalue, &id, value)?;
 
                 let setter = *value.as_float().ok_or(NokhwaError::SetPropertyError {
                     property: id.to_string(),
@@ -1378,7 +1414,7 @@ impl AVCaptureDeviceWrapper {
                     error: "Expected float".to_string(),
                 })? as CGFloat;
 
-                if !ctrlvalue.description().verify_setter(&value) {
+                if !ctrlvalue.description().verify_setter(value) {
                     return Err(NokhwaError::SetPropertyError {
                         property: id.to_string(),
                         value: value.to_string(),
@@ -1397,7 +1433,7 @@ impl AVCaptureDeviceWrapper {
                     error: "Control does not exist".to_string(),
                 })?;
 
-                check_control_flags(ctrlvalue, &id, &value)?;
+                check_control_flags(ctrlvalue, &id, value)?;
 
                 let setter = *value.as_enum().ok_or(NokhwaError::SetPropertyError {
                     property: id.to_string(),
@@ -1405,7 +1441,7 @@ impl AVCaptureDeviceWrapper {
                     error: "Expected Enum".to_string(),
                 })?;
 
-                if !ctrlvalue.description().verify_setter(&value) {
+                if !ctrlvalue.description().verify_setter(value) {
                     return Err(NokhwaError::SetPropertyError {
                         property: id.to_string(),
                         value: value.to_string(),
@@ -1429,7 +1465,7 @@ impl AVCaptureDeviceWrapper {
                     error: "Control does not exist".to_string(),
                 })?;
 
-                check_control_flags(ctrlvalue, &id, &value)?;
+                check_control_flags(ctrlvalue, &id, value)?;
 
                 let setter = *value.as_enum().ok_or(NokhwaError::SetPropertyError {
                     property: id.to_string(),
@@ -1437,7 +1473,7 @@ impl AVCaptureDeviceWrapper {
                     error: "Expected Enum".to_string(),
                 })?;
 
-                if !ctrlvalue.description().verify_setter(&value) {
+                if !ctrlvalue.description().verify_setter(value) {
                     return Err(NokhwaError::SetPropertyError {
                         property: id.to_string(),
                         value: value.to_string(),
@@ -1452,7 +1488,7 @@ impl AVCaptureDeviceWrapper {
             KnownCameraControl::Other(i) => match i {
                 0 => {
                     // Focus point of interest
-                    let ctrlvalue = get_and_check_control(&controls, &id, &value)?;
+                    let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
                     let setter = value
                         .as_point()
@@ -1466,7 +1502,7 @@ impl AVCaptureDeviceWrapper {
                             y: *y as CGFloat,
                         })?;
 
-                    if !ctrlvalue.description().verify_setter(&value) {
+                    if !ctrlvalue.description().verify_setter(value) {
                         return Err(NokhwaError::SetPropertyError {
                             property: id.to_string(),
                             value: value.to_string(),
@@ -1480,7 +1516,7 @@ impl AVCaptureDeviceWrapper {
                 }
                 1 => {
                     // Focus manual lens position
-                    let ctrlvalue = get_and_check_control(&controls, &id, &value)?;
+                    let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
                     let setter = *value.as_float().ok_or(NokhwaError::SetPropertyError {
                         property: id.to_string(),
@@ -1488,7 +1524,7 @@ impl AVCaptureDeviceWrapper {
                         error: "Expected float".to_string(),
                     })? as c_float;
 
-                    if !ctrlvalue.description().verify_setter(&value) {
+                    if !ctrlvalue.description().verify_setter(value) {
                         return Err(NokhwaError::SetPropertyError {
                             property: id.to_string(),
                             value: value.to_string(),
@@ -1502,7 +1538,7 @@ impl AVCaptureDeviceWrapper {
                 }
                 2 => {
                     // Exposure point of interest
-                    let ctrlvalue = get_and_check_control(&controls, &id, &value)?;
+                    let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
                     let setter = value
                         .as_point()
@@ -1516,7 +1552,7 @@ impl AVCaptureDeviceWrapper {
                             y: *y as CGFloat,
                         })?;
 
-                    if !ctrlvalue.description().verify_setter(&value) {
+                    if !ctrlvalue.description().verify_setter(value) {
                         return Err(NokhwaError::SetPropertyError {
                             property: id.to_string(),
                             value: value.to_string(),
@@ -1530,7 +1566,7 @@ impl AVCaptureDeviceWrapper {
                 }
                 3 => {
                     // Face-driven auto exposure
-                    let ctrlvalue = get_and_check_control(&controls, &id, &value)?;
+                    let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
                     let setter: bool =
                         *value.as_boolean().ok_or(NokhwaError::SetPropertyError {
@@ -1539,7 +1575,7 @@ impl AVCaptureDeviceWrapper {
                             error: "Expected Boolean".to_string(),
                         })?;
 
-                    if !ctrlvalue.description().verify_setter(&value) {
+                    if !ctrlvalue.description().verify_setter(value) {
                         return Err(NokhwaError::SetPropertyError {
                             property: id.to_string(),
                             value: value.to_string(),
@@ -1553,7 +1589,7 @@ impl AVCaptureDeviceWrapper {
                 }
                 4 => {
                     // Exposure target bias
-                    let ctrlvalue = get_and_check_control(&controls, &id, &value)?;
+                    let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
                     let setter = *value.as_float().ok_or(NokhwaError::SetPropertyError {
                         property: id.to_string(),
@@ -1561,7 +1597,7 @@ impl AVCaptureDeviceWrapper {
                         error: "Expected Float".to_string(),
                     })? as c_float;
 
-                    if !ctrlvalue.description().verify_setter(&value) {
+                    if !ctrlvalue.description().verify_setter(value) {
                         return Err(NokhwaError::SetPropertyError {
                             property: id.to_string(),
                             value: value.to_string(),
@@ -1575,7 +1611,7 @@ impl AVCaptureDeviceWrapper {
                 }
                 5 => {
                     // Torch mode
-                    let ctrlvalue = get_and_check_control(&controls, &id, &value)?;
+                    let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
                     let setter = *value.as_enum().ok_or(NokhwaError::SetPropertyError {
                         property: id.to_string(),
@@ -1583,7 +1619,7 @@ impl AVCaptureDeviceWrapper {
                         error: "Expected Enum".to_string(),
                     })?;
 
-                    if !ctrlvalue.description().verify_setter(&value) {
+                    if !ctrlvalue.description().verify_setter(value) {
                         return Err(NokhwaError::SetPropertyError {
                             property: id.to_string(),
                             value: value.to_string(),
@@ -1597,7 +1633,7 @@ impl AVCaptureDeviceWrapper {
                 }
                 6 => {
                     // Geometric distortion correction
-                    let ctrlvalue = get_and_check_control(&controls, &id, &value)?;
+                    let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
                     let setter: bool =
                         *value.as_boolean().ok_or(NokhwaError::SetPropertyError {
@@ -1606,7 +1642,7 @@ impl AVCaptureDeviceWrapper {
                             error: "Expected Boolean".to_string(),
                         })?;
 
-                    if !ctrlvalue.description().verify_setter(&value) {
+                    if !ctrlvalue.description().verify_setter(value) {
                         return Err(NokhwaError::SetPropertyError {
                             property: id.to_string(),
                             value: value.to_string(),
@@ -1637,6 +1673,8 @@ impl AVCaptureDeviceWrapper {
         let avf_format = AVCaptureDeviceFormatWrapper::try_from_format(&af)?;
         let resolution = avf_format.resolution;
         let fourcc = avf_format.fourcc;
+        // fps and resolution casts: same safe FFI boundary as supported_formats.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let mut a = avf_format
             .fps_list
             .into_iter()
@@ -1646,15 +1684,15 @@ impl AVCaptureDeviceWrapper {
                 CameraFormat::new(resolution, fourcc, fps)
             })
             .collect::<Vec<_>>();
-        a.sort_by_key(|a| a.frame_rate());
+        a.sort_by_key(CameraFormat::frame_rate);
 
-        if !a.is_empty() {
-            Ok(a[a.len() - 1])
-        } else {
+        if a.is_empty() {
             Err(NokhwaError::GetPropertyError {
                 property: "activeFormat".to_string(),
                 error: "None??".to_string(),
             })
+        } else {
+            Ok(a[a.len() - 1])
         }
     }
 }
