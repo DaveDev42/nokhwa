@@ -4,6 +4,25 @@
 
 ### Infrastructure
 
+* **`v4l-loopback` CI: load `videodev` correctly on Azure 6.17 kernel.**
+  Two compounding causes silently broke every PR run since the #183
+  era: (1) only `linux-modules-extra-<kernel>` was installed, but on
+  the Ubuntu Azure 6.17.x kernel `videodev.ko` (the V4L2 core module)
+  ships in the base `linux-modules-<kernel>` package — the `-extra`
+  split no longer carries it; (2) `awalsh128/cache-apt-pkgs-action`
+  defaults to `execute_install_scripts: false`, so the
+  `linux-modules*` `postinst` script (which runs `depmod -a`) is
+  skipped on cache hits, leaving `/lib/modules/<kernel>/modules.dep`
+  stale and causing `modprobe videodev` to report "not found" even
+  when the `.ko` is on disk. Fix: add `linux-modules-$KERNEL` to the
+  apt package list alongside `linux-modules-extra-$KERNEL`; insert an
+  unconditional `sudo depmod -a` step between the apt cache restore
+  and the `modprobe` calls; bump the cache version key from `kernel-`
+  to `kernel2-` to bust the now-incomplete cached entry. Job-level
+  `continue-on-error: true` is preserved — the symptom (run-level
+  green, job-level failure with all device-test steps skipped) was
+  what masked the breakage in the first place; the fix makes the job
+  actually run end-to-end again.
 * **`clippy::pedantic` enforced across all workspace crates; matrix lint CI.**
   Added `#![deny(clippy::pedantic)]` / `#![warn(clippy::all)]` /
   `#![allow(clippy::module_name_repetitions)]` headers to

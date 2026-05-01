@@ -41,6 +41,7 @@ jobs:
         run: |
           KERNEL="$(uname -r)"
           echo "version=$KERNEL" >> "$GITHUB_OUTPUT"
+          echo "modules-base=linux-modules-$KERNEL" >> "$GITHUB_OUTPUT"
           echo "modules=linux-modules-extra-$KERNEL" >> "$GITHUB_OUTPUT"
 
       - name: Install system dependencies (cached)
@@ -52,19 +53,31 @@ jobs:
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: >-
+            ${{ steps.kernel.outputs.modules-base }}
             ${{ steps.kernel.outputs.modules }}
             libv4l-dev
             v4l-utils
             v4l2loopback-dkms
             ffmpeg
-          version: kernel-${{ steps.kernel.outputs.version }}
+          version: kernel2-${{ steps.kernel.outputs.version }}
+
+      - name: Rebuild kernel module dependency index
+        # awalsh128/cache-apt-pkgs-action skips package postinst scripts
+        # by default (execute_install_scripts: false). The linux-modules*
+        # postinst normally runs `depmod -a` to regenerate
+        # /lib/modules/<kernel>/modules.dep. Without it, modprobe
+        # reports "not found" by name even when the .ko file is on
+        # disk. Run depmod unconditionally — idempotent, ~500ms — so
+        # both cold installs and cache hits leave a usable index.
+        run: sudo depmod -a
 
       - name: Load v4l2loopback module
         run: |
           # v4l2loopback depends on symbols from videodev (v4l2_fh_exit,
-          # video_device_*). On ubuntu-latest the videodev module is not
-          # autoloaded, so insmod fails with "Unknown symbol". Ensure the
-          # prerequisite modules are loaded first.
+          # video_device_*). videodev.ko ships in linux-modules-<kernel>
+          # (the base package), not linux-modules-extra. On ubuntu-latest
+          # it is not autoloaded, so insmod fails with "Unknown symbol".
+          # Ensure the prerequisite modules are loaded first.
           sudo modprobe videodev
           # exclusive_caps=1 makes the node advertise either capture or
           # output caps depending on which side opens first — required
