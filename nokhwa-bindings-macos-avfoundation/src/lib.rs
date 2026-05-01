@@ -20,6 +20,10 @@
 
 // <some change so we can call this 0.10.4>
 
+#![deny(clippy::pedantic)]
+#![warn(clippy::all)]
+#![allow(clippy::module_name_repetitions)]
+#![allow(clippy::missing_errors_doc)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]

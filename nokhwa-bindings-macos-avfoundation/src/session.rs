@@ -28,6 +28,11 @@ use objc2_foundation::{NSArray, NSString};
 
 /// Returns `Result` for API consistency with callers that propagate `NokhwaError`,
 /// even though the current implementation is infallible.
+///
+/// # Panics
+///
+/// Panics if the `AVMediaTypeVideo` constant is unavailable on the current
+/// platform, which should not happen on any supported Apple platform.
 pub fn discovery_session_with_types(
     device_types: &[AVCaptureDeviceTypeLocal],
 ) -> Result<Retained<AVCaptureDeviceDiscoverySession>, NokhwaError> {
@@ -56,6 +61,8 @@ pub fn discovery_session_devices(session: &AVCaptureDeviceDiscoverySession) -> V
     let mut result = Vec::with_capacity(count);
     for index in 0..count {
         let device = devices.objectAtIndex(index);
+        // index is a usize array offset bounded by count (a small device list, well within u32::MAX).
+        #[allow(clippy::cast_possible_truncation)]
         result.push(get_raw_device_info(
             CameraIndex::Index(index as u32),
             &device,
@@ -78,6 +85,7 @@ pub fn create_device_input(
     }
 }
 
+#[must_use]
 pub fn create_video_data_output() -> Retained<AVCaptureVideoDataOutput> {
     unsafe { AVCaptureVideoDataOutput::new() }
 }
@@ -120,6 +128,9 @@ pub fn output_set_frame_format(
     // Build NSDictionary via msg_send! since the typed NSDictionary API
     // requires complex generics. The key is a CFString (toll-free bridged with NSString).
     let ns_number_cls = objc2::class!(NSNumber);
+    // cmpixelfmt is a FourCharCode (u32); NSNumber's numberWithInt: takes an i32.
+    // The FourCharCode bit pattern is preserved — the value is used as an opaque key, not compared numerically.
+    #[allow(clippy::cast_possible_wrap)]
     let obj: *mut AnyObject =
         unsafe { objc2::msg_send![ns_number_cls, numberWithInt: cmpixelfmt as i32] };
     let key = unsafe { crate::ffi::kCVPixelBufferPixelFormatTypeKey } as *mut AnyObject;
@@ -139,6 +150,7 @@ pub fn output_set_frame_format(
 
 // -- AVCaptureSession wrapper functions --
 
+#[must_use]
 pub fn session_new() -> Retained<AVCaptureSession> {
     unsafe { AVCaptureSession::new() }
 }

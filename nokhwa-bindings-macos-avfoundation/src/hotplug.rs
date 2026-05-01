@@ -35,7 +35,7 @@ mod real {
     /// How often the polling thread re-enumerates `AVFoundation`
     /// devices. 500ms matches the MSMF and V4L backends and is a
     /// compromise between "noticeable latency" and "burn CPU on the
-    /// AVFoundation discovery session". Tune here if users report
+    /// `AVFoundation` discovery session". Tune here if users report
     /// perceivable lag on hot-unplug.
     const POLL_INTERVAL: Duration = Duration::from_millis(500);
 

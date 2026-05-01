@@ -22,7 +22,7 @@ pub type CMSampleBufferRef = *mut std::ffi::c_void;
 pub type CMBlockBufferRef = *mut std::ffi::c_void;
 pub type CMFormatDescriptionRef = *mut std::ffi::c_void;
 
-/// Local CMTime definition for C FFI function signatures.
+/// Local `CMTime` definition for C FFI function signatures.
 /// Layout-compatible with `objc2_core_media::CMTime` (both `#[repr(C)]`).
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -46,7 +46,7 @@ pub struct CMVideoDimensions {
 }
 
 // CoreMedia pixel format / codec constants (FourCharCode values)
-const fn fourcc(bytes: &[u8; 4]) -> FourCharCode {
+const fn fourcc(bytes: [u8; 4]) -> FourCharCode {
     ((bytes[0] as u32) << 24)
         | ((bytes[1] as u32) << 16)
         | ((bytes[2] as u32) << 8)
@@ -56,23 +56,23 @@ const fn fourcc(bytes: &[u8; 4]) -> FourCharCode {
 #[allow(non_upper_case_globals)]
 pub const kCMPixelFormat_24RGB: FourCharCode = 24;
 #[allow(non_upper_case_globals)]
-pub const kCMPixelFormat_422YpCbCr8_yuvs: FourCharCode = fourcc(b"yuvs");
+pub const kCMPixelFormat_422YpCbCr8_yuvs: FourCharCode = fourcc(*b"yuvs");
 #[allow(non_upper_case_globals)]
 pub const kCMPixelFormat_8IndexedGray_WhiteIsZero: FourCharCode = 0x0000_0028;
 #[allow(non_upper_case_globals)]
-pub const kCMVideoCodecType_422YpCbCr8: FourCharCode = fourcc(b"2vuy");
+pub const kCMVideoCodecType_422YpCbCr8: FourCharCode = fourcc(*b"2vuy");
 #[allow(non_upper_case_globals)]
-pub const kCMVideoCodecType_JPEG: FourCharCode = fourcc(b"jpeg");
+pub const kCMVideoCodecType_JPEG: FourCharCode = fourcc(*b"jpeg");
 #[allow(non_upper_case_globals)]
-pub const kCMVideoCodecType_JPEG_OpenDML: FourCharCode = fourcc(b"dmb1");
+pub const kCMVideoCodecType_JPEG_OpenDML: FourCharCode = fourcc(*b"dmb1");
 
 // CoreVideo pixel format constants
 #[allow(non_upper_case_globals)]
-pub const kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange: FourCharCode = fourcc(b"420v");
+pub const kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange: FourCharCode = fourcc(*b"420v");
 #[allow(non_upper_case_globals)]
-pub const kCVPixelFormatType_420YpCbCr8BiPlanarFullRange: FourCharCode = fourcc(b"420f");
+pub const kCVPixelFormatType_420YpCbCr8BiPlanarFullRange: FourCharCode = fourcc(*b"420f");
 #[allow(non_upper_case_globals)]
-pub const kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange: FourCharCode = fourcc(b"x420");
+pub const kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange: FourCharCode = fourcc(*b"x420");
 
 pub type Id = *mut AnyObject;
 
@@ -103,7 +103,7 @@ extern "C" {
     pub fn CMFormatDescriptionGetMediaSubType(desc: CMFormatDescriptionRef) -> FourCharCode;
 }
 
-/// Opaque wrapper for GCD dispatch objects (not ObjC NSObjects).
+/// Opaque wrapper for GCD dispatch objects (not `ObjC` `NSObjects`).
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct DispatchQueue(pub Id);
@@ -158,6 +158,6 @@ extern "C" {
 
     pub fn CVPixelBufferGetPixelFormatType(pixelBuffer: CVPixelBufferRef) -> OSType;
 
-    /// CFStringRef in Apple headers; cast to `*mut AnyObject` at usage site.
+    /// `CFStringRef` in Apple headers; cast to `*mut AnyObject` at usage site.
     pub static kCVPixelBufferPixelFormatTypeKey: *const std::ffi::c_void;
 }
