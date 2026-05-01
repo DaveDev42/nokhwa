@@ -23,6 +23,9 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Infrastructure / CI
 
+- [ ] **Ruleset context names** — after the `chore/clippy-pedantic-all-crates`
+  PR merges, update the branch ruleset required-status-check contexts from
+  `Clippy` to `Clippy (linux)`, `Clippy (windows)`, `Clippy (macos)`.
 - [ ] **Windows GStreamer CI** blocked on `gstreamer.freedesktop.org`'s
   `go-away` JS challenge (PR #174 closed). Paths forward: (a) private
   artifact mirror the CI can pull from, (b) wait for `winget` to gain a

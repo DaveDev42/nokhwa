@@ -149,9 +149,8 @@ impl CameraDevice for MediaFoundationCaptureDevice {
     fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
         let mut camera_ctrls = Vec::with_capacity(15);
         for ctrl_id in all_known_camera_controls() {
-            let ctrl = match self.camera_control(ctrl_id) {
-                Ok(v) => v,
-                Err(_) => continue,
+            let Ok(ctrl) = self.camera_control(ctrl_id) else {
+                continue;
             };
 
             camera_ctrls.push(ctrl);

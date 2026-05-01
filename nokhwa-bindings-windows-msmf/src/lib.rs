@@ -202,9 +202,8 @@ pub mod wmf {
                 }
             };
 
-            let frame_format = match guid_to_frameformat(fourcc) {
-                Some(fcc) => fcc,
-                None => continue,
+            let Some(frame_format) = guid_to_frameformat(fourcc) else {
+                continue;
             };
 
             let (width, height) = match unsafe { media_type.GetUINT64(&MF_MT_FRAME_SIZE) } {
@@ -298,7 +297,7 @@ pub mod wmf {
         initialize_mf()?;
 
         let mut attributes: Option<IMFAttributes> = None;
-        if let Err(why) = unsafe { MFCreateAttributes(&mut attributes, 1) } {
+        if let Err(why) = unsafe { MFCreateAttributes(&raw mut attributes, 1) } {
             return Err(NokhwaError::GetPropertyError {
                 property: "IMFAttributes".to_string(),
                 error: why.to_string(),
@@ -334,9 +333,9 @@ pub mod wmf {
         let mut count: u32 = 0;
         let mut unused_mf_activate: MaybeUninit<*mut Option<IMFActivate>> = MaybeUninit::uninit();
 
-        if let Err(why) =
-            unsafe { MFEnumDeviceSources(&attributes, unused_mf_activate.as_mut_ptr(), &mut count) }
-        {
+        if let Err(why) = unsafe {
+            MFEnumDeviceSources(&attributes, unused_mf_activate.as_mut_ptr(), &raw mut count)
+        } {
             return Err(NokhwaError::StructureError {
                 structure: "MFEnumDeviceSources".to_string(),
                 error: why.to_string(),
@@ -371,8 +370,8 @@ pub mod wmf {
         if let Err(why) = unsafe {
             imf_activate.GetAllocatedString(
                 &MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME,
-                &mut pwstr_name,
-                &mut len_pwstrname,
+                &raw mut pwstr_name,
+                &raw mut len_pwstrname,
             )
         } {
             return Err(NokhwaError::GetPropertyError {
@@ -384,8 +383,8 @@ pub mod wmf {
         if let Err(why) = unsafe {
             imf_activate.GetAllocatedString(
                 &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK,
-                &mut pwstr_symlink,
-                &mut len_pwstrsymlink,
+                &raw mut pwstr_symlink,
+                &raw mut len_pwstrsymlink,
             )
         } {
             return Err(NokhwaError::GetPropertyError {
@@ -526,24 +525,18 @@ pub mod wmf {
                         };
 
                     let source_reader_attr = {
-                        let attr = match {
-                            let mut attr: Option<IMFAttributes> = None;
-
-                            if let Err(why) = unsafe { MFCreateAttributes(&mut attr, 3) } {
-                                return Err(NokhwaError::StructureError {
-                                    structure: "MFCreateAttributes".to_string(),
-                                    error: why.to_string(),
-                                });
-                            }
-                            attr
-                        } {
-                            Some(imf_attr) => imf_attr,
-                            None => {
-                                return Err(NokhwaError::StructureError {
-                                    structure: "MFCreateAttributes".to_string(),
-                                    error: "Attributee Alloc Failure".to_string(),
-                                });
-                            }
+                        let mut attr_opt: Option<IMFAttributes> = None;
+                        if let Err(why) = unsafe { MFCreateAttributes(&raw mut attr_opt, 3) } {
+                            return Err(NokhwaError::StructureError {
+                                structure: "MFCreateAttributes".to_string(),
+                                error: why.to_string(),
+                            });
+                        }
+                        let Some(attr) = attr_opt else {
+                            return Err(NokhwaError::StructureError {
+                                structure: "MFCreateAttributes".to_string(),
+                                error: "Attributee Alloc Failure".to_string(),
+                            });
                         };
 
                         if let Err(why) = unsafe {
@@ -711,20 +704,20 @@ pub mod wmf {
                 MFControlId::ProcAmpBoolean(id) => unsafe {
                     if let Err(why) = video_proc_amp.GetRange(
                         id,
-                        &mut min,
-                        &mut max,
-                        &mut step,
-                        &mut default,
-                        &mut flag,
+                        &raw mut min,
+                        &raw mut max,
+                        &raw mut step,
+                        &raw mut default,
+                        &raw mut flag,
                     ) {
                         return Err(NokhwaError::GetPropertyError {
-                            property: format!("{:?}: {} - Range", control_id, control),
+                            property: format!("{control_id:?}: {control} - Range"),
                             error: why.to_string(),
                         });
                     }
-                    if let Err(why) = video_proc_amp.Get(id, &mut value, &mut flag) {
+                    if let Err(why) = video_proc_amp.Get(id, &raw mut value, &raw mut flag) {
                         return Err(NokhwaError::GetPropertyError {
-                            property: format!("{:?}: {} - Value", control_id, control),
+                            property: format!("{control_id:?}: {control} - Value"),
                             error: why.to_string(),
                         });
                     }
@@ -739,20 +732,20 @@ pub mod wmf {
                 MFControlId::ProcAmpRange(id) => unsafe {
                     if let Err(why) = video_proc_amp.GetRange(
                         id,
-                        &mut min,
-                        &mut max,
-                        &mut step,
-                        &mut default,
-                        &mut flag,
+                        &raw mut min,
+                        &raw mut max,
+                        &raw mut step,
+                        &raw mut default,
+                        &raw mut flag,
                     ) {
                         return Err(NokhwaError::GetPropertyError {
-                            property: format!("{:?}: {} - Range", control_id, control),
+                            property: format!("{control_id:?}: {control} - Range"),
                             error: why.to_string(),
                         });
                     }
-                    if let Err(why) = video_proc_amp.Get(id, &mut value, &mut flag) {
+                    if let Err(why) = video_proc_amp.Get(id, &raw mut value, &raw mut flag) {
                         return Err(NokhwaError::GetPropertyError {
-                            property: format!("{:?}: {} - Value", control_id, control),
+                            property: format!("{control_id:?}: {control} - Value"),
                             error: why.to_string(),
                         });
                     }
@@ -767,20 +760,20 @@ pub mod wmf {
                 MFControlId::CCValue(id) => unsafe {
                     if let Err(why) = camera_control.GetRange(
                         id,
-                        &mut min,
-                        &mut max,
-                        &mut step,
-                        &mut default,
-                        &mut flag,
+                        &raw mut min,
+                        &raw mut max,
+                        &raw mut step,
+                        &raw mut default,
+                        &raw mut flag,
                     ) {
                         return Err(NokhwaError::GetPropertyError {
-                            property: format!("{:?}: {} - Range", control_id, control),
+                            property: format!("{control_id:?}: {control} - Range"),
                             error: why.to_string(),
                         });
                     }
-                    if let Err(why) = camera_control.Get(id, &mut value, &mut flag) {
+                    if let Err(why) = camera_control.Get(id, &raw mut value, &raw mut flag) {
                         return Err(NokhwaError::GetPropertyError {
-                            property: format!("{:?}: {} - Value", control_id, control),
+                            property: format!("{control_id:?}: {control} - Value"),
                             error: why.to_string(),
                         });
                     }
@@ -794,20 +787,20 @@ pub mod wmf {
                 MFControlId::CCRange(id) => unsafe {
                     if let Err(why) = camera_control.GetRange(
                         id,
-                        &mut min,
-                        &mut max,
-                        &mut step,
-                        &mut default,
-                        &mut flag,
+                        &raw mut min,
+                        &raw mut max,
+                        &raw mut step,
+                        &raw mut default,
+                        &raw mut flag,
                     ) {
                         return Err(NokhwaError::GetPropertyError {
-                            property: format!("{:?}: {} - Range", control_id, control),
+                            property: format!("{control_id:?}: {control} - Range"),
                             error: why.to_string(),
                         });
                     }
-                    if let Err(why) = camera_control.Get(id, &mut value, &mut flag) {
+                    if let Err(why) = camera_control.Get(id, &raw mut value, &raw mut flag) {
                         return Err(NokhwaError::GetPropertyError {
-                            property: format!("{:?}: {} - Value", control_id, control),
+                            property: format!("{control_id:?}: {control} - Value"),
                             error: why.to_string(),
                         });
                     }
@@ -891,7 +884,7 @@ pub mod wmf {
                 ControlValueSetter::Boolean(b) => i32::from(b),
                 v => {
                     return Err(NokhwaError::StructureError {
-                        structure: format!("ControlValueSetter {}", v),
+                        structure: format!("ControlValueSetter {v}"),
                         error: "invalid value type".to_string(),
                     })
                 }
@@ -899,7 +892,7 @@ pub mod wmf {
 
             let flag = current_value
                 .flag()
-                .get(0)
+                .first()
                 .map(|x| {
                     if *x == KnownCameraControlFlag::Automatic {
                         CameraControl_Flags_Auto
@@ -1039,7 +1032,7 @@ pub mod wmf {
                             Err(why) => {
                                 last_error = Some(NokhwaError::SetPropertyError {
                                     property: "MEDIA_FOUNDATION_FIRST_VIDEO_STREAM".to_string(),
-                                    value: format!("{:?}", parsed.media_type),
+                                    value: format!("{:?}", &parsed.media_type),
                                     error: why.to_string(),
                                 });
                             }
@@ -1100,9 +1093,9 @@ pub mod wmf {
                             MEDIA_FOUNDATION_FIRST_VIDEO_STREAM,
                             0,
                             None,
-                            Some(&mut stream_flags),
-                            Some(&mut sample_time_100ns),
-                            Some(&mut imf_sample),
+                            Some(&raw mut stream_flags),
+                            Some(&raw mut sample_time_100ns),
+                            Some(&raw mut imf_sample),
                         )
                     } {
                         return Err(NokhwaError::ReadFrameError {
@@ -1117,20 +1110,18 @@ pub mod wmf {
                 }
             }
 
-            let imf_sample = match imf_sample {
-                Some(sample) => sample,
-                None => {
-                    // shouldn't happen
-                    return Err(NokhwaError::ReadFrameError {
-                        message: "No sample".to_string(),
-                        format: frame_fmt,
-                    });
-                }
+            let Some(imf_sample) = imf_sample else {
+                // shouldn't happen
+                return Err(NokhwaError::ReadFrameError {
+                    message: "No sample".to_string(),
+                    format: frame_fmt,
+                });
             };
 
             // Calculate absolute capture timestamp.
             let capture_ts = if sample_time_100ns > 0 {
-                let sample_offset = Duration::from_nanos(sample_time_100ns as u64 * 100);
+                let sample_offset =
+                    Duration::from_nanos(u64::try_from(sample_time_100ns).unwrap_or(0) * 100);
                 self.stream_epoch
                     .and_then(|epoch| epoch.checked_add(sample_offset))
             } else {
@@ -1150,9 +1141,13 @@ pub mod wmf {
             let mut buffer_valid_length = 0;
             let mut buffer_start_ptr = std::ptr::null_mut::<u8>();
 
-            if let Err(why) =
-                unsafe { buffer.Lock(&mut buffer_start_ptr, None, Some(&mut buffer_valid_length)) }
-            {
+            if let Err(why) = unsafe {
+                buffer.Lock(
+                    &raw mut buffer_start_ptr,
+                    None,
+                    Some(&raw mut buffer_valid_length),
+                )
+            } {
                 return Err(NokhwaError::ReadFrameError {
                     message: why.to_string(),
                     format: frame_fmt,
@@ -1196,18 +1191,16 @@ pub mod wmf {
         fn drop(&mut self) {
             // swallow errors
             unsafe {
-                if self
+                let _ = self
                     .source_reader
-                    .Flush(MEDIA_FOUNDATION_FIRST_VIDEO_STREAM)
-                    .is_ok()
-                {}
+                    .Flush(MEDIA_FOUNDATION_FIRST_VIDEO_STREAM);
 
                 // decrement refcnt
                 if CAMERA_REFCNT.load(Ordering::SeqCst) > 0 {
                     CAMERA_REFCNT.store(CAMERA_REFCNT.load(Ordering::SeqCst) - 1, Ordering::SeqCst);
                 }
                 if CAMERA_REFCNT.load(Ordering::SeqCst) == 0 {
-                    #[allow(clippy::let_underscore_drop)]
+                    #[allow(let_underscore_drop)]
                     let _ = de_initialize_mf();
                 }
             }

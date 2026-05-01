@@ -83,7 +83,7 @@ mod real {
     }
 
     /// Concrete [`HotplugEventPoll`]. Owns the worker thread + a
-    /// cross-thread handle (`ThreadId`) used to wake the GetMessage
+    /// cross-thread handle (`ThreadId`) used to wake the `GetMessage`
     /// loop with `WM_QUIT` on drop. The mpsc channel carries events
     /// from the WndProc-synthesised callbacks back to the consumer.
     struct MsmfHotplugPoll {
@@ -201,14 +201,14 @@ mod real {
         // the documented contract.
         loop {
             let mut msg = MSG::default();
-            let rv = unsafe { GetMessageW(&mut msg, Some(hwnd), 0, 0) };
+            let rv = unsafe { GetMessageW(&raw mut msg, Some(hwnd), 0, 0) };
             if rv.0 == 0 || rv.0 == -1 {
                 // 0 = WM_QUIT received, -1 = error. Either way, exit.
                 break;
             }
             unsafe {
-                let _ = TranslateMessage(&msg);
-                DispatchMessageW(&msg);
+                let _ = TranslateMessage(&raw const msg);
+                DispatchMessageW(&raw const msg);
             }
             if stop.load(Ordering::Acquire) {
                 break;
@@ -223,9 +223,9 @@ mod real {
         }
     }
 
-    /// State shared between the worker thread and the WndProc
-    /// callback. The WndProc reads `tx` + `snapshot` through the
-    /// raw pointer stashed in the window's GWLP_USERDATA slot.
+    /// State shared between the worker thread and the `WndProc`
+    /// callback. The `WndProc` reads `tx` + `snapshot` through the
+    /// raw pointer stashed in the window's `GWLP_USERDATA` slot.
     struct SharedState {
         tx: Sender<HotplugEvent>,
         snapshot: std::cell::RefCell<BTreeMap<String, CameraInfo>>,
@@ -247,7 +247,7 @@ mod real {
             // RegisterClassExW may fail if the class is already
             // registered by a previous MsmfHotplugPoll instance; that's
             // fine, CreateWindowExW below will still find the class.
-            let _ = RegisterClassExW(&wc);
+            let _ = RegisterClassExW(&raw const wc);
             let hwnd = CreateWindowExW(
                 WINDOW_EX_STYLE(0),
                 windows::core::PCWSTR(class_name.as_ptr()),
@@ -287,8 +287,8 @@ mod real {
         }
     }
 
-    /// Static WndProc. Reads the `SharedState` pointer back from
-    /// GWLP_USERDATA, then on each `WM_DEVICECHANGE` (or our
+    /// Static `WndProc`. Reads the `SharedState` pointer back from
+    /// `GWLP_USERDATA`, then on each `WM_DEVICECHANGE` (or our
     /// `WM_HEARTBEAT`) takes a fresh snapshot and emits deltas.
     unsafe extern "system" fn wnd_proc(
         hwnd: HWND,

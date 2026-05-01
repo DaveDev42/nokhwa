@@ -4,6 +4,25 @@
 
 ### Infrastructure
 
+* **`clippy::pedantic` enforced across all workspace crates; matrix lint CI.**
+  Added `#![deny(clippy::pedantic)]` / `#![warn(clippy::all)]` /
+  `#![allow(clippy::module_name_repetitions)]` headers to
+  `nokhwa-bindings-linux-v4l` and `nokhwa-bindings-macos-avfoundation` (the
+  two crates that previously had no lint policy). Fixed all 68 violations in
+  `nokhwa-bindings-windows-msmf` and 20 violations in
+  `nokhwa-bindings-linux-v4l`: `borrow_as_ptr` (Win32/libc FFI raw-pointer
+  passing rewritten to `&raw mut`/`&raw const`), `uninlined_format_args`
+  (format strings inlined), `manual_let_else`, `doc_markdown` (Win32/V4L2
+  terms backtick-quoted), `get_first`, `cast_sign_loss`, `needless_ifs`,
+  `explicit_iter_loop`, `iter_filter_is_some`, `iter_filter_is_ok`, and
+  the renamed lint `clippy::let_underscore_drop` → `let_underscore_drop`.
+  Expanded `lint.yml` from a single Ubuntu job to a three-platform matrix:
+  `Clippy (linux)` (core + v4l + gstreamer + nokhwa), `Clippy (windows)`
+  (msmf + nokhwa), `Clippy (macos)` (avfoundation + nokhwa). All four
+  env combinations (Linux stable/nightly, Windows stable/nightly) verified
+  locally. **Note:** the old `Clippy` required-status-check context in the
+  branch ruleset must be updated to the new matrix names (`Clippy (linux)`,
+  `Clippy (windows)`, `Clippy (macos)`) by the repo admin after merge.
 * **`.gitattributes` for LF normalization.** `text=auto eol=lf` plus
   explicit rules for `*.rs` / `*.toml` / `*.md` / `*.yml` / `*.json` /
   Xcode project files (`*.pbxproj`, `*.xcscheme`, `*.plist`,

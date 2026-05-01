@@ -14,6 +14,13 @@
  * limitations under the License.
  */
 
+#![deny(clippy::pedantic)]
+#![warn(clippy::all)]
+#![allow(clippy::module_name_repetitions)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_sign_loss)]
+
 #[cfg(target_os = "linux")]
 mod internal {
     use nokhwa_core::{
@@ -66,12 +73,14 @@ mod internal {
     ];
 
     /// Converts a [`KnownCameraControl`] into a V4L2 Control ID.
+    #[must_use]
     pub fn known_camera_control_to_id(ctrl: KnownCameraControl) -> u32 {
         ctrl.to_platform_id(&V4L2_CONTROL_IDS)
     }
 
     /// Converts a V4L2 Control ID into a [`KnownCameraControl`].
     /// Unrecognised IDs are returned as `Other(id)`.
+    #[must_use]
     pub fn id_to_known_camera_control(id: u32) -> KnownCameraControl {
         KnownCameraControl::from_platform_id(id, &V4L2_CONTROL_IDS)
     }
@@ -127,7 +136,7 @@ mod internal {
             .lock()
             .map_err(|e| NokhwaError::InitializeError {
                 backend: ApiBackend::Video4Linux,
-                error: format!("Fail to lock global device list mutex: {}", e),
+                error: format!("Fail to lock global device list mutex: {e}"),
             })?;
 
         // do some cleanup, this will avoid here memory to grow forever
@@ -157,7 +166,7 @@ mod internal {
             Err(why) => {
                 return Err(NokhwaError::OpenDeviceError {
                     device: index.to_string(),
-                    error: format!("V4L2 Error: {}", why),
+                    error: format!("V4L2 Error: {why}"),
                 })
             }
         };
@@ -285,7 +294,7 @@ mod internal {
                 .lock()
                 .map_err(|e| NokhwaError::InitializeError {
                     backend: ApiBackend::Video4Linux,
-                    error: format!("Fail to lock device mutex: {}", e),
+                    error: format!("Fail to lock device mutex: {e}"),
                 })?;
 
             // get all formats
@@ -295,9 +304,9 @@ mod internal {
             let frame_formats = match device.enum_formats() {
                 Ok(formats) => {
                     let mut frame_format_vec = vec![];
-                    formats
-                        .iter()
-                        .for_each(|fmt| frame_format_vec.push(fmt.fourcc));
+                    for fmt in &formats {
+                        frame_format_vec.push(fmt.fourcc);
+                    }
                     frame_format_vec.dedup();
                     Ok(frame_format_vec)
                 }
@@ -308,9 +317,8 @@ mod internal {
             }?;
 
             for ff in frame_formats {
-                let framefmt = match fourcc_to_frameformat(ff) {
-                    Some(s) => s,
-                    None => continue,
+                let Some(framefmt) = fourcc_to_frameformat(ff) else {
+                    continue;
                 };
                 // i write unmaintainable blobs of code because i am so cute uwu~~
                 let mut formats = device
@@ -421,7 +429,7 @@ mod internal {
                 camera_info: CameraInfo::new(
                     &device_caps.card,
                     &device_caps.driver,
-                    &format!("{} {:?}", device_caps.bus, device_caps.version),
+                    &format!("{} {:?}", &device_caps.bus, &device_caps.version),
                     index,
                 ),
                 device: shared_device,
@@ -464,7 +472,7 @@ mod internal {
 
         fn lock_device(&self) -> Result<std::sync::MutexGuard<'_, Device>, NokhwaError> {
             self.device.lock().map_err(|e| NokhwaError::GeneralError {
-                message: format!("Failed to lock device: {}", e),
+                message: format!("Failed to lock device: {e}"),
                 backend: Some(ApiBackend::Video4Linux),
             })
         }
@@ -518,7 +526,7 @@ mod internal {
         #[allow(clippy::cast_possible_wrap)]
         fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
             let device = self.lock_device()?;
-            device
+            let camera_ctrls = device
                 .query_controls()
                 .map_err(|why| NokhwaError::GetPropertyError {
                     property: "V4L2 Controls".to_string(),
@@ -595,9 +603,8 @@ mod internal {
                         is_writeonly,
                     ]
                     .into_iter()
-                    .filter(Option::is_some)
-                    .collect::<Option<Vec<KnownCameraControlFlag>>>()
-                    .unwrap_or_default();
+                    .flatten()
+                    .collect::<Vec<KnownCameraControlFlag>>();
 
                     Ok(CameraControl::new(
                         id_as_kcc,
@@ -607,12 +614,9 @@ mod internal {
                         !desc.flags.intersects(Flags::INACTIVE),
                     ))
                 })
-                .filter(Result::is_ok)
-                .collect::<Result<Vec<CameraControl>, io::Error>>()
-                .map_err(|x| NokhwaError::GetPropertyError {
-                    property: "www".to_string(),
-                    error: x.to_string(),
-                })
+                .filter_map(Result::ok)
+                .collect::<Vec<CameraControl>>();
+            Ok(camera_ctrls)
         }
 
         fn set_control(
@@ -641,7 +645,7 @@ mod internal {
                 })
                 .map_err(|why| NokhwaError::SetPropertyError {
                     property: id.to_string(),
-                    value: format!("{:?}", value),
+                    value: format!("{value:?}"),
                     error: why.to_string(),
                 })?;
             // verify
@@ -650,7 +654,7 @@ mod internal {
             if control.value() != value {
                 return Err(NokhwaError::SetPropertyError {
                     property: id.to_string(),
-                    value: format!("{:?}", value),
+                    value: format!("{value:?}"),
                     error: "Rejected".to_string(),
                 });
             }
@@ -715,13 +719,13 @@ mod internal {
 
             if self.stream_handle.is_some() {
                 return match self.open() {
-                    Ok(_) => Ok(()),
+                    Ok(()) => Ok(()),
                     Err(why) => {
                         // undo
                         let device = self.lock_device()?;
                         if let Err(why) = Capture::set_format(&*device, &prev_format) {
                             return Err(NokhwaError::SetPropertyError {
-                                property: format!("Attempt undo due to stream acquisition failure with error {}. Resolution, FrameFormat", why),
+                                property: format!("Attempt undo due to stream acquisition failure with error {why}. Resolution, FrameFormat"),
                                 value: prev_format.to_string(),
                                 error: why.to_string(),
                             });
@@ -729,7 +733,7 @@ mod internal {
                         if let Err(why) = Capture::set_params(&*device, &prev_fps) {
                             return Err(NokhwaError::SetPropertyError {
                                 property:
-                                format!("Attempt undo due to stream acquisition failure with error {}. Frame rate", why),
+                                format!("Attempt undo due to stream acquisition failure with error {why}. Frame rate"),
                                 value: prev_fps.to_string(),
                                 error: why.to_string(),
                             });
@@ -806,9 +810,8 @@ mod internal {
                 Ok(formats) => {
                     let mut frame_format_vec = vec![];
                     for format in formats {
-                        match fourcc_to_frameformat(format.fourcc) {
-                            Some(ff) => frame_format_vec.push(ff),
-                            None => continue,
+                        if let Some(ff) = fourcc_to_frameformat(format.fourcc) {
+                            frame_format_vec.push(ff);
                         }
                     }
                     frame_format_vec.sort();
@@ -947,7 +950,7 @@ mod internal {
         )
     }
 
-    /// Convert a V4L2 CLOCK_MONOTONIC timestamp to a wallclock Duration since UNIX_EPOCH.
+    /// Convert a V4L2 `CLOCK_MONOTONIC` timestamp to a wallclock Duration since `UNIX_EPOCH`.
     fn monotonic_to_wallclock(ts: v4l::Timestamp) -> Option<std::time::Duration> {
         let frame_mono = std::time::Duration::from(ts);
         if frame_mono.is_zero() {
@@ -964,8 +967,8 @@ mod internal {
         };
         // SAFETY: passing valid pointers to kernel clock_gettime
         unsafe {
-            libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut mono_now);
-            libc::clock_gettime(libc::CLOCK_REALTIME, &mut wall_now);
+            libc::clock_gettime(libc::CLOCK_MONOTONIC, &raw mut mono_now);
+            libc::clock_gettime(libc::CLOCK_REALTIME, &raw mut wall_now);
         }
         let mono_now = std::time::Duration::new(mono_now.tv_sec as u64, mono_now.tv_nsec as u32);
         let wall_now = std::time::Duration::new(wall_now.tv_sec as u64, wall_now.tv_nsec as u32);
