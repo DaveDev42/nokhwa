@@ -94,6 +94,19 @@
   `convert_to_rgb_buffer` / `convert_to_rgba_buffer` are unreachable
   through the typed `Frame<Gray>` API (gray is luma-only), so those
   two tests call the crate-internal dispatchers directly.
+* **Cover the remaining `NokhwaError` `Display` variants.**
+  `error_tests.rs` already pinned the four variants with optional
+  context (`GeneralError`, `OpenStreamError`, `ReadFrameError`,
+  `StreamShutdownError`) plus `TimeoutError`,
+  `UnsupportedOperationError`, and `ProcessFrameError`, but eight
+  variants emitted by every backend went uncovered:
+  `UninitializedError`, `InitializeError`, `ShutdownError`,
+  `StructureError`, `OpenDeviceError`, `GetPropertyError`,
+  `SetPropertyError`, `NotImplementedError`. Their `Display` output
+  is part of the public error contract — applications grep / log on
+  it. Added one targeted test per variant pinning the format string
+  contains the expected fields (backend name, device path, property
+  name + value, etc.). 8 new tests in `error_tests.rs`.
 * **`nokhwa-core::testing` mock helpers gain direct unit coverage.**
   `mock_frame`'s per-format byte-per-pixel table (3 for MJPEG / YUYV /
   RAWRGB / RAWBGR / NV12, 1 for GRAY) and `mock_info`'s

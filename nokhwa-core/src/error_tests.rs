@@ -111,6 +111,90 @@ fn process_frame_error_display_includes_src_and_destination() {
 }
 
 #[test]
+fn uninitialized_error_display_mentions_init() {
+    let e = NokhwaError::UninitializedError;
+    let s = format!("{e}");
+    assert!(s.contains("Uninitialized"));
+    assert!(s.contains("init()"));
+}
+
+#[test]
+fn initialize_error_display_includes_backend_and_error() {
+    let e = NokhwaError::InitializeError {
+        backend: ApiBackend::Video4Linux,
+        error: "no /dev/video0".into(),
+    };
+    let s = format!("{e}");
+    assert!(s.contains("Video4Linux"));
+    assert!(s.contains("no /dev/video0"));
+}
+
+#[test]
+fn shutdown_error_display_includes_backend_and_error() {
+    let e = NokhwaError::ShutdownError {
+        backend: ApiBackend::AVFoundation,
+        error: "device busy".into(),
+    };
+    let s = format!("{e}");
+    assert!(s.contains("AVFoundation"));
+    assert!(s.contains("device busy"));
+}
+
+#[test]
+fn structure_error_display_includes_structure_and_error() {
+    let e = NokhwaError::StructureError {
+        structure: "FrameFormat".into(),
+        error: "No match for FOOBAR".into(),
+    };
+    let s = format!("{e}");
+    assert!(s.contains("FrameFormat"));
+    assert!(s.contains("No match for FOOBAR"));
+}
+
+#[test]
+fn open_device_error_display_includes_device_and_error() {
+    let e = NokhwaError::OpenDeviceError {
+        device: "/dev/video2".into(),
+        error: "permission denied".into(),
+    };
+    let s = format!("{e}");
+    assert!(s.contains("/dev/video2"));
+    assert!(s.contains("permission denied"));
+}
+
+#[test]
+fn get_property_error_display_includes_property_and_error() {
+    let e = NokhwaError::GetPropertyError {
+        property: "Brightness".into(),
+        error: "not supported".into(),
+    };
+    let s = format!("{e}");
+    assert!(s.contains("Brightness"));
+    assert!(s.contains("not supported"));
+}
+
+#[test]
+fn set_property_error_display_includes_property_value_and_error() {
+    let e = NokhwaError::SetPropertyError {
+        property: "Exposure".into(),
+        value: "9999".into(),
+        error: "out of range".into(),
+    };
+    let s = format!("{e}");
+    assert!(s.contains("Exposure"));
+    assert!(s.contains("9999"));
+    assert!(s.contains("out of range"));
+}
+
+#[test]
+fn not_implemented_error_display_includes_message() {
+    let e = NokhwaError::NotImplementedError("hotplug on browser".into());
+    let s = format!("{e}");
+    assert!(s.contains("not implemented"));
+    assert!(s.contains("hotplug on browser"));
+}
+
+#[test]
 fn helper_constructors_default_optional_context_to_none() {
     if let NokhwaError::GeneralError { backend, .. } = NokhwaError::general("x") {
         assert!(backend.is_none());
