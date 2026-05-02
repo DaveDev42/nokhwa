@@ -510,7 +510,10 @@ pub const fn color_frame_formats() -> &'static [FrameFormat] {
 
 /// Describes a Resolution.
 /// This struct consists of a Width and a Height value (x,y). <br>
-/// Note: the [`Ord`] implementation of this struct is flipped from highest to lowest.
+/// Note: the [`Ord`] implementation is **lexicographic and ascending**:
+/// width is the primary key (lowest first), height is the tiebreaker
+/// (lowest first). `Vec::iter().max()` therefore returns the largest
+/// resolution, which is what [`RequestedFormat::fulfill`] relies on.
 /// # JS-WASM
 /// This is exported as `JSResolution`
 #[cfg_attr(feature = "serialize", derive(Serialize, Deserialize))]

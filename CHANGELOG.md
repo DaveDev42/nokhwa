@@ -127,8 +127,40 @@
   `cargo test -p nokhwa-core` invocation emitted
   `warning: unused import: \`Mjpeg\`` until now.
 
+### Documentation
+
+* **Fix misleading `Resolution` `Ord` docstring.** The doc-comment
+  on `Resolution` claimed "the `Ord` implementation of this struct
+  is flipped from highest to lowest", but the actual `cmp` impl is
+  plain lex-ascending (width primary, height tiebreaker — both
+  lowest first). The mismatch was a real hazard: a contributor
+  trusting the docstring and "fixing" the implementation would
+  silently invert the `Iterator::max` path that
+  `RequestedFormat::fulfill` uses for `AbsoluteHighestResolution`,
+  causing `fulfill` to return the *lowest* resolution. Replaced
+  with a description of the actual lex-ascending behaviour and a
+  pointer to the `fulfill` consumer.
+
 ### Testing
 
+* **Pin types-layer invariants with 4 unit tests in
+  `nokhwa-core/src/types_tests.rs`.** Two distinct silent-regression
+  hazards in `RequestedFormat::fulfill` were uncovered: (a) the
+  existing `color_frame_formats_subset_of_all` test only verified
+  that every entry is in `frame_formats()` — it said nothing about
+  what must NOT appear, so a refactor accidentally adding
+  `FrameFormat::GRAY` to `color_frame_formats()` would silently
+  route GRAY cameras through a chroma decode pipeline; (b) the
+  `Resolution::Ord` impl is consumed via `Iterator::max`, but no
+  test pinned the lex-ascending semantics through that path —
+  a comparator inversion (e.g. someone reversing `cmp` to "fix"
+  the misleading "flipped" docstring) would silently invert
+  `AbsoluteHighestResolution` selection. New tests pin: (1)
+  `color_frame_formats()` must not contain `GRAY`; (2) every
+  non-GRAY entry in `frame_formats()` must appear in
+  `color_frame_formats()` (the bijection); (3) `Resolution`
+  ordering is lex-ascending, not area-based (1×0 > 0×u32::MAX);
+  (4) `iter().max()` on a mixed list picks the largest width-first.
 * **Pin size-prediction invariants with 3 unit tests across
   `nokhwa-core/src/types_tests.rs` and `traits_tests.rs`.**
   Two distinct size-prediction formulas drive destination-buffer
