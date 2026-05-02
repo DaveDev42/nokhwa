@@ -226,3 +226,74 @@ impl Drop for TokioCameraRunner {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{spawn_forwarder, FORWARDER_CAPACITY};
+    use tokio::task::JoinHandle;
+
+    /// `FORWARDER_CAPACITY` is the documented buffer size for the
+    /// tokio-side mpsc channel that bridges blocking-thread sends
+    /// to async receivers. The crate-level docs note `32` as a
+    /// considered choice ("large enough to absorb brief async
+    /// scheduling jitter without starving the forwarder, small
+    /// enough that back-pressure still reaches the sync-side
+    /// bounded channel"). Pin the exact value so a future tweak
+    /// is a deliberate, reviewed change rather than a silent
+    /// memory-vs-throughput shift.
+    #[test]
+    fn forwarder_capacity_is_thirty_two() {
+        assert_eq!(FORWARDER_CAPACITY, 32);
+    }
+
+    /// `spawn_forwarder` bridges items from a `std::sync::mpsc::Receiver`
+    /// to a `tokio::sync::mpsc::Receiver`. Pin the contract: items
+    /// produced on the sync side reach the async side in order.
+    #[tokio::test(flavor = "current_thread")]
+    async fn forwarder_bridges_sync_to_async_in_order() {
+        let (sync_tx, sync_rx) = std::sync::mpsc::channel::<u32>();
+        let mut forwarders: Vec<JoinHandle<()>> = Vec::new();
+        let mut async_rx = spawn_forwarder(sync_rx, &mut forwarders);
+        assert_eq!(
+            forwarders.len(),
+            1,
+            "spawn_forwarder must register one forwarder JoinHandle"
+        );
+
+        for i in 0..10u32 {
+            sync_tx.send(i).expect("sync_tx.send");
+        }
+        drop(sync_tx);
+
+        let mut received = Vec::new();
+        while let Some(v) = async_rx.recv().await {
+            received.push(v);
+        }
+        assert_eq!(
+            received,
+            (0..10).collect::<Vec<_>>(),
+            "forwarder must preserve order across the sync→async bridge"
+        );
+    }
+
+    /// When the sync producer disconnects, the async receiver must
+    /// observe `None` (channel closed) and the forwarder task must
+    /// exit cleanly. Catches a regression where the forwarder
+    /// accidentally swallows the `Err` branch from `sync_rx.recv()`
+    /// and stays alive holding the tokio sender, which would prevent
+    /// the async side from ever observing closure.
+    #[tokio::test(flavor = "current_thread")]
+    async fn forwarder_closes_async_when_sync_producer_drops() {
+        let (sync_tx, sync_rx) = std::sync::mpsc::channel::<u32>();
+        let mut forwarders: Vec<JoinHandle<()>> = Vec::new();
+        let mut async_rx = spawn_forwarder(sync_rx, &mut forwarders);
+        drop(sync_tx);
+        // After the sync sender is dropped, the forwarder's
+        // sync_rx.recv() returns Err and the task exits, dropping
+        // its tokio sender; the async recv() then yields None.
+        assert!(
+            async_rx.recv().await.is_none(),
+            "async receiver must observe closure when sync producer disconnects"
+        );
+    }
+}
