@@ -667,6 +667,70 @@ fn stream_camera_reopen_after_close() {
     cam.close().expect("second StreamCamera::close");
 }
 
+/// `compatible_formats()` must not duplicate entries. The
+/// per-backend enumerators sometimes emit the same `(resolution,
+/// frame_format, frame_rate)` tuple twice when the underlying API
+/// reports a format under multiple internal media-type IDs (MSMF
+/// `IMFAttributes` enumeration is the historical offender). The
+/// pipeline `RequestedFormat::fulfill` and downstream UI code that
+/// indexes into this list assume each tuple is unique; a regression
+/// would silently double-count a format and surface as a confusing
+/// duplicate row in pickers.
+#[test]
+fn compatible_formats_unique() {
+    let OpenedCamera::Stream(mut cam) = open_first() else {
+        eprintln!("compatible_formats_unique: backend is not Stream-capable; skipping.");
+        return;
+    };
+    let formats = cam
+        .compatible_formats()
+        .expect("StreamCamera::compatible_formats");
+
+    let mut sorted = formats.clone();
+    sorted.sort();
+    sorted.dedup();
+    assert_eq!(
+        formats.len(),
+        sorted.len(),
+        "compatible_formats() returned duplicate (resolution, format, frame_rate) tuples: {formats:?}"
+    );
+}
+
+/// After `set_format(fmt)` succeeds, `negotiated_format()` must
+/// reflect that exact format. Catches a regression where a backend
+/// silently substitutes a different format on the way in (e.g.
+/// fallback to a default resolution because the requested resolution
+/// failed an internal validation) without surfacing an error. The
+/// existing `set_format_from_compatible_round_trip` runs the round
+/// trip end-to-end for every entry; this is the focused
+/// single-format pin so a future bisect points at the
+/// negotiated-format invariant directly.
+#[test]
+fn negotiated_format_after_set_format_matches() {
+    let OpenedCamera::Stream(mut cam) = open_first() else {
+        eprintln!(
+            "negotiated_format_after_set_format_matches: backend is not Stream-capable; skipping."
+        );
+        return;
+    };
+    let formats = cam
+        .compatible_formats()
+        .expect("StreamCamera::compatible_formats");
+    let Some(target) = formats.into_iter().next() else {
+        eprintln!(
+            "negotiated_format_after_set_format_matches: device exposes no compatible formats; skipping."
+        );
+        return;
+    };
+    cam.set_format(target)
+        .unwrap_or_else(|e| panic!("set_format({target}): {e}"));
+    let negotiated = cam.negotiated_format();
+    assert_eq!(
+        negotiated, target,
+        "negotiated_format() does not match set_format() input: wanted {target}, got {negotiated}"
+    );
+}
+
 // The file is already gated by `device-test` at the top, so this
 // submodule's effective gate is `device-test AND runner` — i.e. it
 // compiles only when both features are enabled.

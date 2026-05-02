@@ -116,6 +116,25 @@
 
 ### Testing
 
+* **Pin format-uniqueness and `negotiated_format()` round-trip in
+  `tests/device_tests.rs`.** Two new device tests cover gaps in the
+  existing TODO Backlog:
+  - `compatible_formats_unique` — `StreamCamera::compatible_formats()`
+    must not return duplicate `(resolution, frame_format,
+    frame_rate)` tuples. MSMF historically emitted the same format
+    twice when the underlying `IMFAttributes` enumeration reported
+    it under multiple internal media-type IDs; downstream pickers
+    that index into this list assume each entry is unique, so a
+    regression would silently double-count a format.
+  - `negotiated_format_after_set_format_matches` — after a
+    successful `set_format(fmt)`, `negotiated_format()` must echo
+    the exact same format. Catches a regression where a backend
+    silently substitutes a fallback (e.g. a default resolution)
+    without surfacing an error. The existing
+    `set_format_from_compatible_round_trip` runs the loop
+    end-to-end for every entry; this focused single-format pin
+    makes a future bisect point at the negotiated-format invariant
+    directly.
 * **Pin `ControlValueSetter::Display` (10 variants) and
   `CameraControl::Display` rendering in
   `nokhwa-core/src/types_tests.rs`.** `ControlValueSetter::Display`
