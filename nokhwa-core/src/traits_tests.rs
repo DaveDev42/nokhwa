@@ -294,11 +294,7 @@ impl FrameSource for FrameCallCounter {
     }
     fn frame(&mut self) -> Result<Buffer, NokhwaError> {
         self.frame_calls += 1;
-        Ok(Buffer::new(
-            self.fmt.resolution(),
-            &[],
-            self.fmt.format(),
-        ))
+        Ok(Buffer::new(self.fmt.resolution(), &[], self.fmt.format()))
     }
     fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
         Ok(Cow::Borrowed(&[]))
