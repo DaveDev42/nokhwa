@@ -18,6 +18,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p nokhwa-core
+      # `wgpu-types` gates the GPU output module (`src/wgpu.rs`) behind
+      # a `#[cfg(...)]`. Default-feature `cargo test` skips it entirely,
+      # so the `raw_texture_layout` arithmetic ships untested without
+      # this second invocation. The tests are pure CPU arithmetic; no
+      # GPU/surface is created, so ubuntu-latest is sufficient.
+      - run: cargo test -p nokhwa-core --features wgpu-types
 
   # Verifies output feature deps resolve correctly.
   # input-v4l satisfies the compile_error! guard that requires an input backend.
