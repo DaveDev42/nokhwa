@@ -1631,3 +1631,54 @@ fn api_backend_derived_ord_is_declaration_order() {
         ]
     );
 }
+
+// ─── KnownCameraControl / KnownCameraControlFlag Display rendering ───
+//
+// All four Display impls in `types.rs` delegate to `{self:?}`. Pin the rendering
+// so a future move away from Debug-piping is a deliberate, reviewed change.
+
+#[test]
+fn known_camera_control_display_renders_variant_name() {
+    assert_eq!(KnownCameraControl::Brightness.to_string(), "Brightness");
+    assert_eq!(KnownCameraControl::WhiteBalance.to_string(), "WhiteBalance");
+    assert_eq!(
+        KnownCameraControl::BacklightComp.to_string(),
+        "BacklightComp"
+    );
+    assert_eq!(KnownCameraControl::Focus.to_string(), "Focus");
+    assert_eq!(KnownCameraControl::Other(42).to_string(), "Other(42)");
+}
+
+#[test]
+fn known_camera_control_flag_display_renders_variant_name() {
+    assert_eq!(KnownCameraControlFlag::Automatic.to_string(), "Automatic");
+    assert_eq!(KnownCameraControlFlag::Manual.to_string(), "Manual");
+    assert_eq!(KnownCameraControlFlag::Continuous.to_string(), "Continuous");
+    assert_eq!(KnownCameraControlFlag::ReadOnly.to_string(), "ReadOnly");
+    assert_eq!(KnownCameraControlFlag::WriteOnly.to_string(), "WriteOnly");
+    assert_eq!(KnownCameraControlFlag::Volatile.to_string(), "Volatile");
+    assert_eq!(KnownCameraControlFlag::Disabled.to_string(), "Disabled");
+}
+
+#[test]
+fn requested_format_type_display_matches_debug() {
+    let none = RequestedFormatType::None;
+    assert_eq!(none.to_string(), format!("{none:?}"));
+    assert_eq!(none.to_string(), "None");
+
+    let abs_res = RequestedFormatType::AbsoluteHighestResolution;
+    assert_eq!(abs_res.to_string(), "AbsoluteHighestResolution");
+
+    let exact =
+        RequestedFormatType::Exact(CameraFormat::new_from(1920, 1080, FrameFormat::MJPEG, 30));
+    assert_eq!(exact.to_string(), format!("{exact:?}"));
+}
+
+#[test]
+fn requested_format_display_matches_debug() {
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::AbsoluteHighestResolution,
+        &[FrameFormat::MJPEG, FrameFormat::YUYV],
+    );
+    assert_eq!(req.to_string(), format!("{req:?}"));
+}
