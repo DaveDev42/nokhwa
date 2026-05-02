@@ -38,10 +38,11 @@
 
 //! # nokhwa-bindings-gstreamer
 //!
-//! Cross-platform `GStreamer` bindings for
-//! [`nokhwa`](https://crates.io/crates/nokhwa). Device enumeration only in
-//! this release — streaming, format negotiation, and control surface land
-//! in subsequent sessions. See the root project `TODO.md` for the roadmap.
+//! Cross-platform `GStreamer` bindings for `nokhwa`. Covers device
+//! enumeration, streaming, format negotiation, controls (Linux), and URL
+//! sources (`rtsp://` / `http://` / `file://`) via `uridecodebin`. Backend
+//! parity with the native V4L / AVFoundation / MediaFoundation paths;
+//! gaps are tracked in the root project `TODO.md`.
 //!
 //! This crate is consumed through `nokhwa` with feature `input-gstreamer`.
 //! Do not depend on it directly.

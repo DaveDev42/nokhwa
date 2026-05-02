@@ -413,6 +413,18 @@
 
 ### Documentation
 
+* **`nokhwa-bindings-gstreamer` crate doc: drop the upstream
+  crates.io link + the "device enumeration only" stale claim.** The
+  crate-level `//!` doc still pointed at
+  `https://crates.io/crates/nokhwa` (the upstream crate, not this
+  fork) and described the GStreamer backend as "device enumeration
+  only in this release — streaming, format negotiation, and control
+  surface land in subsequent sessions." All three sessions (2:
+  streaming, 3: controls, 5: URL sources) shipped in 0.14.3 — the
+  paragraph was carrying ~6 months of staleness. Replaced with prose
+  that names the actual surface (enumeration, streaming, format
+  negotiation, controls, URL sources) and points unfinished work at
+  `TODO.md`. No code change.
 * **`src/lib.rs` crate doc: fix `nokhwa-tokio` crates.io link +
   fill the feature flags list.** The crate-level doc still pointed
   at `https://crates.io/crates/nokhwa-tokio` even though this fork
