@@ -1340,6 +1340,64 @@ fn frame_format_to_fourcc_is_four_bytes() {
     }
 }
 
+// ─── FrameFormat FromStr ───
+//
+// `from_fourcc` parses 4-byte FourCC tokens (e.g. "MJPG", "RGB3"), but
+// `FromStr` parses the human-readable variant names (e.g. "MJPEG",
+// "RAWRGB"). They are *distinct mappings* — confusing them is a
+// common backend bug — so pin the FromStr table separately.
+
+#[test]
+fn frame_format_from_str_recognises_every_variant() {
+    for &fmt in frame_formats() {
+        let name = format!("{fmt:?}");
+        let parsed: FrameFormat = name.parse().unwrap_or_else(|e| {
+            panic!("FrameFormat::from_str({name:?}) should succeed but got: {e:?}")
+        });
+        assert_eq!(parsed, fmt, "FromStr({name:?}) round-trip mismatch");
+    }
+}
+
+#[test]
+fn frame_format_from_str_unknown_returns_structure_error() {
+    let err = "H264"
+        .parse::<FrameFormat>()
+        .expect_err("unknown should err");
+    match err {
+        NokhwaError::StructureError { structure, error } => {
+            assert_eq!(structure, "FrameFormat");
+            assert!(
+                error.contains("H264"),
+                "error message must echo the offending input, got: {error}"
+            );
+        }
+        other => panic!("expected StructureError, got {other:?}"),
+    }
+}
+
+#[test]
+fn frame_format_from_str_is_case_sensitive() {
+    // "mjpeg" (lowercase) must NOT parse — pin this so a future
+    // "be lenient" tweak is a deliberate, reviewed change rather
+    // than silent surface drift.
+    assert!("mjpeg".parse::<FrameFormat>().is_err());
+    assert!("Mjpeg".parse::<FrameFormat>().is_err());
+}
+
+#[test]
+fn frame_format_from_str_distinguished_from_fourcc() {
+    // "MJPG" is a valid FourCC but NOT a valid FromStr token, and
+    // "MJPEG" is a valid FromStr token but NOT a valid FourCC.
+    // Pin the asymmetry to catch a future merge of the two tables.
+    assert!("MJPG".parse::<FrameFormat>().is_err());
+    assert_eq!(FrameFormat::from_fourcc("MJPEG"), None);
+    assert_eq!(
+        "MJPEG".parse::<FrameFormat>().ok(),
+        Some(FrameFormat::MJPEG)
+    );
+    assert_eq!(FrameFormat::from_fourcc("MJPG"), Some(FrameFormat::MJPEG));
+}
+
 // ─── KnownCameraControl index helpers ───
 
 #[test]
