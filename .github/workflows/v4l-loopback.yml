@@ -50,16 +50,40 @@ jobs:
         # runs on a new kernel still do the full apt-get dance and
         # pay the 50MB linux-modules-extra cost; every other run
         # hits the cache and installs in ~10s instead of ~90s.
+        #
+        # linux-headers-azure is included so DKMS can compile
+        # v4l2loopback.ko against the running kernel on cache-hit
+        # runs (see "Ensure v4l2loopback DKMS module is built" step).
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: >-
             ${{ steps.kernel.outputs.modules-base }}
             ${{ steps.kernel.outputs.modules }}
+            linux-headers-azure
             libv4l-dev
             v4l-utils
             v4l2loopback-dkms
             ffmpeg
-          version: kernel2-${{ steps.kernel.outputs.version }}
+          version: kernel3-${{ steps.kernel.outputs.version }}
+
+      - name: Ensure v4l2loopback DKMS module is built
+        # awalsh128/cache-apt-pkgs-action defaults to
+        # execute_install_scripts: false. On cache hit the dpkg DB and
+        # /usr/src/v4l2loopback-<ver>/ are restored but the
+        # v4l2loopback-dkms postinst (which runs `dkms install`) never
+        # re-executes, so /lib/modules/<kernel>/updates/dkms/v4l2loopback.ko
+        # for the *current* kernel is missing. Call `dkms install`
+        # explicitly with the current kernel as target. Idempotent: a
+        # no-op (~0s) when the postinst already ran on a cold install,
+        # a ~10–15s compile on cache-hit runs.
+        run: |
+          KERNEL="$(uname -r)"
+          if sudo dkms status v4l2loopback/0.12.7 -k "$KERNEL" 2>/dev/null \
+              | grep -q "installed"; then
+            echo "v4l2loopback/0.12.7 already installed for $KERNEL — skipping dkms install"
+          else
+            sudo dkms install v4l2loopback/0.12.7 -k "$KERNEL"
+          fi
 
       - name: Rebuild kernel module dependency index
         # awalsh128/cache-apt-pkgs-action skips package postinst scripts
@@ -67,8 +91,10 @@ jobs:
         # postinst normally runs `depmod -a` to regenerate
         # /lib/modules/<kernel>/modules.dep. Without it, modprobe
         # reports "not found" by name even when the .ko file is on
-        # disk. Run depmod unconditionally — idempotent, ~500ms — so
-        # both cold installs and cache hits leave a usable index.
+        # disk. The `dkms install` step above also runs depmod
+        # internally, but an explicit call here covers the
+        # linux-modules* .ko index regardless of ordering and is
+        # idempotent (~500ms).
         run: sudo depmod -a
 
       - name: Load v4l2loopback module

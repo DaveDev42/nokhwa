@@ -4,25 +4,35 @@
 
 ### Infrastructure
 
-* **`v4l-loopback` CI: load `videodev` correctly on Azure 6.17 kernel.**
-  Two compounding causes silently broke every PR run since the #183
-  era: (1) only `linux-modules-extra-<kernel>` was installed, but on
-  the Ubuntu Azure 6.17.x kernel `videodev.ko` (the V4L2 core module)
-  ships in the base `linux-modules-<kernel>` package — the `-extra`
-  split no longer carries it; (2) `awalsh128/cache-apt-pkgs-action`
-  defaults to `execute_install_scripts: false`, so the
-  `linux-modules*` `postinst` script (which runs `depmod -a`) is
-  skipped on cache hits, leaving `/lib/modules/<kernel>/modules.dep`
-  stale and causing `modprobe videodev` to report "not found" even
-  when the `.ko` is on disk. Fix: add `linux-modules-$KERNEL` to the
-  apt package list alongside `linux-modules-extra-$KERNEL`; insert an
-  unconditional `sudo depmod -a` step between the apt cache restore
-  and the `modprobe` calls; bump the cache version key from `kernel-`
-  to `kernel2-` to bust the now-incomplete cached entry. Job-level
-  `continue-on-error: true` is preserved — the symptom (run-level
-  green, job-level failure with all device-test steps skipped) was
-  what masked the breakage in the first place; the fix makes the job
-  actually run end-to-end again.
+* **`v4l-loopback` CI: fix `videodev` + `v4l2loopback` modprobe
+  failures on Azure 6.17 kernel.** Three compounding causes silently
+  broke every PR run since the #183 era (masked by job-level
+  `continue-on-error: true` — run-level green, job-level failure with
+  every device-test step `skipped`):
+  (1) only `linux-modules-extra-<kernel>` was installed, but on the
+  Ubuntu Azure 6.17.x kernel `videodev.ko` (the V4L2 core module)
+  ships in the *base* `linux-modules-<kernel>` package — the `-extra`
+  split no longer carries it;
+  (2) `awalsh128/cache-apt-pkgs-action` defaults to
+  `execute_install_scripts: false`, so the `linux-modules*` `postinst`
+  script (which runs `depmod -a`) is skipped on cache restore,
+  leaving `/lib/modules/<kernel>/modules.dep` stale and causing
+  `modprobe videodev` to report "not found" by name even when the
+  `.ko` is on disk;
+  (3) the same `execute_install_scripts: false` behaviour means that
+  on a cache-hit run the `v4l2loopback-dkms` `postinst` (`dkms install`)
+  never re-executes, so the compiled
+  `/lib/modules/<kernel>/updates/dkms/v4l2loopback.ko` is missing for
+  the running kernel and `modprobe v4l2loopback` fails with "Module
+  not found in directory".
+  Fix: add `linux-modules-$KERNEL` (base) and `linux-headers-azure`
+  to the apt package list; insert an unconditional `dkms install
+  v4l2loopback/0.12.7 -k $(uname -r)` step (idempotent — no-op on cold
+  runs, ~10–15s compile on cache hits) after cache restore; insert an
+  unconditional `sudo depmod -a` step as belt-and-suspenders; bump
+  the cache version key from `kernel-` to `kernel3-` to bust the
+  incomplete cached entry. Job-level `continue-on-error: true`
+  preserved.
 * **`clippy::pedantic` enforced across all workspace crates; matrix lint CI.**
   Added `#![deny(clippy::pedantic)]` / `#![warn(clippy::all)]` /
   `#![allow(clippy::module_name_repetitions)]` headers to
