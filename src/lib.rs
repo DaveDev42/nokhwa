@@ -67,13 +67,13 @@
 //! blocking calls in the runtime's blocking-task helper (e.g.
 //! [`tokio::task::spawn_blocking`] or `async_std::task::spawn_blocking`).
 //!
-//! For tokio users, the companion crate
-//! [`nokhwa-tokio`](https://crates.io/crates/nokhwa-tokio) ships
+//! For tokio users, the companion workspace crate `nokhwa-tokio` ships
 //! `TokioCameraRunner`, an async wrapper whose receivers are
 //! `tokio::sync::mpsc::Receiver`s (use `.recv().await`). It also handles
 //! async-safe `Drop`: dropping the wrapper inside a tokio runtime does not
 //! block the caller — the underlying worker thread is joined on a
-//! `spawn_blocking` task.
+//! `spawn_blocking` task. Add it as a path or git dependency alongside
+//! `nokhwa` (this fork is not published to crates.io).
 //!
 //! Bounded channels (with `Overflow::DropNewest` or `DropOldest`) are the
 //! default for new `CameraRunner`s in 0.14+. A slow async consumer no
@@ -84,12 +84,16 @@
 //!
 //! Enable at least one input backend: `input-native` (auto-selects), or
 //! `input-v4l` / `input-avfoundation` / `input-msmf` for a specific platform.
+//! `input-gstreamer` is cross-platform and additionally handles
+//! `rtsp://` / `http://` / `file://` URLs via `CameraIndex::String`.
 //!
 //! - `mjpeg` (default): MJPEG decoding via `mozjpeg`.
 //! - `runner`: threaded helper [`CameraRunner`].
 //! - `output-wgpu`: direct frame-to-wgpu texture copy.
 //! - `serialize`: serde on core types.
 //! - `logging`: route internal diagnostics through the `log` crate.
+//! - `device-test`: build the integration tests in `tests/device_tests.rs`.
+//!   Requires a real camera; CI runners without one should leave it off.
 //!
 //! ## Traits
 //!
