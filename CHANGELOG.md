@@ -82,6 +82,19 @@
 
 ### Testing
 
+* **Pin GStreamer `pipeline::resolve_format` and `compatible_fourcc`.**
+  The two pure helpers in `nokhwa-bindings-gstreamer/src/pipeline.rs` —
+  `resolve_format` (the `RequestedFormat::fulfill` adapter that produces
+  the `OpenDeviceError` users see when no caps match) and
+  `compatible_fourcc` (the `collect → sort → dedup` shape unified across
+  all four backends in #198) — had zero unit tests despite being the
+  exit gates for `set_format` and `compatible_fourcc()` on real hardware.
+  Added 9 tests covering: `compatible_fourcc` empty / dedupe + sort /
+  singleton / ordering matches `FrameFormat::Ord` / idempotency;
+  `resolve_format` empty-candidates error / no-matching-format error
+  with candidates surfaced in the message / highest-resolution pick /
+  highest-framerate tie-break at max resolution / `Exact` round-trip /
+  `wanted_decoder` filter rejection of an otherwise-tied entry.
 * **Pin GStreamer `controls` static map + helpers.**
   `nokhwa-bindings-gstreamer/src/controls.rs` had zero tests despite
   carrying the full `KnownCameraControl` → V4L2-CID-name lookup table —
