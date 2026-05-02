@@ -413,6 +413,15 @@
 
 ### Documentation
 
+* **`nokhwa-bindings-windows-msmf::MediaFoundationCaptureDevice`
+  doc-link pointed at upstream `l1npengtul/nokhwa`.** The struct's
+  `# Quirks` section linked back-source readers at
+  `https://github.com/l1npengtul/nokhwa/tree/senpai/nokhwa-bindings-windows-msmf`
+  — both the wrong repo (upstream, not this fork) and a branch
+  (`senpai`) that doesn't exist on this fork. Repointed at
+  `DaveDev42/nokhwa/tree/main/nokhwa-bindings-windows-msmf`. Single
+  line touched; no rustdoc warnings from `cargo doc --no-deps
+  --package nokhwa-bindings-windows-msmf`.
 * **`nokhwa-bindings-gstreamer` crate doc: drop the upstream
   crates.io link + the "device enumeration only" stale claim.** The
   crate-level `//!` doc still pointed at
