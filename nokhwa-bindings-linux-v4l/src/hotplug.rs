@@ -301,7 +301,17 @@ mod real {
         tx: &Sender<HotplugEvent>,
         previous: &mut BTreeMap<String, CameraInfo>,
     ) -> bool {
-        let current = snapshot();
+        reconcile_and_emit_with(tx, previous, snapshot())
+    }
+
+    /// Diff `current` against `previous`, emit events, swap cache.
+    /// Split out from [`reconcile_and_emit`] so unit tests can inject
+    /// a synthetic `current` without touching `/dev/`.
+    fn reconcile_and_emit_with(
+        tx: &Sender<HotplugEvent>,
+        previous: &mut BTreeMap<String, CameraInfo>,
+        current: BTreeMap<String, CameraInfo>,
+    ) -> bool {
         for (key, info) in &current {
             if !previous.contains_key(key)
                 && tx.send(HotplugEvent::Connected(info.clone())).is_err()
@@ -339,6 +349,119 @@ mod real {
                 .map(|ci| (ci.index().to_string(), ci))
                 .collect(),
             Err(_) => BTreeMap::new(),
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::reconcile_and_emit_with;
+        use nokhwa_core::{
+            traits::HotplugEvent,
+            types::{CameraIndex, CameraInfo},
+        };
+        use std::{collections::BTreeMap, sync::mpsc};
+
+        fn info(idx: u32) -> CameraInfo {
+            CameraInfo::new(
+                &format!("cam{idx}"),
+                "test",
+                "test",
+                CameraIndex::Index(idx),
+            )
+        }
+
+        fn snap<I: IntoIterator<Item = u32>>(ids: I) -> BTreeMap<String, CameraInfo> {
+            ids.into_iter()
+                .map(|i| (CameraIndex::Index(i).to_string(), info(i)))
+                .collect()
+        }
+
+        /// `reconcile_and_emit_with` must replace `previous` with
+        /// `current` so the next call sees the updated cache.
+        #[test]
+        fn cache_is_swapped_after_reconcile() {
+            let (tx, _rx) = mpsc::channel();
+            let mut previous = snap([0]);
+            let current = snap([1, 2]);
+            assert!(reconcile_and_emit_with(&tx, &mut previous, current));
+            let keys: Vec<_> = previous.keys().cloned().collect();
+            assert_eq!(keys, vec!["1".to_string(), "2".to_string()]);
+        }
+
+        /// Newcomers (in `current`, not in `previous`) emit
+        /// `Connected`; removals (in `previous`, not in `current`)
+        /// emit `Disconnected`.
+        #[test]
+        fn arrivals_and_removals_are_both_emitted() {
+            let (tx, rx) = mpsc::channel();
+            let mut previous = snap([0, 1]);
+            let current = snap([1, 2]);
+            assert!(reconcile_and_emit_with(&tx, &mut previous, current));
+            drop(tx);
+            let events: Vec<_> = rx.iter().collect();
+            assert_eq!(events.len(), 2, "got: {events:?}");
+            let connected = events
+                .iter()
+                .filter(|e| matches!(e, HotplugEvent::Connected(_)))
+                .count();
+            let disconnected = events
+                .iter()
+                .filter(|e| matches!(e, HotplugEvent::Disconnected(_)))
+                .count();
+            assert_eq!(connected, 1, "expected 1 Connected, got {events:?}");
+            assert_eq!(disconnected, 1, "expected 1 Disconnected, got {events:?}");
+        }
+
+        /// Pin the documented ordering invariant: arrivals are sent
+        /// before removals so a re-plug landing in one inotify wake
+        /// is observable as `Disconnected` → `Connected` on the
+        /// consumer side. (Here we have one of each across distinct
+        /// keys; the key promise is "all Connecteds precede all
+        /// Disconnecteds within a single reconcile call".)
+        #[test]
+        fn arrivals_precede_removals_in_emission_order() {
+            let (tx, rx) = mpsc::channel();
+            let mut previous = snap([0]);
+            let current = snap([1]);
+            assert!(reconcile_and_emit_with(&tx, &mut previous, current));
+            drop(tx);
+            let events: Vec<_> = rx.iter().collect();
+            assert_eq!(events.len(), 2);
+            assert!(
+                matches!(events[0], HotplugEvent::Connected(_)),
+                "first event must be Connected, got {:?}",
+                events[0]
+            );
+            assert!(
+                matches!(events[1], HotplugEvent::Disconnected(_)),
+                "second event must be Disconnected, got {:?}",
+                events[1]
+            );
+        }
+
+        /// No-op reconcile (current == previous) emits zero events
+        /// and leaves the cache equal.
+        #[test]
+        fn identical_snapshots_emit_no_events() {
+            let (tx, rx) = mpsc::channel();
+            let mut previous = snap([0, 1, 2]);
+            let current = snap([0, 1, 2]);
+            assert!(reconcile_and_emit_with(&tx, &mut previous, current));
+            drop(tx);
+            assert_eq!(rx.iter().count(), 0);
+            assert_eq!(previous.len(), 3);
+        }
+
+        /// If the channel is closed mid-emission, return false so
+        /// the worker can exit early instead of looping over a dead
+        /// channel.
+        #[test]
+        fn returns_false_when_channel_closed() {
+            let (tx, rx) = mpsc::channel();
+            drop(rx);
+            let mut previous = snap([0]);
+            let current = snap([1]);
+            assert!(!reconcile_and_emit_with(&tx, &mut previous, current));
         }
     }
 }
