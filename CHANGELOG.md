@@ -82,6 +82,23 @@
 
 ### Testing
 
+* **`nokhwa-core::testing` mock helpers gain direct unit coverage.**
+  `mock_frame`'s per-format byte-per-pixel table (3 for MJPEG / YUYV /
+  RAWRGB / RAWBGR / NV12, 1 for GRAY) and `mock_info`'s
+  `index` / `human_name` / `description` / `misc` round-trip were
+  exercised only indirectly via `tests/session.rs` and
+  `tests/runner.rs`, which only ever pushed MJPEG / YUYV frames.
+  Added four targeted unit tests inside the existing
+  `#[cfg(test)] mod tests` block: `mock_info_round_trip`,
+  `mock_frame_three_byte_formats_size_w_h_3`,
+  `mock_frame_gray_size_w_h_1`, and
+  `mock_frame_zero_dimensions_yields_empty_buffer`. Also wired
+  `cargo test -p nokhwa-core --features testing` into the
+  `Core unit tests` CI job — the existing `cargo test -p nokhwa-core`
+  invocation runs with default features (which do not include
+  `testing`), so without this addition the mock helpers would compile
+  but their tests would be skipped on every PR. Mirrors the
+  `--features wgpu-types` precedent.
 * **Expand `tests/device_tests.rs`.** Adds four integration tests that
   exercise corners of the `nokhwa::open` / `OpenedCamera` surface
   previously left uncovered: `open_invalid_index_errors` (a far-OOB

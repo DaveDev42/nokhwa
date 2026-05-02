@@ -24,6 +24,12 @@ jobs:
       # this second invocation. The tests are pure CPU arithmetic; no
       # GPU/surface is created, so ubuntu-latest is sufficient.
       - run: cargo test -p nokhwa-core --features wgpu-types
+      # `testing` gates the mock helpers (`src/testing.rs`) behind a
+      # `#[cfg(...)]`. The root crate's dev-dependencies activate it,
+      # but `cargo test -p nokhwa-core` above does not, so the unit
+      # tests covering `mock_frame` / `mock_info` ship untested
+      # without this third invocation.
+      - run: cargo test -p nokhwa-core --features testing
 
   # Verifies output feature deps resolve correctly.
   # input-v4l satisfies the compile_error! guard that requires an input backend.
