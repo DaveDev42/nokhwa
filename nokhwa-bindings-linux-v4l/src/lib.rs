@@ -1060,7 +1060,17 @@ mod internal {
 
     #[cfg(test)]
     mod tests {
-        use super::{expand_stepwise_resolutions, Resolution};
+        use super::{
+            expand_stepwise_resolutions, id_to_known_camera_control, known_camera_control_to_id,
+            KnownCameraControl, Resolution, V4L2_CONTROL_IDS,
+        };
+        use v4l::v4l_sys::{
+            V4L2_CID_BACKLIGHT_COMPENSATION, V4L2_CID_BRIGHTNESS, V4L2_CID_CONTRAST,
+            V4L2_CID_EXPOSURE, V4L2_CID_FOCUS_RELATIVE, V4L2_CID_GAIN, V4L2_CID_GAMMA,
+            V4L2_CID_HUE, V4L2_CID_IRIS_RELATIVE, V4L2_CID_PAN_RELATIVE, V4L2_CID_SATURATION,
+            V4L2_CID_SHARPNESS, V4L2_CID_TILT_RELATIVE, V4L2_CID_WHITE_BALANCE_TEMPERATURE,
+            V4L2_CID_ZOOM_RELATIVE,
+        };
 
         fn run(
             min_w: u32,
@@ -1127,6 +1137,89 @@ mod internal {
             assert!(out.contains(&Resolution::new(1280, 720)));
             assert!(!out.contains(&Resolution::new(1920, 1080)));
             assert!(!out.contains(&Resolution::new(3840, 2160)));
+        }
+
+        // V4L2_CONTROL_IDS contract: each row maps a canonical
+        // KnownCameraControl index (0..=14) to the matching V4L2_CID_*
+        // constant. If the order ever drifts, every standard control
+        // gets the wrong CID — set_control / camera_control would
+        // silently issue VIDIOC_S_CTRL on an unrelated control. Pin
+        // the table.
+        #[test]
+        fn v4l2_control_ids_table_order_matches_known_camera_control_index() {
+            let expected: [(KnownCameraControl, u32); KnownCameraControl::STANDARD_COUNT] = [
+                (KnownCameraControl::Brightness, V4L2_CID_BRIGHTNESS),
+                (KnownCameraControl::Contrast, V4L2_CID_CONTRAST),
+                (KnownCameraControl::Hue, V4L2_CID_HUE),
+                (KnownCameraControl::Saturation, V4L2_CID_SATURATION),
+                (KnownCameraControl::Sharpness, V4L2_CID_SHARPNESS),
+                (KnownCameraControl::Gamma, V4L2_CID_GAMMA),
+                (
+                    KnownCameraControl::WhiteBalance,
+                    V4L2_CID_WHITE_BALANCE_TEMPERATURE,
+                ),
+                (
+                    KnownCameraControl::BacklightComp,
+                    V4L2_CID_BACKLIGHT_COMPENSATION,
+                ),
+                (KnownCameraControl::Gain, V4L2_CID_GAIN),
+                (KnownCameraControl::Pan, V4L2_CID_PAN_RELATIVE),
+                (KnownCameraControl::Tilt, V4L2_CID_TILT_RELATIVE),
+                (KnownCameraControl::Zoom, V4L2_CID_ZOOM_RELATIVE),
+                (KnownCameraControl::Exposure, V4L2_CID_EXPOSURE),
+                (KnownCameraControl::Iris, V4L2_CID_IRIS_RELATIVE),
+                (KnownCameraControl::Focus, V4L2_CID_FOCUS_RELATIVE),
+            ];
+            for (idx, (ctrl, cid)) in expected.iter().enumerate() {
+                assert_eq!(
+                    ctrl.as_index(),
+                    Some(idx as u8),
+                    "expected canonical index {idx} for {ctrl:?}"
+                );
+                assert_eq!(
+                    V4L2_CONTROL_IDS[idx], *cid,
+                    "V4L2_CONTROL_IDS[{idx}] should be the CID for {ctrl:?}"
+                );
+            }
+        }
+
+        #[test]
+        fn known_camera_control_to_id_round_trips_for_every_standard_control() {
+            for idx in 0..KnownCameraControl::STANDARD_COUNT {
+                let ctrl = KnownCameraControl::from_index(
+                    u8::try_from(idx).expect("STANDARD_COUNT < 256"),
+                )
+                .expect("from_index in range");
+                let cid = known_camera_control_to_id(ctrl);
+                let back = id_to_known_camera_control(cid);
+                assert_eq!(back, ctrl, "round-trip failed for {ctrl:?} (cid={cid})");
+            }
+        }
+
+        #[test]
+        fn id_to_known_camera_control_unknown_returns_other() {
+            // 0xFFFF_FFFF is not a real V4L2 CID — the table must
+            // fall through to Other(id).
+            let unknown: u32 = 0xFFFF_FFFF;
+            match id_to_known_camera_control(unknown) {
+                KnownCameraControl::Other(v) => assert_eq!(v, u128::from(unknown)),
+                other => panic!("expected Other({unknown}), got {other:?}"),
+            }
+        }
+
+        #[test]
+        fn known_camera_control_to_id_other_truncates_to_u32() {
+            // Round-trip an Other(_) through to_platform_id: the stored
+            // u128 is truncated to u32 (V4L2 CIDs are u32 by definition).
+            let raw: u128 = 0xDEAD_BEEF;
+            let ctrl = KnownCameraControl::Other(raw);
+            let id = known_camera_control_to_id(ctrl);
+            assert_eq!(id, raw as u32);
+            // And the reverse path resurfaces an Other for an
+            // unrecognised CID — i.e. callers see the same variant
+            // discriminant either side of the FFI boundary.
+            let back = id_to_known_camera_control(id);
+            assert_eq!(back, KnownCameraControl::Other(u128::from(id)));
         }
     }
 }

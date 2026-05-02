@@ -82,6 +82,22 @@
 
 ### Testing
 
+* **Pin V4L2 control-ID table + `KnownCameraControl` ↔ V4L2-CID
+  round-trips.** `nokhwa-bindings-linux-v4l/src/lib.rs` carries a
+  `V4L2_CONTROL_IDS: [u32; 15]` table whose row order *must* match
+  `KnownCameraControl::as_index` (Brightness=0, Contrast=1, …,
+  Focus=14). Drift would silently send `VIDIOC_S_CTRL` for the wrong
+  control on real hardware — the user asks to set Brightness, the
+  driver receives Saturation. The order is not enforced by the type
+  system. Added 4 tests: an explicit `[(KnownCameraControl,
+  V4L2_CID_*); 15]` table-driven assertion that pins each row's
+  `(canonical_index, V4L2 CID)` pair; round-trip
+  `id_to_known_camera_control(known_camera_control_to_id(c)) == c`
+  for every standard control via `STANDARD_COUNT`-driven loop;
+  `id_to_known_camera_control(0xFFFF_FFFF)` returns
+  `Other(0xFFFF_FFFF)`; and `Other(0xDEAD_BEEF)` round-trips with
+  the documented `u128 → u32` truncation through `to_platform_id`
+  and back via `from_platform_id`.
 * **Pin `init` no-op stubs for non-AVFoundation builds.** `src/init.rs`
   exposes `nokhwa_initialize` and `nokhwa_check`, both of which collapse
   to compile-time no-ops on every platform / feature combo where
