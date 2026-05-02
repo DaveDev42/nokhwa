@@ -464,6 +464,23 @@ impl FrameFormat {
             Self::NV12 => "NV12",
         }
     }
+
+    /// Bytes per pixel after **decoding** to a flat RGB-style or grayscale
+    /// surface — `1` for [`FrameFormat::GRAY`], `3` for every color format.
+    /// This is *not* the wire size: e.g. YUYV is 2 bytes/pixel on the wire,
+    /// NV12 is 1.5, MJPEG is variable. Use this when sizing a destination
+    /// buffer for a decoded frame.
+    ///
+    /// Centralises the table that was previously duplicated in
+    /// `FrameSource::decoded_buffer_size` and the test-fixture
+    /// `mock_frame()`.
+    #[must_use]
+    pub const fn decoded_pixel_byte_width(&self) -> usize {
+        match self {
+            Self::MJPEG | Self::YUYV | Self::RAWRGB | Self::RAWBGR | Self::NV12 => 3,
+            Self::GRAY => 1,
+        }
+    }
 }
 
 /// Returns all the frame formats

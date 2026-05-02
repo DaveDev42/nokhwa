@@ -49,6 +49,19 @@
 
 ### Refactoring
 
+* **Centralise the decoded-pixel-byte-width table on
+  `FrameFormat::decoded_pixel_byte_width()`.** Two copies of the
+  same `match` (mapping each `FrameFormat` to `1` for `GRAY` or `3`
+  for every color format) lived in `nokhwa-core::traits`'s
+  `FrameSource::decoded_buffer_size` default impl and in the
+  test-fixture `nokhwa-core::testing::mock_frame`. Adding a new
+  variant required updating both, and a future divergence would
+  have produced inconsistent buffer sizing across the production
+  path and the test fixtures. New `const fn` method centralises
+  the table and is exhaustively unit-tested (3 tests: gray = 1,
+  every color = 3, and a total-coverage guard against an
+  unclassified future variant). Both call sites now delegate to
+  it. No public surface removed; behaviour unchanged.
 * **MSMF `compatible_fourcc` uses `sort() + dedup()` like V4L /
   AVFoundation.** Following the truncation fix, the inline
   `!contains()` dedup loop was kept around for one PR. This commit
