@@ -174,6 +174,17 @@
   shape-equivalence assertion. Wired the `Core unit tests` CI job to
   run `cargo test -p nokhwa-core --features wgpu-types` after the
   default-feature pass so these tests actually execute on every PR.
+* **`FrameSource::decoded_buffer_size` and `frame_timeout` defaults.**
+  Two trait default methods were untested: `decoded_buffer_size`
+  (per-format `pxwidth` table + alpha branch) and `frame_timeout` (the
+  default forwards to `frame()` ignoring the timeout). Added 5 tests
+  in `traits_tests.rs`: 3-byte-formats × {alpha on/off}, GRAY ×
+  {alpha on/off}, and `frame_timeout_default_forwards_to_frame` (uses
+  a small `FrameCallCounter` mock that bumps a counter on each
+  `frame()` invocation, asserting the default forwards 1:1). Pins
+  the per-format byte arithmetic so a future cleanup of the match
+  arms can't silently change buffer-size requirements that callers
+  rely on for pre-allocation.
 
 ### Documentation
 
