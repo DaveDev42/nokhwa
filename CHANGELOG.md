@@ -174,6 +174,25 @@
 
 ### Testing
 
+* **Pin `RequestedFormat::fulfill` `Closest` distance-tie tiebreaker
+  with 1 unit test in `nokhwa-core/src/types_tests.rs`.** When two
+  candidate resolutions are equidistant from the requested target,
+  the algorithm walks `sort_by_key` (stable) →
+  `dedup_by(|a, b| a.0.eq(&b.0))` → `first()`, which silently
+  collapses equidistant candidates down to whichever one appears
+  first in the input `all_formats` slice. That contract was
+  unpinned, so a future refactor swapping to `sort_unstable_by_key`
+  (no stability guarantee), or replacing `dedup_by` with a
+  different pruning step, would scramble selection on real cameras
+  that happen to advertise equidistant formats — and only manifest
+  as confusing format choices on hardware. New test fires
+  `fulfill` twice against the same target (100×100) with the same
+  set of candidates {50×100, 100×50, 200×200} in two different
+  orderings and asserts that the winner flips to whichever
+  equidistant candidate was listed first, plus uses a clearly-
+  farther 200×200 control so the test fails loudly if the
+  squared-distance computation itself breaks rather than just the
+  tie-breaking.
 * **Pin types-layer invariants with 4 unit tests in
   `nokhwa-core/src/types_tests.rs`.** Two distinct silent-regression
   hazards in `RequestedFormat::fulfill` were uncovered: (a) the

@@ -634,6 +634,59 @@ fn fulfill_closest_single_candidate_does_not_panic_and_picks_it() {
 }
 
 #[test]
+fn fulfill_closest_distance_tie_picks_first_in_device_order() {
+    // When two resolutions are equidistant from the requested target,
+    // `RequestedFormat::fulfill` for `Closest`:
+    //   1. computes `(dist_no_sqrt, res)` per candidate
+    //   2. `sort_by_key(|a| a.0)` — Rust's stable sort, so equal keys
+    //      retain their input order
+    //   3. `dedup_by(|a, b| a.0.eq(&b.0))` — removes consecutive ties
+    //      from the sorted slice, leaving the first of any tied run
+    //   4. `first()` — picks the survivor
+    //
+    // Net contract: ties go to whichever resolution appears first in
+    // `all_formats`. This is the only signal a backend has for
+    // expressing preference between equidistant candidates, so a
+    // refactor that swapped to `sort_unstable_by_key` (no stability
+    // guarantee), or replaced `dedup_by` with a different pruning
+    // step, would silently scramble selection on real cameras that
+    // happen to advertise equidistant formats. Pinned with target
+    // 100×100 vs candidates {50×100, 100×50} which both have
+    // squared-distance 2500 — and a clearly-farther 200×200 control
+    // (squared-distance 20000) so the test fails loudly if distance
+    // computation itself breaks rather than just tie-breaking.
+    let target = CameraFormat::new_from(100, 100, FrameFormat::MJPEG, 30);
+    let req =
+        RequestedFormat::with_formats(RequestedFormatType::Closest(target), &[FrameFormat::MJPEG]);
+
+    let order_a = vec![
+        CameraFormat::new_from(50, 100, FrameFormat::MJPEG, 30),
+        CameraFormat::new_from(100, 50, FrameFormat::MJPEG, 30),
+        CameraFormat::new_from(200, 200, FrameFormat::MJPEG, 30),
+    ];
+    let pick_a = req.fulfill(&order_a).unwrap();
+    assert_eq!(
+        pick_a.resolution(),
+        Resolution::new(50, 100),
+        "first equidistant candidate (by device order) must win",
+    );
+
+    let order_b = vec![
+        CameraFormat::new_from(100, 50, FrameFormat::MJPEG, 30),
+        CameraFormat::new_from(50, 100, FrameFormat::MJPEG, 30),
+        CameraFormat::new_from(200, 200, FrameFormat::MJPEG, 30),
+    ];
+    let pick_b = req.fulfill(&order_b).unwrap();
+    assert_eq!(
+        pick_b.resolution(),
+        Resolution::new(100, 50),
+        "swapping the input order must swap the winner — proves the \
+         stable-sort + dedup-by-distance contract is what's pinned, \
+         not an accidental Resolution-Ord tiebreaker",
+    );
+}
+
+#[test]
 fn fulfill_decoder_filter_applies_across_variants() {
     let available = vec![
         CameraFormat::new_from(1920, 1080, FrameFormat::NV12, 60),
