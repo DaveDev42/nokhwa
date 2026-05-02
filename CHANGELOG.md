@@ -129,6 +129,21 @@
 
 ### Testing
 
+* **Pin `RequestedFormat::fulfill` no-match branches with 4 unit
+  tests in `nokhwa-core/src/types_tests.rs`.** `fulfill` is the
+  cross-backend selection algorithm that every backend's `open()`
+  routes through; its `?`-short-circuit branches (filter excludes
+  everything → `None`) are easy to break with a future "let's fall
+  back to something" tweak that silently reaches for the wrong
+  format. Existing tests covered happy paths plus
+  `HighestResolution` no-match; the symmetric `Closest` and
+  `HighestFrameRate` no-match branches had no coverage. New tests
+  pin: (1) `Closest` returns `None` when no candidate matches the
+  requested format kind; (2) `Closest` returns `None` for an
+  empty format list; (3) `HighestFrameRate(fps)` returns `None`
+  when no candidate runs at `fps`; (4) `Closest` with a single
+  candidate doesn't lose it through the sort+dedup+first()
+  pipeline.
 * **Pin error-guard branches in `buf_yuyv422_to_rgb` /
   `buf_nv12_to_rgb` / `buf_yuyv_extract_luma` /
   `buf_nv12_extract_luma` / `buf_bgr_to_rgb` with 7 unit tests in

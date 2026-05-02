@@ -476,6 +476,94 @@ fn fulfill_closest_picks_nearest_framerate() {
     assert_eq!(result.frame_rate(), 30); // 30 is closest to 25
 }
 
+// `RequestedFormat::fulfill` is the cross-backend selection
+// algorithm — every backend's `open()` ends up here. The no-match
+// branches (filter excludes everything → `?` short-circuits to
+// `None`) are easy to break with a future "let's fall back to
+// something" tweak that silently reaches for the wrong format.
+// Pin every short-circuit so a regression surfaces here, not on
+// hardware.
+
+#[test]
+fn fulfill_closest_returns_none_when_format_not_in_decoder_set() {
+    // `Closest` filters by `wanted_decoder.contains(&x.format())`
+    // before computing distance. If no candidate survives the
+    // filter, `resolution_map.first()?` short-circuits to `None`
+    // — the contract is "Closest can fail when no candidate of
+    // the requested kind exists", not "fall back to the nearest
+    // wrong format".
+    let available = vec![
+        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30),
+        CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 60),
+    ];
+    let requested = CameraFormat::new_from(1280, 720, FrameFormat::YUYV, 30);
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::Closest(requested),
+        &[FrameFormat::YUYV],
+    );
+    assert!(
+        req.fulfill(&available).is_none(),
+        "Closest must return None when no candidate matches the requested format"
+    );
+}
+
+#[test]
+fn fulfill_closest_returns_none_for_empty_format_list() {
+    // Empty `all_formats` → empty `same_fmt_formats` → empty
+    // `resolution_map` → `first()?` is `None`. Pin separately
+    // from the format-mismatch case because the existing
+    // `fulfill_empty_format_list` only covers
+    // `AbsoluteHighestResolution`.
+    let requested = CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 30);
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::Closest(requested),
+        &[FrameFormat::MJPEG],
+    );
+    assert!(req.fulfill(&[]).is_none());
+}
+
+#[test]
+fn fulfill_highest_framerate_returns_none_when_no_candidate_at_fps() {
+    // `HighestFrameRate(fps)` filters to candidates whose
+    // `frame_rate == fps` then `max_by_key(...)?`. If zero
+    // candidates match, the `?` short-circuits to `None`. The
+    // existing `fulfill_highest_resolution_no_match` pins this
+    // for the resolution variant; this pins the symmetric
+    // framerate variant.
+    let available = vec![
+        CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 30),
+        CameraFormat::new_from(1920, 1080, FrameFormat::MJPEG, 60),
+    ];
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::HighestFrameRate(120),
+        &[FrameFormat::MJPEG],
+    );
+    assert!(
+        req.fulfill(&available).is_none(),
+        "HighestFrameRate must return None when no candidate matches the requested fps"
+    );
+}
+
+#[test]
+fn fulfill_closest_single_candidate_does_not_panic_and_picks_it() {
+    // Sanity: with exactly one candidate of the right format,
+    // `resolution_map.first()` and `framerate_map.first()` both
+    // resolve to the only entry. Pinned because the algorithm
+    // does `sort` + `dedup` + `first()` and a regression that
+    // accidentally pops or skips the only entry would silently
+    // return `None` for a perfectly answerable request.
+    let only = CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 30);
+    let requested = CameraFormat::new_from(1920, 1080, FrameFormat::MJPEG, 60);
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::Closest(requested),
+        &[FrameFormat::MJPEG],
+    );
+    let result = req
+        .fulfill(&[only])
+        .expect("Closest with single candidate must return that candidate");
+    assert_eq!(result, only);
+}
+
 #[test]
 fn fulfill_decoder_filter_applies_across_variants() {
     let available = vec![
