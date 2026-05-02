@@ -30,7 +30,6 @@ pub fn native_api_backend() -> Option<ApiBackend> {
     }
 }
 
-// TODO: Update as this goes
 /// Query the system for a list of available devices. Please refer to the API Backends that support `Query`) <br>
 /// Usually the order goes Native -> `GStreamer`.
 /// # Quirks
@@ -106,8 +105,6 @@ pub fn query(api: ApiBackend) -> Result<Vec<CameraInfo>, NokhwaError> {
         ApiBackend::Custom(_) => Err(NokhwaError::UnsupportedOperationError(api)),
     }
 }
-
-// TODO: More
 
 #[cfg(all(feature = "input-v4l", target_os = "linux"))]
 fn query_v4l() -> Result<Vec<CameraInfo>, NokhwaError> {

@@ -489,9 +489,25 @@ mod internal {
                                 resolutions.push(Resolution::new(dis.width, dis.height));
                             }
                             FrameSizeEnum::Stepwise(step) => {
+                                // V4L Stepwise advertises a (min, max,
+                                // step) triple — every (min + k*step,
+                                // min + k*step) pair up to max is
+                                // legal. We expose only the endpoints
+                                // because expanding the full grid can
+                                // produce hundreds of synthetic
+                                // resolutions on drivers that allow
+                                // tiny steps (e.g. a 1×1 step over
+                                // 4096×4096), which floods the UI
+                                // surface with nonsense choices.
+                                // Consumers that need an arbitrary
+                                // intermediate resolution should call
+                                // `set_format` with the chosen
+                                // value — the driver still accepts it
+                                // even though it isn't enumerated.
+                                // See TODO.md for the full enumeration
+                                // follow-up.
                                 resolutions.push(Resolution::new(step.min_width, step.min_height));
                                 resolutions.push(Resolution::new(step.max_width, step.max_height));
-                                // TODO: Respect step size
                             }
                         }
                     }

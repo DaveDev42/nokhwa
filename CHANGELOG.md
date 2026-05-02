@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+### Bug Fixes
+
+* **`ControlValueDescription::RGB::verify_setter` accepted only
+  out-of-range values.** The predicate was `*v.0 >= max.0 && *v.1
+  >= max.1 && *v.2 >= max.2` — i.e. it returned `true` exactly
+  when *every* channel was at-or-above the upper bound, the
+  inverse of what range validation should do. (`IntegerRange` and
+  `FloatRange` both use `value >= min && value <= max` so RGB was
+  the odd one out.) Replaced with finite-aware
+  `0.0 ..= max` per channel. Existing test `verify_setter_rgb`
+  documented the buggy behaviour with a `// FIXME:` comment;
+  rewritten to cover the corrected semantics + NaN / infinity /
+  negative rejection. `control_value_roundtrip_rgb` updated to use
+  in-range values (the previous (2,3,4) over (1,1,1) only passed
+  thanks to the inverted predicate).
+
+### Cleanup
+
+* **TODO/FIXME audit.** Removed two stale `// TODO: Update as this
+  goes` / `// TODO: More` markers in `src/query.rs` (no actionable
+  intent). Replaced V4L `// TODO: Respect step size` with a
+  prose-comment explaining why `FrameSizeEnum::Stepwise` only
+  exposes endpoints (unbounded steps would flood the UI surface);
+  the proper enumeration is tracked in `TODO.md`.
+* **Fixed `unused_imports` warning in `nokhwa-core/src/frame_tests.rs`.**
+  The `Mjpeg` symbol is only referenced from
+  `#[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]` test
+  blocks, but its `use` line was unconditional — every default-feature
+  `cargo test -p nokhwa-core` invocation emitted
+  `warning: unused import: \`Mjpeg\`` until now.
+
 ### Performance
 
 * **Event-driven V4L hotplug via `inotify`.** Replaces the 500 ms

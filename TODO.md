@@ -52,6 +52,15 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Backlog
 
+- [ ] **V4L Stepwise frame-size enumeration.** Currently
+  `get_resolution_list` exposes only the (min, max) endpoints of a
+  `FrameSizeEnum::Stepwise` advertisement. A full enumeration would
+  walk `(min..=max).step_by(step)` per axis, but unbounded steps
+  (e.g. 1×1) produce hundreds of synthetic resolutions; a sensible
+  upper bound + a "common preset" filter (640×480, 1280×720,
+  1920×1080) is the practical fix. Drivers still accept arbitrary
+  intermediate resolutions via `set_format` so this is a
+  surface-quality issue, not correctness.
 - [ ] **WASM / browser backend.** Blocked on five design decisions, no
   active consumer:
   - interop library (`tsify` vs `serde-wasm-bindgen` vs hand-rolled)
