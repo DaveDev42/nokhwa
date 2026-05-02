@@ -265,15 +265,18 @@ pub trait ShutterCapture: CameraDevice {
         Ok(())
     }
 
-    /// Convenience: `lock_ui` → `trigger` → `take_picture` → `unlock_ui`, with
-    /// `unlock_ui` always attempted (errors from `unlock_ui` are discarded if
-    /// the inner sequence failed).
+    /// Convenience: `lock_ui` → `trigger` → `take_picture` → `unlock_ui`.
+    ///
+    /// `unlock_ui` is always attempted once `lock_ui` has succeeded — even if
+    /// `trigger` or `take_picture` fail — so a UI lock cannot leak. Errors
+    /// from `unlock_ui` are silently discarded; the inner sequence's
+    /// `Result` is what propagates. If `lock_ui` itself fails, the call
+    /// short-circuits and `unlock_ui` is not called (no lock was acquired).
     /// # Errors
     /// Returns [`NokhwaError`] if any step of the sequence fails.
     fn capture(&mut self, timeout: Duration) -> Result<Buffer, NokhwaError> {
         self.lock_ui()?;
-        self.trigger()?;
-        let result = self.take_picture(timeout);
+        let result = self.trigger().and_then(|()| self.take_picture(timeout));
         let _ = self.unlock_ui();
         result
     }
