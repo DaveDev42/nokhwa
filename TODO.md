@@ -93,12 +93,14 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
-- **`v4l-loopback` CI fix** (#185, in-flight) — `videodev.ko` is in
-  base `linux-modules-<kernel>` (not `-extra`) on Azure 6.17.x;
-  `awalsh128/cache-apt-pkgs-action` skips `postinst` so `depmod -a`
-  never runs on cache hit. Both addressed; cache key bumped. The job
-  was silently `failure` (run-level green via `continue-on-error`)
-  since the #183 era.
+- **`v4l-loopback` CI fix** (#185) — four compounding bugs silently
+  broke the job since the #183 era (job-level `failure` masked by
+  run-level `continue-on-error: true`): wrong modules package
+  (`-extra` instead of base), stale `modules.dep` on cache hit, DKMS
+  `postinst` skipped on cache hit (no `v4l2loopback.ko` for the
+  running kernel), `ffmpeg` cached without its transitive shared-lib
+  closure (`libblas.so.3`). Verified end-to-end on cold + cache-hit
+  runs.
 - **`clippy::pedantic` matrix lint CI** (#183) — extended pedantic
   enforcement to `nokhwa-bindings-{linux-v4l, macos-avfoundation,
   windows-msmf}` (previously only `nokhwa-core` + `nokhwa` had it).
