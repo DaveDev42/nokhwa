@@ -513,6 +513,91 @@ fn stream_camera_is_open_lifecycle() {
     );
 }
 
+/// `frame_raw()` is the zero-copy sibling of `frame()`. The raw byte
+/// slice must be non-empty for the same reason `frame()`'s `Buffer`
+/// payload must be — a regression that returns `Cow::Borrowed(&[])`
+/// would slip past `frame_buffer_is_non_empty` (which goes through
+/// `frame()`) and silently break low-level consumers that read
+/// `frame_raw()` directly to avoid the `Buffer` copy.
+#[test]
+fn frame_raw_is_non_empty() {
+    let OpenedCamera::Stream(mut cam) = open_first() else {
+        eprintln!("frame_raw_is_non_empty: backend is not Stream-capable; skipping.");
+        return;
+    };
+    cam.open().expect("StreamCamera::open");
+    let raw = cam.frame_raw().expect("StreamCamera::frame_raw");
+    assert!(
+        !raw.is_empty(),
+        "frame_raw() returned a zero-length slice — backend is producing empty frames"
+    );
+    cam.close().expect("StreamCamera::close");
+}
+
+/// Indices returned by `query()` must be openable by `open()`. The
+/// dual-form `CameraIndex` contract has the parsed-from-string path
+/// (covered by `open_numeric_string_routes_to_native_backend`); this
+/// is the matching pin for the typed `Index` path: `query()` is the
+/// canonical enumerator, and a `CameraInfo` it returns must round-trip
+/// through `open()` without surprise. A regression — `query()`
+/// reporting an index `open()` rejects — would break every consumer
+/// that picks devices by enumeration.
+#[test]
+fn query_results_are_openable() {
+    let devices = query(native_backend()).expect("query() returned an error");
+    let Some(first) = devices.first() else {
+        eprintln!("query_results_are_openable: query returned empty; skipping.");
+        return;
+    };
+    let CameraIndex::Index(idx) = first.index() else {
+        eprintln!(
+            "query_results_are_openable: native query returned a non-Index variant ({:?}); skipping.",
+            first.index()
+        );
+        return;
+    };
+    let cam = open(CameraIndex::Index(*idx), OpenRequest::any())
+        .unwrap_or_else(|e| panic!("open(query[0].index = {idx}) failed: {e}"));
+    let backend = match &cam {
+        OpenedCamera::Stream(c) => c.backend(),
+        OpenedCamera::Shutter(c) => c.backend(),
+        OpenedCamera::Hybrid(c) => c.backend(),
+    };
+    assert_eq!(
+        backend,
+        native_backend(),
+        "open() of a query-reported index reached the wrong backend"
+    );
+}
+
+/// Every entry in `compatible_formats()` must have a non-zero
+/// resolution. A 0×0 entry would silently feed into `set_format()` /
+/// `RequestedFormat::Exact` and either error or produce a degenerate
+/// stream, depending on the backend. The closest-match negotiation
+/// path also assumes positive resolutions for distance computation.
+#[test]
+fn compatible_formats_have_nonzero_resolutions() {
+    let OpenedCamera::Stream(mut cam) = open_first() else {
+        eprintln!(
+            "compatible_formats_have_nonzero_resolutions: backend is not Stream-capable; skipping."
+        );
+        return;
+    };
+    let formats = cam
+        .compatible_formats()
+        .expect("StreamCamera::compatible_formats");
+    for f in &formats {
+        assert!(
+            f.resolution().width() > 0,
+            "compatible_formats() returned a 0-width entry: {f:?}"
+        );
+        assert!(
+            f.resolution().height() > 0,
+            "compatible_formats() returned a 0-height entry: {f:?}"
+        );
+    }
+}
+
 // The file is already gated by `device-test` at the top, so this
 // submodule's effective gate is `device-test AND runner` — i.e. it
 // compiles only when both features are enabled.
