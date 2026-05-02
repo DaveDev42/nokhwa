@@ -129,6 +129,21 @@
 
 ### Testing
 
+* **Pin extraction / channel-swap pixel-correctness with 3 unit
+  tests in `nokhwa-core/src/types_tests.rs`.** The existing tests
+  for `buf_yuyv_extract_luma`, `buf_nv12_extract_luma`, and
+  `buf_bgr_to_rgb` only fired the error guards; the happy paths —
+  the actual byte selection / channel swap — were entirely
+  uncovered. SIMD shuffle-mask regressions in
+  `yuyv_extract_luma_simd` (picking U/V instead of Y), index
+  arithmetic drift in NV12 luma extraction (UV bleed into the Y
+  plane), or shuffle inversion in `bgr_to_rgb_simd` (silent hue
+  inversion) would all pass the previous tests. New tests use
+  known-value patterns where every byte is distinct: (1) YUYV
+  `[10,200,11,201,…]` must extract `[10,11,…]` not `[200,201,…]`;
+  (2) NV12 frame with Y bytes 1..=16 and UV bytes 100..=107 must
+  copy only Y; (3) BGR with per-pixel-distinct B/G/R must swap B
+  and R while preserving G.
 * **Pin YUYV → RGB / RGBA pixel-correctness with 4 unit tests in
   `nokhwa-core/src/frame_tests.rs`.** Symmetric to the NV12 entry:
   `buf_yuyv422_to_rgb`'s error guards were pinned but the actual
