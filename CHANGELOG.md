@@ -83,6 +83,24 @@
 
 ### Cleanup
 
+* **Remove `new_with` deprecated-since-0.10.0 builder across V4L /
+  MSMF / AVFoundation bindings.** Each binding crate carried a
+  `pub fn new_with(index, width, height, fps, fourcc) -> Result<Self>`
+  marked `#[deprecated(since = "0.10.0", note = "please use \`new\`
+  instead.")]` — a thin shim that constructed a
+  `RequestedFormat::Exact(CameraFormat::new_from(...))` and forwarded
+  to `new`. No call sites remain anywhere in the workspace
+  (verified by `grep -rn "new_with" --include="*.rs"`); the
+  deprecation is 5 minor versions stale (0.10 → current 0.14.x), and
+  the binding crates are explicitly internal-only ("Do not depend on
+  it directly" — per `nokhwa-bindings-windows-msmf` crate doc).
+  Dropped from all three real impls and the V4L non-Linux stub.
+  Pruned the now-orphaned `RequestedFormatType` /
+  `color_frame_formats` imports in MSMF + AVFoundation `capture.rs`
+  and `RequestedFormatType` in V4L `lib.rs`. `cargo check
+  --features docs-only` clean across all three platform stubs;
+  `cargo clippy --features input-v4l --no-deps` clean on the live
+  V4L impl.
 * **TODO/FIXME audit.** Removed two stale `// TODO: Update as this
   goes` / `// TODO: More` markers in `src/query.rs` (no actionable
   intent). Replaced V4L `// TODO: Respect step size` with a

@@ -26,8 +26,8 @@ use nokhwa_core::{
     error::NokhwaError,
     traits::{CameraDevice, FrameSource},
     types::{
-        color_frame_formats, ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo,
-        ControlValueSetter, FrameFormat, KnownCameraControl, RequestedFormat, RequestedFormatType,
+        ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo, ControlValueSetter,
+        FrameFormat, KnownCameraControl, RequestedFormat,
     },
 };
 use objc2::rc::Retained;
@@ -96,29 +96,6 @@ impl AVFoundationCaptureDevice {
             frame_buffer_receiver: recv,
             fbufsnd: Arc::new(send),
         })
-    }
-
-    /// Creates a new capture device using the `AVFoundation` backend with desired settings.
-    ///
-    /// # Errors
-    /// This function will error if the camera is currently busy or if `AVFoundation` can't read device information, or permission was not given by the user.
-    #[deprecated(since = "0.10.0", note = "please use `new` instead.")]
-    #[allow(clippy::cast_possible_truncation)]
-    pub fn new_with(
-        index: usize,
-        width: u32,
-        height: u32,
-        fps: u32,
-        fourcc: FrameFormat,
-    ) -> Result<Self, NokhwaError> {
-        let camera_format = CameraFormat::new_from(width, height, fourcc, fps);
-        AVFoundationCaptureDevice::new(
-            &CameraIndex::Index(index as u32),
-            RequestedFormat::with_formats(
-                RequestedFormatType::Exact(camera_format),
-                color_frame_formats(),
-            ),
-        )
     }
 }
 

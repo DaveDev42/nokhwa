@@ -19,9 +19,8 @@ use nokhwa_core::{
     error::NokhwaError,
     traits::{CameraDevice, FrameSource},
     types::{
-        all_known_camera_controls, color_frame_formats, ApiBackend, CameraControl, CameraFormat,
-        CameraIndex, CameraInfo, ControlValueSetter, FrameFormat, KnownCameraControl,
-        RequestedFormat, RequestedFormatType,
+        all_known_camera_controls, ApiBackend, CameraControl, CameraFormat, CameraIndex,
+        CameraInfo, ControlValueSetter, FrameFormat, KnownCameraControl, RequestedFormat,
     },
 };
 use std::borrow::Cow;
@@ -84,24 +83,6 @@ impl MediaFoundationCaptureDevice {
         };
         new_cam.refresh_camera_format()?;
         Ok(new_cam)
-    }
-
-    /// Create a new Media Foundation Device with desired settings.
-    /// # Errors
-    /// This function will error if Media Foundation fails to get the device.
-    #[deprecated(since = "0.10.0", note = "please use `new` instead.")]
-    pub fn new_with(
-        index: &CameraIndex,
-        width: u32,
-        height: u32,
-        fps: u32,
-        fourcc: FrameFormat,
-    ) -> Result<Self, NokhwaError> {
-        let camera_format = RequestedFormat::with_formats(
-            RequestedFormatType::Exact(CameraFormat::new_from(width, height, fourcc, fps)),
-            color_frame_formats(),
-        );
-        MediaFoundationCaptureDevice::new(index, camera_format)
     }
 
     /// Gets the list of supported [`KnownCameraControl`]s
