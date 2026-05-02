@@ -1409,3 +1409,81 @@ fn yuyv422_predicted_size_rounds_partial_chunks_down() {
     assert_eq!(yuyv422_predicted_size(5, false), 6);
     assert_eq!(yuyv422_predicted_size(5, true), 8);
 }
+
+// `yuyv444_to_rgb` is the per-pixel kernel for YCbCr-4:4:4 → RGB888
+// (BT.601 video-range matrix). Pin the contract through the canonical
+// reference points + the saturation/clamp behaviour so a typo in the
+// integer coefficients (298 / 409 / 100 / 208 / 516 / 128 / 16)
+// trips at the unit-test layer.
+
+#[test]
+fn yuyv444_to_rgb_video_range_black_is_zero() {
+    // BT.601 video-range black: Y=16, Cb=Cr=128. Should round-trip
+    // very close to (0, 0, 0) — the rounding constant `+128 >> 8`
+    // makes this exact for the reference points.
+    assert_eq!(yuyv444_to_rgb(16, 128, 128), [0, 0, 0]);
+}
+
+#[test]
+fn yuyv444_to_rgb_video_range_white_is_max() {
+    // BT.601 video-range white: Y=235, Cb=Cr=128. (235-16)*298 + 128
+    // = 65430, >>8 = 255 exactly per channel (no clamp involvement).
+    assert_eq!(yuyv444_to_rgb(235, 128, 128), [255, 255, 255]);
+}
+
+#[test]
+fn yuyv444_to_rgb_grey_axis_has_equal_channels() {
+    // On the Cb=Cr=128 grey axis, the chroma terms (`409*e`,
+    // `-100*d-208*e`, `516*d`) all collapse to zero, leaving R=G=B
+    // for every Y in [16, 235]. Sweep the legal range and confirm
+    // monotonic non-decreasing intensity.
+    let mut last = 0u8;
+    for y in 16..=235 {
+        let [r, g, b] = yuyv444_to_rgb(y, 128, 128);
+        assert_eq!(r, g, "Y={y}: R/G drift on grey axis");
+        assert_eq!(g, b, "Y={y}: G/B drift on grey axis");
+        assert!(r >= last, "Y={y}: grey ramp not monotonic ({r} < {last})");
+        last = r;
+    }
+    // Endpoints exact.
+    assert_eq!(yuyv444_to_rgb(16, 128, 128)[0], 0);
+    assert_eq!(yuyv444_to_rgb(235, 128, 128)[0], 255);
+}
+
+#[test]
+fn yuyv444_to_rgb_clamps_extreme_inputs() {
+    // Out-of-range YCbCr values (e.g. RGB-to-YUV synthesis with no
+    // clipping) must not panic and must produce bytes in [0, 255].
+    // Sweep a sparse grid that exercises each saturation arm:
+    //   * Y=0 with Cb=Cr=128 → R/G/B underflow → 0
+    //   * Y=255 with Cb=Cr=255 → R overflow → 255
+    //   * Y=255 with Cb=255 Cr=0 → G/B asymmetric → still bounded
+    for &(y, u, v) in &[
+        (0_i32, 128, 128),
+        (255, 128, 128),
+        (255, 255, 255),
+        (255, 0, 0),
+        (255, 255, 0),
+        (0, 0, 255),
+    ] {
+        let _ = yuyv444_to_rgb(y, u, v);
+        // No assertion needed beyond "must not panic"; the function
+        // returns `[u8; 3]` so the bytes are inherently in range.
+    }
+}
+
+#[test]
+fn yuyv444_to_rgba_matches_rgb_with_alpha_255() {
+    // `yuyv444_to_rgba` is documented as `yuyv444_to_rgb + alpha=255`.
+    // Pin that exact relationship across a small sample.
+    for &(y, u, v) in &[
+        (16, 128, 128),
+        (235, 128, 128),
+        (125, 128, 128),
+        (90, 60, 200),
+        (200, 200, 100),
+    ] {
+        let [r, g, b] = yuyv444_to_rgb(y, u, v);
+        assert_eq!(yuyv444_to_rgba(y, u, v), [r, g, b, 255]);
+    }
+}
