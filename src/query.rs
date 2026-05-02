@@ -164,3 +164,87 @@ fn query_avfoundation() -> Result<Vec<CameraInfo>, NokhwaError> {
 fn query_wasm() -> Result<Vec<CameraInfo>, NokhwaError> {
     Err(NokhwaError::UnsupportedOperationError(ApiBackend::Browser))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_api_backend_matches_current_os() {
+        let got = native_api_backend();
+        if cfg!(target_os = "linux") {
+            assert_eq!(got, Some(ApiBackend::Video4Linux));
+        } else if cfg!(any(target_os = "macos", target_os = "ios")) {
+            assert_eq!(got, Some(ApiBackend::AVFoundation));
+        } else if cfg!(target_os = "windows") {
+            assert_eq!(got, Some(ApiBackend::MediaFoundation));
+        } else {
+            assert_eq!(got, None);
+        }
+    }
+
+    #[test]
+    fn query_custom_is_unsupported() {
+        let api = ApiBackend::Custom("my-backend".to_string());
+        let result = query(api.clone());
+        match result {
+            Err(NokhwaError::UnsupportedOperationError(returned)) => {
+                assert_eq!(returned, api);
+            }
+            other => panic!("expected UnsupportedOperationError(Custom), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn query_browser_is_unsupported() {
+        match query(ApiBackend::Browser) {
+            Err(NokhwaError::UnsupportedOperationError(ApiBackend::Browser)) => {}
+            other => panic!("expected UnsupportedOperationError(Browser), got {other:?}"),
+        }
+    }
+
+    // Each `query_*` stub returns the matching `UnsupportedOperationError` when
+    // its backend is disabled. We can only assert this for the backends that
+    // are actually compiled out in the current build configuration — running
+    // these tests under different feature combos collectively covers every
+    // disabled arm.
+
+    #[cfg(any(not(feature = "input-v4l"), not(target_os = "linux")))]
+    #[test]
+    fn query_v4l_is_unsupported_when_disabled() {
+        match query(ApiBackend::Video4Linux) {
+            Err(NokhwaError::UnsupportedOperationError(ApiBackend::Video4Linux)) => {}
+            other => panic!("expected UnsupportedOperationError(Video4Linux), got {other:?}"),
+        }
+    }
+
+    #[cfg(any(not(feature = "input-msmf"), not(target_os = "windows")))]
+    #[test]
+    fn query_msmf_is_unsupported_when_disabled() {
+        match query(ApiBackend::MediaFoundation) {
+            Err(NokhwaError::UnsupportedOperationError(ApiBackend::MediaFoundation)) => {}
+            other => panic!("expected UnsupportedOperationError(MediaFoundation), got {other:?}"),
+        }
+    }
+
+    #[cfg(not(all(
+        feature = "input-avfoundation",
+        any(target_os = "macos", target_os = "ios")
+    )))]
+    #[test]
+    fn query_avfoundation_is_unsupported_when_disabled() {
+        match query(ApiBackend::AVFoundation) {
+            Err(NokhwaError::UnsupportedOperationError(ApiBackend::AVFoundation)) => {}
+            other => panic!("expected UnsupportedOperationError(AVFoundation), got {other:?}"),
+        }
+    }
+
+    #[cfg(not(feature = "input-gstreamer"))]
+    #[test]
+    fn query_gstreamer_is_unsupported_when_disabled() {
+        match query(ApiBackend::GStreamer) {
+            Err(NokhwaError::UnsupportedOperationError(ApiBackend::GStreamer)) => {}
+            other => panic!("expected UnsupportedOperationError(GStreamer), got {other:?}"),
+        }
+    }
+}

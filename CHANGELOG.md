@@ -82,6 +82,22 @@
 
 ### Testing
 
+* **Pin `query::native_api_backend` + `query::query` disabled-arm errors.**
+  `src/query.rs` had zero tests despite being the dispatcher for `open()`
+  and the public entry point most callers reach through `nokhwa::query`.
+  Added 6 tests: `native_api_backend()` returns the right `ApiBackend`
+  for the current `target_os` (`Video4Linux` on Linux, `AVFoundation` on
+  macOS / iOS, `MediaFoundation` on Windows, `None` on others);
+  `query(ApiBackend::Custom("…"))` is always
+  `UnsupportedOperationError(Custom(…))` and round-trips the payload;
+  `query(ApiBackend::Browser)` is always
+  `UnsupportedOperationError(Browser)`; and one cfg-gated assertion per
+  optional backend (`Video4Linux` / `MediaFoundation` / `AVFoundation` /
+  `GStreamer`) that the disabled stub returns `UnsupportedOperationError`
+  for *its own* `ApiBackend` variant. The cfg gating means each test
+  feature combo (no-features build, gstreamer-only build, native build,
+  etc.) collectively exercises every disabled arm without false-positives
+  when the backend is actually compiled in.
 * **Pin GStreamer `pipeline::resolve_format` and `compatible_fourcc`.**
   The two pure helpers in `nokhwa-bindings-gstreamer/src/pipeline.rs` —
   `resolve_format` (the `RequestedFormat::fulfill` adapter that produces
