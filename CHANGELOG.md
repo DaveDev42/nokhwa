@@ -116,6 +116,20 @@
 
 ### Testing
 
+* **Pin `ControlValueDescription::Display` rendering for all 11
+  variants in `nokhwa-core/src/types_tests.rs`.** Unlike the four
+  Debug-piping `Display` impls in `types.rs`, each
+  `ControlValueDescription` variant has a hand-written rendering
+  arm that grew organically alongside the matching `verify_setter`
+  arm — so a refactor of one variant is easy to land without
+  noticing the `Display` drift. The rendered string surfaces in
+  `NokhwaError::SetPropertyError` payloads when a setter is
+  rejected and in user-visible `CameraControl` log lines, so a
+  field reorder or label rename would silently change downstream
+  error messages and dashboard greps. Direct tests now lock the
+  exact rendering for `None` / `Integer` / `IntegerRange` /
+  `Float` / `FloatRange` / `Boolean` / `String` / `Bytes` /
+  `KeyValuePair` / `Point` / `Enum` / `RGB`.
 * **Pin `KnownCameraControl` / `KnownCameraControlFlag` /
   `RequestedFormatType` / `RequestedFormat` `Display` rendering with
   4 unit tests in `nokhwa-core/src/types_tests.rs`.** All four

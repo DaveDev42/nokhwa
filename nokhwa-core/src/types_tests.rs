@@ -1682,3 +1682,137 @@ fn requested_format_display_matches_debug() {
     );
     assert_eq!(req.to_string(), format!("{req:?}"));
 }
+
+// ─── ControlValueDescription Display rendering ───
+//
+// `ControlValueDescription::Display` produces the human-readable
+// portion of `CameraControl` log lines and surfaces in
+// `NokhwaError::SetPropertyError` payloads when a setter is rejected.
+// Unlike the four Debug-piping Display impls above, each variant has
+// a hand-written rendering that grew organically alongside the
+// matching `verify_setter` arm — so a refactor of one variant is
+// easy to land without noticing the Display drift. Pin each
+// rendering shape so a regression that re-orders / renames fields
+// triggers a unit-test failure rather than silently changing log
+// output.
+
+#[test]
+fn control_value_description_display_none() {
+    assert_eq!(ControlValueDescription::None.to_string(), "(None)");
+}
+
+#[test]
+fn control_value_description_display_integer() {
+    let desc = ControlValueDescription::Integer {
+        value: 50,
+        default: 0,
+        step: 1,
+    };
+    assert_eq!(desc.to_string(), "(Current: 50, Default: 0, Step: 1)");
+}
+
+#[test]
+fn control_value_description_display_integer_range() {
+    let desc = ControlValueDescription::IntegerRange {
+        min: -100,
+        max: 100,
+        value: 25,
+        step: 5,
+        default: 0,
+    };
+    assert_eq!(
+        desc.to_string(),
+        "(Current: 25, Default: 0, Step: 5, Range: (-100, 100))"
+    );
+}
+
+#[test]
+fn control_value_description_display_float() {
+    let desc = ControlValueDescription::Float {
+        value: 1.5,
+        default: 0.0,
+        step: 0.1,
+    };
+    assert_eq!(desc.to_string(), "(Current: 1.5, Default: 0, Step: 0.1)");
+}
+
+#[test]
+fn control_value_description_display_float_range() {
+    let desc = ControlValueDescription::FloatRange {
+        min: 0.0,
+        max: 1.0,
+        value: 0.5,
+        step: 0.01,
+        default: 0.25,
+    };
+    assert_eq!(
+        desc.to_string(),
+        "(Current: 0.5, Default: 0.25, Step: 0.01, Range: (0, 1))"
+    );
+}
+
+#[test]
+fn control_value_description_display_boolean() {
+    let desc = ControlValueDescription::Boolean {
+        value: true,
+        default: false,
+    };
+    assert_eq!(desc.to_string(), "(Current: true, Default: false)");
+}
+
+#[test]
+fn control_value_description_display_string() {
+    let desc = ControlValueDescription::String {
+        value: "hello".to_string(),
+        default: Some("world".to_string()),
+    };
+    assert_eq!(
+        desc.to_string(),
+        "(Current: hello, Default: Some(\"world\"))"
+    );
+}
+
+#[test]
+fn control_value_description_display_key_value_pair() {
+    let desc = ControlValueDescription::KeyValuePair {
+        key: 1,
+        value: 2,
+        default: (3, 4),
+    };
+    assert_eq!(desc.to_string(), "Current: (1, 2), Default: (3, 4)");
+}
+
+#[test]
+fn control_value_description_display_point() {
+    let desc = ControlValueDescription::Point {
+        value: (1.5, 2.5),
+        default: (0.0, 0.0),
+    };
+    assert_eq!(desc.to_string(), "Current: (1.5, 2.5), Default: (0, 0)");
+}
+
+#[test]
+fn control_value_description_display_enum() {
+    let desc = ControlValueDescription::Enum {
+        value: 1,
+        possible: vec![0, 1, 2],
+        default: 0,
+    };
+    assert_eq!(
+        desc.to_string(),
+        "Current: 1, Possible Values: [0, 1, 2], Default: 0"
+    );
+}
+
+#[test]
+fn control_value_description_display_rgb() {
+    let desc = ControlValueDescription::RGB {
+        value: (1.0, 2.0, 3.0),
+        max: (255.0, 255.0, 255.0),
+        default: (0.0, 0.0, 0.0),
+    };
+    assert_eq!(
+        desc.to_string(),
+        "Current: (1, 2, 3), Max: (255, 255, 255), Default: (0, 0, 0)"
+    );
+}
