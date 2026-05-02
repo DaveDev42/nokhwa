@@ -159,14 +159,7 @@ fn fraction_to_fps(frac: gstreamer::Fraction) -> Option<u32> {
 }
 
 fn dedupe(mut v: Vec<CameraFormat>) -> Vec<CameraFormat> {
-    v.sort_by(|a, b| {
-        (a.width(), a.height(), a.format(), a.frame_rate()).cmp(&(
-            b.width(),
-            b.height(),
-            b.format(),
-            b.frame_rate(),
-        ))
-    });
+    v.sort();
     v.dedup();
     v
 }

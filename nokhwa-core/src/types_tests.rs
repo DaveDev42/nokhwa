@@ -118,6 +118,22 @@ fn camera_format_display() {
 }
 
 #[test]
+fn camera_format_ordering_is_lexicographic_resolution_format_framerate() {
+    let small_low_fps = CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30);
+    let small_high_fps = CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 60);
+    let small_yuyv = CameraFormat::new_from(640, 480, FrameFormat::YUYV, 30);
+    let big = CameraFormat::new_from(1920, 1080, FrameFormat::MJPEG, 30);
+
+    assert!(small_low_fps < small_high_fps);
+    assert_eq!(
+        small_low_fps.cmp(&small_yuyv),
+        FrameFormat::MJPEG.cmp(&FrameFormat::YUYV)
+    );
+    assert!(small_low_fps < big);
+    assert!(small_high_fps < big);
+}
+
+#[test]
 fn camera_index_from_u32() {
     let idx = CameraIndex::Index(0u32);
     assert!(idx.is_index());
