@@ -248,6 +248,40 @@ fn decoded_buffer_size_gray_alpha_on_is_two_bytes_per_pixel() {
     assert_eq!(s.decoded_buffer_size(true), 1920 * 1080 * 2);
 }
 
+#[test]
+fn decoded_buffer_size_gray_alpha_on_smallest_resolution_is_two_bytes() {
+    // 1×1 GRAY + alpha is the only `decoded_buffer_size` configuration
+    // where `pxwidth + 1` evaluates to 2 (rather than 4, which is the
+    // 3-byte-format case). A future refactor that hard-codes
+    // "non-RGB formats get alpha=1 → bpp=2 ≡ wrong" or that conflates
+    // GRAY's 1-byte-per-pixel width with the 3-byte-per-pixel formats
+    // would fail this case while passing the existing 1920×1080
+    // GRAY+alpha test (large resolution masks the per-pixel formula).
+    let s = stub(FrameFormat::GRAY, 1, 1);
+    assert_eq!(s.decoded_buffer_size(true), 2);
+}
+
+#[test]
+fn decoded_buffer_size_zero_resolution_returns_zero_for_every_format() {
+    // 0×0 must produce 0 bytes for every `FrameFormat`, regardless of
+    // alpha. A bug that returned `pxwidth` (or `pxwidth + 1`) for a
+    // zero-resolution frame would feed a non-zero allocation request
+    // into `frame_texture` for a buffer that has zero actual frame
+    // bytes — a silent memory hazard at the wgpu upload boundary.
+    for f in [
+        FrameFormat::MJPEG,
+        FrameFormat::YUYV,
+        FrameFormat::NV12,
+        FrameFormat::RAWRGB,
+        FrameFormat::RAWBGR,
+        FrameFormat::GRAY,
+    ] {
+        let s = stub(f, 0, 0);
+        assert_eq!(s.decoded_buffer_size(false), 0, "{f:?} alpha=false");
+        assert_eq!(s.decoded_buffer_size(true), 0, "{f:?} alpha=true");
+    }
+}
+
 struct FrameCallCounter {
     info: CameraInfo,
     fmt: CameraFormat,
