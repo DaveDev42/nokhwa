@@ -7,8 +7,8 @@
 //! Enumerates devices via `query(ApiBackend::GStreamer)`, opens the
 //! first one with `GStreamerCaptureDevice::new`, builds the
 //! `source ! capsfilter ! videoconvert ! appsink` pipeline, pulls 5
-//! frames, and prints a summary. Used for hardware verification in WSL
-//! + usbipd setups before the `nokhwa::open()` dispatch integration
+//! frames, and prints a summary. Used for hardware verification in
+//! WSL/usbipd setups before the `nokhwa::open()` dispatch integration
 //! (session 4) lands.
 
 #[cfg(feature = "input-gstreamer")]
@@ -79,9 +79,9 @@ fn main() -> Result<(), nokhwa_core::error::NokhwaError> {
                 min, max, value, ..
             } = brightness.description()
             {
-                let target: i64 = if *value + 1 <= *max {
+                let target: i64 = if *value < *max {
                     *value + 1
-                } else if *value - 1 >= *min {
+                } else if *value > *min {
                     *value - 1
                 } else {
                     *value
