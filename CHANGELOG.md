@@ -116,6 +116,23 @@
 
 ### Testing
 
+* **Expand `tests/device_tests.rs` with 3 more integration tests
+  (`frame_raw()` payload, `query()` ↔ `open()` round-trip,
+  compatible-format resolutions non-zero).** Pins three more
+  surface-level guarantees: (1) `frame_raw()` (the zero-copy sibling
+  of `frame()`) returns a non-empty slice — `frame_buffer_is_non_empty`
+  only covers the `frame()` path, so a regression that returns
+  `Cow::Borrowed(&[])` from the raw method would slip past every
+  existing test; (2) indices reported by `query()` are openable via
+  `open(CameraIndex::Index(_))` and resolve to the same native
+  backend — catches drift between the enumerator and the dispatcher
+  (e.g. `query()` reporting an index `open()` rejects); (3) every
+  entry in `compatible_formats()` has positive width and height —
+  a 0×0 entry would silently corrupt closest-match negotiation
+  (which uses Euclidean distance on resolution) and feed degenerate
+  values into `set_format()`. All three skip cleanly on
+  Shutter-only / Hybrid backends, no Stream-capable assumption
+  baked in.
 * **Expand `tests/device_tests.rs` with 4 new integration tests
   (info+backend reflection, numeric-string `open()` dispatch,
   non-empty frame payload, `is_open()` lifecycle).** Covers four
