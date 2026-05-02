@@ -315,3 +315,173 @@ pub(crate) fn compatible_fourcc(candidates: &[CameraFormat]) -> Vec<FrameFormat>
     out.dedup();
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nokhwa_core::types::{RequestedFormat, RequestedFormatType, Resolution};
+
+    fn fmt(w: u32, h: u32, ff: FrameFormat, fps: u32) -> CameraFormat {
+        CameraFormat::new(Resolution::new(w, h), ff, fps)
+    }
+
+    #[test]
+    fn compatible_fourcc_empty_returns_empty() {
+        assert_eq!(compatible_fourcc(&[]), Vec::<FrameFormat>::new());
+    }
+
+    #[test]
+    fn compatible_fourcc_dedupes_and_sorts() {
+        // Three duplicates of YUYV mixed with one NV12 and one MJPEG —
+        // result must be one of each, sorted in `FrameFormat::Ord` order.
+        let candidates = [
+            fmt(640, 480, FrameFormat::YUYV, 30),
+            fmt(1280, 720, FrameFormat::NV12, 30),
+            fmt(640, 480, FrameFormat::YUYV, 60),
+            fmt(1920, 1080, FrameFormat::MJPEG, 30),
+            fmt(1280, 720, FrameFormat::YUYV, 30),
+        ];
+        let out = compatible_fourcc(&candidates);
+        let mut expected = vec![FrameFormat::YUYV, FrameFormat::NV12, FrameFormat::MJPEG];
+        expected.sort();
+        assert_eq!(out, expected);
+    }
+
+    #[test]
+    fn compatible_fourcc_singleton_returns_singleton() {
+        let candidates = [fmt(640, 480, FrameFormat::GRAY, 30)];
+        assert_eq!(compatible_fourcc(&candidates), vec![FrameFormat::GRAY]);
+    }
+
+    #[test]
+    fn compatible_fourcc_ordering_matches_frame_format_ord() {
+        // Construct candidates in reverse `FrameFormat::Ord` order — the
+        // sort must place them in the canonical cross-backend ordering.
+        let candidates = [
+            fmt(640, 480, FrameFormat::RAWBGR, 30),
+            fmt(640, 480, FrameFormat::RAWRGB, 30),
+            fmt(640, 480, FrameFormat::GRAY, 30),
+            fmt(640, 480, FrameFormat::NV12, 30),
+            fmt(640, 480, FrameFormat::MJPEG, 30),
+            fmt(640, 480, FrameFormat::YUYV, 30),
+        ];
+        let mut got = compatible_fourcc(&candidates);
+        let mut expected = got.clone();
+        expected.sort();
+        assert_eq!(got, expected);
+        // Idempotent: running it again is identical.
+        got = compatible_fourcc(&got.iter().map(|f| fmt(1, 1, *f, 30)).collect::<Vec<_>>());
+        assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn resolve_format_empty_candidates_errors_with_open_device() {
+        let req =
+            RequestedFormat::with_formats(RequestedFormatType::AbsoluteHighestResolution, &[]);
+        let err = resolve_format(&[], &req).unwrap_err();
+        match err {
+            NokhwaError::OpenDeviceError { device, error } => {
+                assert_eq!(device, "GStreamer device");
+                assert!(error.contains("no compatible formats"));
+            }
+            other => panic!("expected OpenDeviceError, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_format_no_matching_format_errors() {
+        // Candidates only carry MJPEG, but the request only accepts YUYV
+        // — `fulfill` returns None and `resolve_format` must surface an
+        // OpenDeviceError mentioning the candidates.
+        let candidates = [
+            fmt(640, 480, FrameFormat::MJPEG, 30),
+            fmt(1280, 720, FrameFormat::MJPEG, 30),
+        ];
+        let req = RequestedFormat::with_formats(
+            RequestedFormatType::AbsoluteHighestResolution,
+            &[FrameFormat::YUYV],
+        );
+        let err = resolve_format(&candidates, &req).unwrap_err();
+        match err {
+            NokhwaError::OpenDeviceError { device, error } => {
+                assert_eq!(device, "GStreamer device");
+                assert!(
+                    error.contains("no format in the device's caps satisfied the request"),
+                    "wrong message: {error}"
+                );
+                // Both candidates appear in the error so the user can
+                // diagnose the mismatch without re-querying the device.
+                assert!(error.contains("MJPEG"), "candidates missing: {error}");
+            }
+            other => panic!("expected OpenDeviceError, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_format_picks_highest_resolution() {
+        let candidates = [
+            fmt(640, 480, FrameFormat::YUYV, 30),
+            fmt(1920, 1080, FrameFormat::YUYV, 30),
+            fmt(1280, 720, FrameFormat::YUYV, 30),
+        ];
+        let req = RequestedFormat::with_formats(
+            RequestedFormatType::AbsoluteHighestResolution,
+            &[FrameFormat::YUYV],
+        );
+        let chosen = resolve_format(&candidates, &req).unwrap();
+        assert_eq!(chosen.resolution(), Resolution::new(1920, 1080));
+        assert_eq!(chosen.format(), FrameFormat::YUYV);
+    }
+
+    #[test]
+    fn resolve_format_picks_highest_framerate_at_max_resolution() {
+        // Two entries share the max resolution; `fulfill` must tie-break
+        // by framerate (highest wins).
+        let candidates = [
+            fmt(1920, 1080, FrameFormat::YUYV, 30),
+            fmt(1920, 1080, FrameFormat::YUYV, 60),
+            fmt(1280, 720, FrameFormat::YUYV, 120),
+        ];
+        let req = RequestedFormat::with_formats(
+            RequestedFormatType::AbsoluteHighestResolution,
+            &[FrameFormat::YUYV],
+        );
+        let chosen = resolve_format(&candidates, &req).unwrap();
+        assert_eq!(chosen.resolution(), Resolution::new(1920, 1080));
+        assert_eq!(chosen.frame_rate(), 60);
+    }
+
+    #[test]
+    fn resolve_format_exact_returns_exact_match() {
+        let target = fmt(1280, 720, FrameFormat::NV12, 30);
+        let candidates = [
+            fmt(640, 480, FrameFormat::YUYV, 30),
+            target,
+            fmt(1920, 1080, FrameFormat::MJPEG, 60),
+        ];
+        let req = RequestedFormat::with_formats(
+            RequestedFormatType::Exact(target),
+            &[FrameFormat::NV12, FrameFormat::YUYV, FrameFormat::MJPEG],
+        );
+        let chosen = resolve_format(&candidates, &req).unwrap();
+        assert_eq!(chosen, target);
+    }
+
+    #[test]
+    fn resolve_format_filters_by_wanted_decoder_list() {
+        // Both formats are at 1920x1080 and the request asks for the
+        // absolute-highest resolution, but the wanted-decoder list only
+        // permits MJPEG — we must not pick the (otherwise tied) YUYV
+        // entry.
+        let candidates = [
+            fmt(1920, 1080, FrameFormat::YUYV, 60),
+            fmt(1920, 1080, FrameFormat::MJPEG, 30),
+        ];
+        let req = RequestedFormat::with_formats(
+            RequestedFormatType::AbsoluteHighestResolution,
+            &[FrameFormat::MJPEG],
+        );
+        let chosen = resolve_format(&candidates, &req).unwrap();
+        assert_eq!(chosen.format(), FrameFormat::MJPEG);
+    }
+}
