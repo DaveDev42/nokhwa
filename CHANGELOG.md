@@ -85,6 +85,17 @@
   `set_format()`, and asserts `negotiated_format()` reports the same
   value — guards against future drift between what a backend says it
   supports and what it actually accepts.
+* **`avfoundation_hotplug_take_and_steady_state`.** Parallels the
+  existing `msmf_hotplug_take_and_steady_state` and
+  `v4l_hotplug_take_and_steady_state` tests for the third native
+  backend. Constructs `AVFoundationHotplugContext`, asserts the
+  `take_hotplug_events()` once-and-only-once contract, asserts
+  steady-state silence over a 1.5s window on the 500ms polling
+  worker, and exercises the Drop-time thread-join (the test would
+  hang on regression). Brings cross-backend hotplug-plumbing test
+  parity to all three native backends. Runs on the self-hosted
+  `macos-camera` runner only; gated `#[cfg(all(feature =
+  "input-avfoundation", target_os = "macos"))]`.
 
 ### Documentation
 
