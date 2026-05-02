@@ -731,6 +731,51 @@ fn negotiated_format_after_set_format_matches() {
     );
 }
 
+/// `frame()`'s reported `resolution()` and `source_frame_format()`
+/// must match what `negotiated_format()` reports. This is the
+/// **cross-surface** invariant — the API surface (`negotiated_format`)
+/// and the per-frame metadata (`Buffer::resolution` /
+/// `Buffer::source_frame_format`) come from different code paths in
+/// every backend, and a regression in either could leave them out of
+/// sync. Catches bugs where:
+///   - `negotiated_format` is cached at open() time but the device
+///     silently re-negotiates on the wire (buffer reflects the wire
+///     format; the API surface lies);
+///   - the frame buffer is built with a hard-coded fallback format
+///     (e.g. always YUYV) regardless of what was negotiated;
+///   - resolution drift between the API-reported size and the actual
+///     pixel count, which silently breaks downstream decoders.
+///
+/// The existing `frame_metadata_is_stable` test only checks frame-to-
+/// frame consistency; this pins the surface-to-buffer link.
+#[test]
+fn frame_metadata_matches_negotiated_format() {
+    let OpenedCamera::Stream(mut cam) = open_first() else {
+        eprintln!(
+            "frame_metadata_matches_negotiated_format: backend is not Stream-capable; skipping."
+        );
+        return;
+    };
+    cam.open().expect("StreamCamera::open");
+    let negotiated = cam.negotiated_format();
+    let frame = cam.frame().expect("frame()");
+    assert_eq!(
+        frame.resolution(),
+        negotiated.resolution(),
+        "frame.resolution() {} does not match negotiated_format().resolution() {}",
+        frame.resolution(),
+        negotiated.resolution()
+    );
+    assert_eq!(
+        frame.source_frame_format(),
+        negotiated.format(),
+        "frame.source_frame_format() {:?} does not match negotiated_format().format() {:?}",
+        frame.source_frame_format(),
+        negotiated.format()
+    );
+    cam.close().expect("StreamCamera::close");
+}
+
 // The file is already gated by `device-test` at the top, so this
 // submodule's effective gate is `device-test AND runner` — i.e. it
 // compiles only when both features are enabled.
