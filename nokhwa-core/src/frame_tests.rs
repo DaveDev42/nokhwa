@@ -555,6 +555,62 @@ fn nv12_into_luma_extracts_y_plane() {
     assert_eq!(img.get_pixel(1, 1).0, [40]);
 }
 
+// `Frame<Nv12>::into_luma().write_to(...)` routes through
+// `convert_to_luma_buffer`'s `FrameFormat::NV12 =>
+// buf_nv12_extract_luma(...)` arm. The materialize path is pinned by
+// `nv12_into_luma_extracts_y_plane` above, but the `write_to`
+// integration — including both error guards in
+// `buf_nv12_extract_luma` (input size mismatch, dest size mismatch)
+// — had zero coverage. A regression in either guard would slip
+// through CI and surface only when downstream code passes a
+// pre-allocated buffer.
+
+#[test]
+fn nv12_into_luma_write_to_extracts_y_plane() {
+    let y_plane = [10u8, 20, 30, 40];
+    let uv_plane = [128u8, 128];
+    let mut data = Vec::new();
+    data.extend_from_slice(&y_plane);
+    data.extend_from_slice(&uv_plane);
+
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::NV12);
+    let frame: Frame<Nv12> = Frame::new(buf);
+    let mut dest = vec![0u8; 4];
+    frame.into_luma().write_to(&mut dest).unwrap();
+    assert_eq!(
+        dest, y_plane,
+        "NV12 write_to luma must copy the Y plane verbatim, ignoring \
+         the trailing UV plane",
+    );
+}
+
+#[test]
+fn nv12_into_luma_write_to_rejects_wrong_input_size() {
+    // 2×2 NV12 needs `2*2 + 2*2/2 = 6` bytes. Pass 5 to hit the
+    // input-size guard at types.rs:1893.
+    let data = vec![10u8, 20, 30, 40, 128];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::NV12);
+    let frame: Frame<Nv12> = Frame::new(buf);
+    let mut dest = vec![0u8; 4];
+    let err = frame.into_luma().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::NV12, "Luma", "NV12 input size");
+}
+
+#[test]
+fn nv12_into_luma_write_to_rejects_mismatched_dest() {
+    let y_plane = [10u8, 20, 30, 40];
+    let uv_plane = [128u8, 128];
+    let mut data = Vec::new();
+    data.extend_from_slice(&y_plane);
+    data.extend_from_slice(&uv_plane);
+
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::NV12);
+    let frame: Frame<Nv12> = Frame::new(buf);
+    let mut dest = vec![0u8; 3]; // expected y_size = 4
+    let err = frame.into_luma().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::NV12, "Luma", "destination buffer size");
+}
+
 // ---------------------------------------------------------------------------
 // Luma write_to
 // ---------------------------------------------------------------------------
