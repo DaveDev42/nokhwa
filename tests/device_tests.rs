@@ -88,6 +88,40 @@ fn v4l_hotplug_take_and_steady_state() {
     drop(poll);
 }
 
+/// AVFoundation hotplug plumbing: same shape as the MSMF and V4L
+/// tests. Exercises the `take_hotplug_events()` contract and the
+/// steady-state silence guarantee on the 500ms polling worker, plus
+/// clean Drop-time join. Manual plug/unplug observation against a
+/// physical USB camera is out of scope for the automated suite, but
+/// the wiring is fully exercised here on the self-hosted
+/// `macos-camera` runner.
+#[cfg(all(feature = "input-avfoundation", target_os = "macos"))]
+#[test]
+fn avfoundation_hotplug_take_and_steady_state() {
+    use nokhwa::backends::hotplug::AVFoundationHotplugContext;
+    use nokhwa_core::traits::HotplugSource;
+    use std::time::Duration;
+
+    let mut ctx = AVFoundationHotplugContext::new();
+    let mut poll = ctx
+        .take_hotplug_events()
+        .expect("first take_hotplug_events must succeed");
+
+    assert!(
+        ctx.take_hotplug_events().is_err(),
+        "second take_hotplug_events must error per the trait contract"
+    );
+
+    // Three poll windows (~1.5s) with no plug/unplug → no events.
+    let evt = poll.next_timeout(Duration::from_millis(1500));
+    assert!(
+        evt.is_none(),
+        "expected no hotplug event on steady state, got {evt:?}"
+    );
+
+    drop(poll);
+}
+
 #[test]
 fn query_reports_at_least_one_device() {
     let devices = query(native_backend()).expect("query() returned an error");
