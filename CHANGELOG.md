@@ -4,11 +4,11 @@
 
 ### Infrastructure
 
-* **`v4l-loopback` CI: fix `videodev` + `v4l2loopback` modprobe
-  failures on Azure 6.17 kernel.** Three compounding causes silently
-  broke every PR run since the #183 era (masked by job-level
-  `continue-on-error: true` — run-level green, job-level failure with
-  every device-test step `skipped`):
+* **`v4l-loopback` CI: fix `videodev` + `v4l2loopback` modprobe and
+  `ffmpeg` shared-lib failures on Azure 6.17 kernel.** Four
+  compounding causes silently broke every PR run since the #183 era
+  (masked by job-level `continue-on-error: true` — run-level green,
+  job-level failure with every device-test step `skipped`):
   (1) only `linux-modules-extra-<kernel>` was installed, but on the
   Ubuntu Azure 6.17.x kernel `videodev.ko` (the V4L2 core module)
   ships in the *base* `linux-modules-<kernel>` package — the `-extra`
@@ -24,15 +24,22 @@
   never re-executes, so the compiled
   `/lib/modules/<kernel>/updates/dkms/v4l2loopback.ko` is missing for
   the running kernel and `modprobe v4l2loopback` fails with "Module
-  not found in directory".
+  not found in directory";
+  (4) the cache action restores only listed packages, not their
+  unlisted transitive shared-lib deps — `ffmpeg` was cached but its
+  runtime closure (`libblas3`, `libgfortran5`, `libavfilter*` …) was
+  not, so on cache hit `ffmpeg` aborted with `libblas.so.3: cannot
+  open shared object file`.
   Fix: add `linux-modules-$KERNEL` (base) and `linux-headers-azure`
-  to the apt package list; insert an unconditional `dkms install
-  v4l2loopback/0.12.7 -k $(uname -r)` step (idempotent — no-op on cold
-  runs, ~10–15s compile on cache hits) after cache restore; insert an
-  unconditional `sudo depmod -a` step as belt-and-suspenders; bump
-  the cache version key from `kernel-` to `kernel3-` to bust the
-  incomplete cached entry. Job-level `continue-on-error: true`
-  preserved.
+  to the cached apt package list; remove `ffmpeg` from the cache
+  action and install it fresh via `apt-get install` in a separate
+  step so apt resolves the full dependency closure (~5–10 s); insert
+  an unconditional `dkms install v4l2loopback/0.12.7 -k $(uname -r)`
+  step (idempotent — no-op on cold runs, ~10–15 s compile on cache
+  hits) after cache restore; insert an unconditional `sudo depmod -a`
+  step as belt-and-suspenders; bump the cache version key from
+  `kernel-` to `kernel4-` to bust the now-incomplete cached entry.
+  Job-level `continue-on-error: true` preserved.
 * **`clippy::pedantic` enforced across all workspace crates; matrix lint CI.**
   Added `#![deny(clippy::pedantic)]` / `#![warn(clippy::all)]` /
   `#![allow(clippy::module_name_repetitions)]` headers to

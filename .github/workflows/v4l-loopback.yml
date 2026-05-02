@@ -54,6 +54,14 @@ jobs:
         # linux-headers-azure is included so DKMS can compile
         # v4l2loopback.ko against the running kernel on cache-hit
         # runs (see "Ensure v4l2loopback DKMS module is built" step).
+        #
+        # ffmpeg is intentionally NOT cached here: it transitively
+        # depends on libblas3/libgfortran5/libavfilter etc., and
+        # awalsh128/cache-apt-pkgs-action restores only the listed
+        # package binaries, not their unlisted transitive shared-lib
+        # deps. On cache hit ffmpeg ends up missing libblas.so.3 at
+        # runtime. Install ffmpeg fresh in the next step instead so
+        # apt resolves the full dependency closure.
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: >-
@@ -63,8 +71,18 @@ jobs:
             libv4l-dev
             v4l-utils
             v4l2loopback-dkms
-            ffmpeg
-          version: kernel3-${{ steps.kernel.outputs.version }}
+          version: kernel4-${{ steps.kernel.outputs.version }}
+
+      - name: Install ffmpeg (uncached, needs full dep closure)
+        # Intentionally outside the apt cache action: ffmpeg's
+        # transitive shared-lib dependencies (libblas3, libgfortran5,
+        # libavfilter etc.) are not enumerated in the cache action's
+        # package list and are not restored on cache hit, leaving
+        # ffmpeg unable to load libblas.so.3 at runtime. apt-get
+        # install resolves the full closure correctly. ~5-10s.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
 
       - name: Ensure v4l2loopback DKMS module is built
         # awalsh128/cache-apt-pkgs-action defaults to
