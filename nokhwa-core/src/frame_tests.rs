@@ -218,6 +218,109 @@ fn nv12_into_rgba_appends_opaque_alpha() {
     }
 }
 
+// `Frame<Yuyv>::into_rgb` / `into_rgba` runs YCbCr 4:2:2 → RGB
+// through `yuyv_to_rgb_simd` (BT.601, same coefficient table as
+// NV12). The error guards on `buf_yuyv422_to_rgb` and the kernel
+// math for NV12 are pinned, but YUYV → RGB had no end-to-end
+// pixel-output assertion. Symmetric risk to the NV12 path: a
+// regression that swaps R / B, mishandles the interleaved
+// `[Y0,U,Y1,V]` layout (e.g. reads V as U), or zeroes the alpha
+// byte would silently corrupt every YUYV frame from popular
+// USB UVC webcams.
+
+#[test]
+fn yuyv_into_rgb_video_range_black_decodes_to_zero() {
+    // 2x2 YUYV: 2 chunks of `[Y0, U, Y1, V]`. Y=16 + U=V=128 is
+    // BT.601 video-range black: R = ((16-16)*298) >> 8 = 0. Pin
+    // the (Y-16) pre-offset so a future "let's accept full-range
+    // input" tweak shifts black off zero.
+    let data = vec![16, 128, 16, 128, 16, 128, 16, 128];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::YUYV);
+    let frame: Frame<Yuyv> = Frame::new(buf);
+    let img = frame.into_rgb().materialize().unwrap();
+    for y in 0..2 {
+        for x in 0..2 {
+            let p = img.get_pixel(x, y).0;
+            assert!(
+                p[0] <= 1 && p[1] <= 1 && p[2] <= 1,
+                "video-range black must decode to ~(0,0,0), got {p:?} at ({x},{y})"
+            );
+        }
+    }
+}
+
+#[test]
+fn yuyv_into_rgb_video_range_white_clamps_to_max() {
+    // Y=255 on every Y0/Y1 with neutral chroma. Decode yields
+    // 278 → clamp(0..=255) = 255. Pin so a regression that uses
+    // raw `as u8` truncation surfaces as wraparound to dim
+    // pixels (278 % 256 = 22) instead of the expected white.
+    let data = vec![255, 128, 255, 128, 255, 128, 255, 128];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::YUYV);
+    let frame: Frame<Yuyv> = Frame::new(buf);
+    let img = frame.into_rgb().materialize().unwrap();
+    for y in 0..2 {
+        for x in 0..2 {
+            let p = img.get_pixel(x, y).0;
+            assert_eq!(
+                p,
+                [255, 255, 255],
+                "Y=255 with neutral chroma must clamp to (255,255,255), got {p:?} at ({x},{y})"
+            );
+        }
+    }
+}
+
+#[test]
+fn yuyv_into_rgb_neutral_chroma_produces_gray() {
+    // Neutral chroma → R=G=B. Catches a regression that feeds
+    // U into the V coefficient or vice versa (the YUYV chunk
+    // layout `[Y0, U, Y1, V]` is easy to mis-index — V at
+    // offset 3 is *one* read away from accidentally being read
+    // as U).
+    let data = vec![100, 128, 100, 128, 100, 128, 100, 128];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::YUYV);
+    let frame: Frame<Yuyv> = Frame::new(buf);
+    let img = frame.into_rgb().materialize().unwrap();
+    for y in 0..2 {
+        for x in 0..2 {
+            let p = img.get_pixel(x, y).0;
+            assert_eq!(
+                p[0], p[1],
+                "neutral-chroma R should equal G at ({x},{y}), got R={} G={}",
+                p[0], p[1]
+            );
+            assert_eq!(
+                p[1], p[2],
+                "neutral-chroma G should equal B at ({x},{y}), got G={} B={}",
+                p[1], p[2]
+            );
+        }
+    }
+}
+
+#[test]
+fn yuyv_into_rgba_appends_opaque_alpha() {
+    // The YUYV→RGBA path shares the YCbCr decode with YUYV→RGB
+    // and writes alpha=255 at every 4th byte. Pin so a tweak
+    // that copies Y into the alpha slot or zeroes alpha is
+    // caught.
+    let data = vec![128, 128, 128, 128, 128, 128, 128, 128];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::YUYV);
+    let frame: Frame<Yuyv> = Frame::new(buf);
+    let img = frame.into_rgba().materialize().unwrap();
+    for y in 0..2 {
+        for x in 0..2 {
+            let p = img.get_pixel(x, y).0;
+            assert_eq!(
+                p[3], 255,
+                "YUYV→RGBA alpha must be 255, got {} at ({x},{y})",
+                p[3]
+            );
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Luma conversion
 // ---------------------------------------------------------------------------

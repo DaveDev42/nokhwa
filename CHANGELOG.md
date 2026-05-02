@@ -129,6 +129,20 @@
 
 ### Testing
 
+* **Pin YUYV → RGB / RGBA pixel-correctness with 4 unit tests in
+  `nokhwa-core/src/frame_tests.rs`.** Symmetric to the NV12 entry:
+  `buf_yuyv422_to_rgb`'s error guards were pinned but the actual
+  BT.601 YCbCr 4:2:2 decode kernel had no end-to-end pixel-output
+  coverage. Risk profile is identical — popular USB UVC webcams
+  default to YUYV — so a regression that swaps R / B, mishandles
+  the interleaved `[Y0, U, Y1, V]` layout (V at offset 3 is one
+  index away from being read as U), or zeroes the alpha byte
+  would silently corrupt every frame. New tests pin: (1)
+  video-range black (Y=16, U=V=128) decodes to ~(0,0,0); (2)
+  Y=255 + neutral chroma clamps to (255,255,255) rather than
+  wrapping via raw `as u8` truncation; (3) neutral-chroma
+  produces R=G=B (catches `[Y0,U,Y1,V]` index transpositions);
+  (4) YUYV → RGBA always writes alpha 255 at the 4th byte.
 * **Pin NV12 → RGB / RGBA pixel-correctness with 4 unit tests in
   `nokhwa-core/src/frame_tests.rs`.** The `buf_nv12_to_rgb` error
   guards were already pinned, but the actual color-decode kernel
