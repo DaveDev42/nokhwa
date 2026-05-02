@@ -465,4 +465,44 @@ mod tests {
             Err(NokhwaError::UnsupportedOperationError(_))
         ));
     }
+
+    #[test]
+    fn mock_info_round_trip() {
+        let info = mock_info(7);
+        assert_eq!(info.index(), &CameraIndex::Index(7));
+        assert_eq!(info.human_name(), "Mock Camera");
+        assert_eq!(info.description(), "mock camera for tests");
+        assert_eq!(info.misc(), "mock");
+    }
+
+    #[test]
+    fn mock_frame_three_byte_formats_size_w_h_3() {
+        for f in [
+            FrameFormat::MJPEG,
+            FrameFormat::YUYV,
+            FrameFormat::RAWRGB,
+            FrameFormat::RAWBGR,
+            FrameFormat::NV12,
+        ] {
+            let buf = mock_frame(8, 4, f);
+            assert_eq!(buf.resolution(), Resolution::new(8, 4));
+            assert_eq!(buf.source_frame_format(), f);
+            assert_eq!(buf.buffer().len(), 8 * 4 * 3, "format {f:?}");
+        }
+    }
+
+    #[test]
+    fn mock_frame_gray_size_w_h_1() {
+        let buf = mock_frame(8, 4, FrameFormat::GRAY);
+        assert_eq!(buf.resolution(), Resolution::new(8, 4));
+        assert_eq!(buf.source_frame_format(), FrameFormat::GRAY);
+        assert_eq!(buf.buffer().len(), 8 * 4);
+    }
+
+    #[test]
+    fn mock_frame_zero_dimensions_yields_empty_buffer() {
+        let buf = mock_frame(0, 0, FrameFormat::YUYV);
+        assert_eq!(buf.buffer().len(), 0);
+        assert_eq!(buf.resolution(), Resolution::new(0, 0));
+    }
 }
