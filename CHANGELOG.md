@@ -129,6 +129,24 @@
 
 ### Testing
 
+* **Pin the cross-surface link between `negotiated_format()` and
+  per-frame `Buffer` metadata in
+  `tests/device_tests.rs::frame_metadata_matches_negotiated_format`.**
+  The API-level `negotiated_format()` and the per-frame
+  `Buffer::resolution` / `Buffer::source_frame_format` come from
+  different code paths in every backend, and a regression in either
+  could leave them out of sync without surfacing an error. New device
+  test pulls one frame after `open()` and asserts that the buffer's
+  reported resolution and source frame format match what
+  `negotiated_format()` advertises. Catches: a `negotiated_format`
+  that is cached at open-time but the device silently re-negotiates
+  on the wire; a frame buffer built with a hard-coded fallback
+  format (e.g. always YUYV) regardless of what was negotiated;
+  resolution drift between the API-reported size and the actual
+  pixel count. The existing `frame_metadata_is_stable` test only
+  pins frame-to-frame consistency; this pins the surface-to-buffer
+  link. Runs on the V4L loopback CI job and any self-hosted
+  AVFoundation/MSMF runner.
 * **Pin `FrameFormat::FromStr` parser with 4 unit tests in
   `nokhwa-core/src/types_tests.rs`.** `FrameFormat` has two
   string-to-format mappings — `from_fourcc` (4-byte FourCC tokens
