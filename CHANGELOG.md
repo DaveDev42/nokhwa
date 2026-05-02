@@ -116,6 +116,21 @@
 
 ### Testing
 
+* **Pin `OpenRequest` constructor + `Copy` contract with 4 unit
+  tests in `src/session.rs::open_request_tests`.** `OpenRequest::any()`
+  / `with_format()` / `format()` / `Default::default()` carried no
+  direct unit tests, only implicit coverage through device-test
+  callers that depend on a Linux-or-macOS-or-Windows host with a
+  physical camera attached. Direct tests now pin: (1) `any()` has
+  no specific format (so `open()` falls through to
+  `RequestedFormatType::AbsoluteHighestResolution`); (2)
+  `with_format(fmt)` round-trips through `format()`; (3)
+  `Default::default()` matches `any()` for derive consumers; (4)
+  `Copy` semantics — passing the request by value to a function
+  doesn't move it. A regression where someone adds a non-`Copy`
+  field, drops the `Copy` derive, or accidentally pins a default
+  format on `any()` would fail the new tests at the unit-test layer
+  rather than as a behavior change in every device-test caller.
 * **Pin `ApiBackend` `Display` / `Eq` / `Ord` contracts with 3 unit
   tests in `nokhwa-core/src/types_tests.rs`.** `ApiBackend` is the
   cross-backend dispatch token used by every error variant

@@ -840,3 +840,58 @@ mod uri_scheme_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod open_request_tests {
+    use super::OpenRequest;
+    use nokhwa_core::types::{CameraFormat, FrameFormat, Resolution};
+
+    /// `OpenRequest::any()` produces a request with no specific
+    /// format. `open()` translates `format == None` to
+    /// `RequestedFormatType::AbsoluteHighestResolution` — a
+    /// regression where `any()` accidentally pinned a default format
+    /// would silently override the highest-resolution negotiation
+    /// path that every default caller relies on.
+    #[test]
+    fn any_has_no_format() {
+        assert_eq!(OpenRequest::any().format(), None);
+    }
+
+    /// `OpenRequest::with_format(fmt)` round-trips through `format()`.
+    /// Pins the constructor against a regression that drops the
+    /// supplied format on the floor; every nontrivial open path goes
+    /// through this constructor when the caller wants a specific
+    /// resolution / framerate.
+    #[test]
+    fn with_format_round_trips() {
+        let fmt = CameraFormat::new(Resolution::new(1920, 1080), FrameFormat::MJPEG, 30);
+        let req = OpenRequest::with_format(fmt);
+        assert_eq!(req.format(), Some(fmt));
+    }
+
+    /// `Default::default()` for `OpenRequest` must match
+    /// `OpenRequest::any()`. Documented contract — derive consumers
+    /// (e.g. struct fields with `#[derive(Default)]`) silently get
+    /// the "no specific format" path. A divergence (e.g. someone
+    /// adding a different default later) would change behaviour for
+    /// every call site that uses the derive.
+    #[test]
+    fn default_equals_any() {
+        assert_eq!(OpenRequest::default().format(), OpenRequest::any().format());
+    }
+
+    /// `OpenRequest` is `Copy` per its doc note. Round-trip it by
+    /// value through a binding and confirm the original is still
+    /// usable. A regression where someone adds a non-`Copy` field
+    /// would force dropping the `Copy` derive; this catches the
+    /// change at the unit-test layer rather than at every call site
+    /// that passes the request by value.
+    #[test]
+    fn copy_semantics_preserved() {
+        fn take_by_value(_r: OpenRequest) {}
+        let fmt = CameraFormat::new(Resolution::new(640, 480), FrameFormat::YUYV, 30);
+        let req = OpenRequest::with_format(fmt);
+        take_by_value(req);
+        assert_eq!(req.format(), Some(fmt), "OpenRequest must still be Copy");
+    }
+}
