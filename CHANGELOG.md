@@ -174,6 +174,21 @@
 
 ### Testing
 
+* **Pin `Frame<Nv12>::into_luma().write_to(...)` end-to-end with 3
+  unit tests in `nokhwa-core/src/frame_tests.rs`.** The NV12 luma
+  `materialize()` path is pinned by `nv12_into_luma_extracts_y_plane`,
+  but the `write_to` integration — which routes through the
+  `FrameFormat::NV12 => buf_nv12_extract_luma(...)` arm of
+  `convert_to_luma_buffer` and exposes both of
+  `buf_nv12_extract_luma`'s error guards (input size mismatch, dest
+  size mismatch) — had zero Frame-layer coverage. A regression in
+  either guard would slip through CI and surface only when
+  downstream code passes a pre-allocated buffer. New tests pin:
+  (1) `write_to` happy path copies the Y plane verbatim and
+  ignores the trailing UV plane; (2) a 5-byte input for 2×2 NV12
+  (needs 6) hits the `"NV12 input size"` guard; (3) a 3-byte
+  dest for 2×2 NV12 (expected 4) hits the
+  `"destination buffer size"` guard.
 * **Pin MJPEG `convert_to_luma_buffer` dest-size guard with 2 unit
   tests in `nokhwa-core/src/frame_tests.rs`.** The MJPEG arm in
   `convert_to_luma_buffer` (`frame.rs:662–673`) is the only luma
