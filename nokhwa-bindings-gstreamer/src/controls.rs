@@ -207,3 +207,243 @@ pub(crate) fn v4l2_cid_value(cid: &str, value: &ControlValueSetter) -> Result<i6
 pub(crate) fn unsupported() -> NokhwaError {
     NokhwaError::UnsupportedOperationError(ApiBackend::GStreamer)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Once;
+
+    /// `gstreamer::Structure::builder` requires the global registry to
+    /// be initialised. Same `Once` guard pattern as `format::tests`.
+    fn ensure_gst_init() {
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            gstreamer::init().expect("gstreamer::init() must succeed in tests");
+        });
+    }
+
+    #[test]
+    fn control_handle_brightness_is_live_property() {
+        match control_handle(KnownCameraControl::Brightness) {
+            Some(GstControlHandle::Property("brightness")) => {}
+            other => panic!("expected Property(\"brightness\"), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn control_handle_contrast_is_live_property() {
+        match control_handle(KnownCameraControl::Contrast) {
+            Some(GstControlHandle::Property("contrast")) => {}
+            other => panic!("expected Property(\"contrast\"), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn control_handle_hue_is_live_property() {
+        match control_handle(KnownCameraControl::Hue) {
+            Some(GstControlHandle::Property("hue")) => {}
+            other => panic!("expected Property(\"hue\"), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn control_handle_saturation_is_live_property() {
+        match control_handle(KnownCameraControl::Saturation) {
+            Some(GstControlHandle::Property("saturation")) => {}
+            other => panic!("expected Property(\"saturation\"), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn control_handle_extra_controls_use_v4l2_cid_names() {
+        // The `extra-controls` payload is a `GstStructure` keyed by
+        // V4L2 CID name strings — these spellings are part of the
+        // ABI contract with `v4l2src` and silent renames will silently
+        // break control writes on real hardware.
+        let pairs: &[(KnownCameraControl, &str)] = &[
+            (KnownCameraControl::Sharpness, "sharpness"),
+            (KnownCameraControl::Gamma, "gamma"),
+            (
+                KnownCameraControl::WhiteBalance,
+                "white_balance_temperature",
+            ),
+            (KnownCameraControl::BacklightComp, "backlight_compensation"),
+            (KnownCameraControl::Gain, "gain"),
+            (KnownCameraControl::Pan, "pan_absolute"),
+            (KnownCameraControl::Tilt, "tilt_absolute"),
+            (KnownCameraControl::Zoom, "zoom_absolute"),
+            (KnownCameraControl::Exposure, "exposure_time_absolute"),
+            (KnownCameraControl::Iris, "iris_absolute"),
+            (KnownCameraControl::Focus, "focus_absolute"),
+        ];
+        for (kcc, expected) in pairs {
+            match control_handle(*kcc) {
+                Some(GstControlHandle::V4l2Cid(name)) => {
+                    assert_eq!(name, *expected, "wrong CID name for {kcc:?}");
+                }
+                other => panic!("expected V4l2Cid for {kcc:?}, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn control_handle_other_returns_none() {
+        // `KnownCameraControl::Other(_)` is the catch-all that callers
+        // must dispatch to `set_control_extra` themselves; the static
+        // map deliberately doesn't know about it.
+        assert!(control_handle(KnownCameraControl::Other(0xdead_beef)).is_none());
+    }
+
+    #[test]
+    fn control_handle_covers_every_known_variant() {
+        // Pin: every variant of `KnownCameraControl` except `Other` must
+        // produce some handle. A new variant added without a `match` arm
+        // will fail compilation here.
+        use nokhwa_core::types::all_known_camera_controls;
+        for kcc in all_known_camera_controls() {
+            assert!(
+                control_handle(kcc).is_some(),
+                "control_handle({kcc:?}) returned None — missing match arm?"
+            );
+        }
+    }
+
+    #[test]
+    fn known_from_property_name_maps_four_v4l2src_props() {
+        assert_eq!(
+            known_from_property_name("brightness"),
+            Some(KnownCameraControl::Brightness)
+        );
+        assert_eq!(
+            known_from_property_name("contrast"),
+            Some(KnownCameraControl::Contrast)
+        );
+        assert_eq!(
+            known_from_property_name("hue"),
+            Some(KnownCameraControl::Hue)
+        );
+        assert_eq!(
+            known_from_property_name("saturation"),
+            Some(KnownCameraControl::Saturation)
+        );
+    }
+
+    #[test]
+    fn known_from_property_name_unknown_returns_none() {
+        // `list_controls` skips structures whose property name doesn't
+        // match — anything outside the four `v4l2src` names is "not a
+        // known camera control" and must return None.
+        assert!(known_from_property_name("name").is_none());
+        assert!(known_from_property_name("zoom_absolute").is_none());
+        assert!(known_from_property_name("").is_none());
+        assert!(known_from_property_name("Brightness").is_none()); // case-sensitive
+    }
+
+    #[test]
+    fn build_extra_controls_empty_returns_none() {
+        // Empty pending → caller skips the property set entirely
+        // (setting an empty `extra-controls` triggers a v4l2src warning
+        // at PAUSED transition).
+        assert!(build_extra_controls(&BTreeMap::new()).is_none());
+    }
+
+    #[test]
+    fn build_extra_controls_uses_structure_name_c() {
+        ensure_gst_init();
+        let mut pending = BTreeMap::new();
+        pending.insert("zoom_absolute".to_string(), 5);
+        let structure = build_extra_controls(&pending).expect("Some for non-empty pending");
+        // v4l2src ignores the structure if the name is anything other
+        // than "c" — pin the spelling.
+        assert_eq!(structure.name(), "c");
+    }
+
+    #[test]
+    fn build_extra_controls_writes_field_per_entry() {
+        ensure_gst_init();
+        let mut pending = BTreeMap::new();
+        pending.insert("zoom_absolute".to_string(), 5);
+        pending.insert("focus_absolute".to_string(), 100);
+        pending.insert("exposure_time_absolute".to_string(), 250);
+        let structure = build_extra_controls(&pending).unwrap();
+        assert_eq!(structure.get::<i32>("zoom_absolute").unwrap(), 5);
+        assert_eq!(structure.get::<i32>("focus_absolute").unwrap(), 100);
+        assert_eq!(structure.get::<i32>("exposure_time_absolute").unwrap(), 250);
+    }
+
+    #[test]
+    fn build_extra_controls_truncates_i64_to_i32() {
+        // V4L2 CIDs are `__s32`-valued; a caller passing an out-of-range
+        // i64 today gets a silent `as i32` truncation. This is documented
+        // (only) by this test — if/when we change the signature to
+        // surface the overflow, update this test.
+        ensure_gst_init();
+        let mut pending = BTreeMap::new();
+        pending.insert("focus_absolute".to_string(), i64::from(i32::MAX) + 1);
+        let structure = build_extra_controls(&pending).unwrap();
+        assert_eq!(structure.get::<i32>("focus_absolute").unwrap(), i32::MIN);
+    }
+
+    #[test]
+    fn v4l2_cid_value_integer_passthrough() {
+        let v = v4l2_cid_value("zoom_absolute", &ControlValueSetter::Integer(42)).unwrap();
+        assert_eq!(v, 42);
+    }
+
+    #[test]
+    fn v4l2_cid_value_boolean_maps_to_zero_or_one() {
+        assert_eq!(
+            v4l2_cid_value("backlight_compensation", &ControlValueSetter::Boolean(true)).unwrap(),
+            1
+        );
+        assert_eq!(
+            v4l2_cid_value(
+                "backlight_compensation",
+                &ControlValueSetter::Boolean(false)
+            )
+            .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn v4l2_cid_value_rejects_unsupported_setters() {
+        // V4L2 CIDs are int-valued — Float / String / RGB etc. must
+        // fail with a SetPropertyError that names the offending CID.
+        let unsupported_setters = [
+            ControlValueSetter::Float(1.5),
+            ControlValueSetter::String("foo".into()),
+            ControlValueSetter::Bytes(vec![1, 2, 3]),
+            ControlValueSetter::KeyValue(1, 2),
+            ControlValueSetter::Point(0.0, 0.0),
+            ControlValueSetter::RGB(0.0, 0.0, 0.0),
+            ControlValueSetter::None,
+            ControlValueSetter::EnumValue(7),
+        ];
+        for setter in &unsupported_setters {
+            let err = v4l2_cid_value("focus_absolute", setter).unwrap_err();
+            let s = format!("{err}");
+            assert!(
+                s.contains("focus_absolute"),
+                "error message must mention CID, got: {s}"
+            );
+        }
+    }
+
+    #[test]
+    fn unsupported_returns_unsupported_operation_error() {
+        // The Windows / macOS sentinel — must surface `GStreamer` so
+        // the user knows which backend lacks the support, not just
+        // "unsupported".
+        let err = unsupported();
+        let msg = format!("{err}");
+        assert!(
+            matches!(
+                err,
+                NokhwaError::UnsupportedOperationError(ApiBackend::GStreamer)
+            ),
+            "wrong variant: {err:?}"
+        );
+        assert!(msg.contains("GStreamer"), "Display lost backend: {msg}");
+    }
+}

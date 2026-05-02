@@ -82,6 +82,22 @@
 
 ### Testing
 
+* **Pin GStreamer `controls` static map + helpers.**
+  `nokhwa-bindings-gstreamer/src/controls.rs` had zero tests despite
+  carrying the full `KnownCameraControl` → V4L2-CID-name lookup table —
+  spellings like `"white_balance_temperature"` and
+  `"exposure_time_absolute"` are part of the wire contract with `v4l2src`
+  and a silent rename would have broken control writes on real hardware.
+  Added 17 tests: brightness / contrast / hue / saturation as
+  `Property("…")` handles, the eleven V4L2-CID controls with their exact
+  CID strings, `Other(_)` returning `None`, an
+  `all_known_camera_controls()`-driven exhaustiveness check, both
+  directions of `known_from_property_name` (the four `v4l2src`
+  properties + non-matches including a case-sensitivity check),
+  `build_extra_controls` empty / structure-name-`"c"` / multi-entry /
+  i64→i32 truncation, `v4l2_cid_value` integer-passthrough / boolean→0|1 /
+  rejection of every non-int variant (Float, String, Bytes, KeyValue,
+  Point, RGB, None, EnumValue), and the `unsupported()` sentinel.
 * **Expand GStreamer `format` module unit coverage.** `format::caps_to_camera_formats`
   is the heart of the session-2 enumeration path — the 200-line function that turns
   raw `Caps` into the `Vec<CameraFormat>` exposed via `compatible_camera_formats()` —
