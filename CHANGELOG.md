@@ -174,6 +174,24 @@
 
 ### Testing
 
+* **Pin MJPEG `convert_to_luma_buffer` dest-size guard with 2 unit
+  tests in `nokhwa-core/src/frame_tests.rs`.** The MJPEG arm in
+  `convert_to_luma_buffer` (`frame.rs:662–673`) is the only luma
+  decoder that uses `dest.len() < luma.len()` — a `<` check, not
+  `!=` — because MJPEG decodes into an intermediate `Vec` first
+  and the asymmetric guard lets call sites pass oversized
+  destinations. The rejection branch (`"Destination buffer too
+  small"`) had **zero coverage**: a regression that drops the
+  guard would panic on OOB inside `dest[..luma.len()]
+  .copy_from_slice(...)` instead of returning a clean
+  `ProcessFrameError`, and silently tightening the guard to `!=`
+  would break call sites that rely on oversized-dest acceptance.
+  New tests pin both directions: (1) a 3-byte dest against 2×2
+  MJPEG (needs 4 luma bytes) is rejected with the
+  `"too small"` error; (2) an 8-byte dest succeeds, the first 4
+  bytes carry the decoded luma, and the trailing 4 bytes remain
+  at their pre-call sentinel value (proving `write_to` doesn't
+  touch the tail).
 * **Pin `Frame<RawBgr>::into_luma` end-to-end with 4 unit tests in
   `nokhwa-core/src/frame_tests.rs`.** `Frame<RawBgr>` routes through
   the `RAWRGB | RAWBGR` arm of `convert_to_luma` /

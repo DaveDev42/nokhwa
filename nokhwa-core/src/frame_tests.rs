@@ -710,6 +710,46 @@ fn mjpeg_luma_write_to() {
 
 #[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
 #[test]
+fn mjpeg_luma_write_to_rejects_too_small_dest() {
+    // The MJPEG arm in `convert_to_luma_buffer` decodes into an
+    // intermediate `Vec` then guards `dest.len() < luma.len()` before
+    // copying. Unlike the RAW{RGB,BGR} luma arm — which requires
+    // `dest.len() == pixel_count` — MJPEG accepts oversized dests
+    // (only the first `luma.len()` bytes are written). Pin the
+    // asymmetric "too-small" rejection so a regression that drops the
+    // guard would panic on OOB instead of returning a clean
+    // `ProcessFrameError`.
+    let buf = Buffer::new(Resolution::new(2, 2), JPEG_RED_2X2, FrameFormat::MJPEG);
+    let frame: Frame<Mjpeg> = Frame::new(buf);
+    let mut dest = vec![0u8; 3]; // expected >= 4 (2x2 = 4 luma bytes)
+    let err = frame.into_luma().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::MJPEG, "Luma", "too small");
+}
+
+#[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
+#[test]
+fn mjpeg_luma_write_to_accepts_oversized_dest() {
+    // Counterpart to the "too small" test: the `<` (not `!=`) check
+    // means oversized dests must succeed, with the trailing bytes
+    // left untouched. This pins the documented asymmetry so a future
+    // refactor can't silently tighten the guard to `!=` and reject
+    // larger dests that the call site happens to allocate.
+    let buf = Buffer::new(Resolution::new(2, 2), JPEG_RED_2X2, FrameFormat::MJPEG);
+    let frame: Frame<Mjpeg> = Frame::new(buf);
+    let sentinel = 0xAB;
+    let mut dest = vec![sentinel; 8]; // expected = 4; trailing 4 bytes must stay sentinel
+    frame.into_luma().write_to(&mut dest).unwrap();
+    assert_eq!(
+        &dest[4..],
+        &[sentinel; 4],
+        "oversized-dest tail must not be touched by `write_to`",
+    );
+    let expected = [85u8; 4];
+    assert_pixels_near(&dest[..4], &expected, 1, 5);
+}
+
+#[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
+#[test]
 fn mjpeg_malformed_returns_error() {
     // Starts with valid JPEG SOI marker but truncated
     let garbage = &[0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x00, 0x00];
