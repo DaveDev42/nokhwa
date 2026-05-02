@@ -87,6 +87,14 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **`compatible_fourcc` cross-backend unification** (#194 / #195 /
+  #196 / #197 / #198) — fixed silent MSMF truncation to 2 entries
+  (#194), unified MSMF/GStreamer to the canonical `collect → sort →
+  dedup` shape (#195, #198), added device-test invariants that would
+  have caught the truncation bug (#196), and brought AVFoundation up
+  to cross-backend hotplug-test parity (#197). All four backends
+  (V4L / AVFoundation / MSMF / GStreamer) now return
+  `FrameFormat`-`Ord`-sorted, deduplicated lists.
 - **V4L Stepwise common-preset enumeration** (`feat/v4l-stepwise-presets`) —
   `get_resolution_list` now also exposes any of {320×240, 640×480,
   800×600, 1024×768, 1280×720, 1280×960, 1920×1080, 2560×1440,
