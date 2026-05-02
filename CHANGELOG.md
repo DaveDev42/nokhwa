@@ -116,6 +116,22 @@
 
 ### Testing
 
+* **Pin `yuyv444_to_rgb` / `yuyv444_to_rgba` BT.601 contract with 5
+  unit tests in `nokhwa-core/src/types_tests.rs`.**
+  `yuyv444_to_rgb` is the per-pixel kernel for YCbCr-4:4:4 → RGB888
+  (BT.601 video-range matrix, integer coefficients
+  298 / 409 / 100 / 208 / 516 / 128 / 16). Until now its correctness
+  was only implicitly tested via the 4:2:2 and NV12 conversion
+  paths' end-to-end pixel checks. Five direct tests pin: (1) the
+  video-range black point Y=16, Cb=Cr=128 → exactly (0,0,0); (2) the
+  video-range white point Y=235, Cb=Cr=128 → exactly (255,255,255);
+  (3) the grey-axis invariant (Cb=Cr=128 ⇒ R=G=B for every legal Y,
+  monotonic non-decreasing); (4) saturation/clamp safety on extreme
+  inputs (Y=0/255 paired with chroma=0/255, all six corners); (5)
+  `yuyv444_to_rgba(y,u,v) == [..yuyv444_to_rgb(y,u,v), 255]` across
+  a representative sample. Catches a flipped sign on the chroma
+  bias (`-128`), a mis-keyed coefficient swap, or a regression that
+  loses the alpha=255 invariant.
 * **Pin `yuyv422_predicted_size` arithmetic with 3 unit tests in
   `nokhwa-core/src/types_tests.rs`.** `yuyv422_predicted_size` is a
   `pub` size predictor that callers pre-allocating a destination
