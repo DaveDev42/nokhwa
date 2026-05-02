@@ -150,6 +150,18 @@
   / `stream_shutdown()` set their optional contexts to `None`. Pins
   the `Error` user-facing message shape so a future
   `#[error(...)]`-attribute edit doesn't silently drop a backend tag.
+* **`CaptureFormat` marker → `FrameFormat` mappings.**
+  `format_types.rs` defines six ZST markers (`Yuyv`, `Nv12`, `Mjpeg`,
+  `Gray`, `RawRgb`, `RawBgr`), each carrying a `const FRAME_FORMAT:
+  FrameFormat` that `Buffer::typed::<F>()` matches against to reject
+  format-mismatched buffers at the type level. The constants had no
+  test coverage at all — a typo (e.g. `Yuyv::FRAME_FORMAT =
+  FrameFormat::YUY2` ↔ `YUYV` — they alias today but a future split
+  would silently route `Yuyv` frames through `Mjpeg`-decoder paths).
+  Added `nokhwa-core/src/format_types_tests.rs` with 8 tests: one per
+  marker, a pairwise-distinct check (no two markers map to the same
+  `FrameFormat`), and a ZST-size check (markers stay zero-sized so
+  `Frame<F>` doesn't accidentally grow).
 
 ### Documentation
 
