@@ -189,11 +189,6 @@ impl FrameSource for MediaFoundationCaptureDevice {
             if !frame_format_list.contains(&camera_format.format()) {
                 frame_format_list.push(camera_format.format());
             }
-
-            // TODO: Update as we get more frame formats!
-            if frame_format_list.len() == 2 {
-                break;
-            }
         }
         Ok(frame_format_list)
     }
