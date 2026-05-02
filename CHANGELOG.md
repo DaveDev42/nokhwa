@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Performance
+
+* **Event-driven V4L hotplug via `inotify`.** Replaces the 500 ms
+  polling loop in `nokhwa-bindings-linux-v4l::hotplug` with an
+  `inotify(7)` watch on `/dev/` for `IN_CREATE` / `IN_DELETE`. Worker
+  thread blocks in `poll(2)` (1 s timeout for shutdown
+  responsiveness) and re-`query()`s only when the kernel signals a
+  device-node change — zero steady-state wake-ups, immediate
+  notification on plug/unplug instead of up-to-500 ms latency.
+  Mirrors the MSMF backend's `RegisterDeviceNotificationW` design
+  (#173); was the last remaining 2×/sec poll thread on the Linux
+  side. Public API unchanged. Added a `v4l_hotplug_take_and_steady_state`
+  integration test paralleling `msmf_hotplug_take_and_steady_state`.
+
 ### Infrastructure
 
 * **`v4l-loopback` CI: fix `videodev` + `v4l2loopback` modprobe and
