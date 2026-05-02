@@ -68,8 +68,10 @@ for buf in runner.frames().unwrap().iter() { /* ... */ }
 ```
 
 The callback model is replaced by `std::sync::mpsc::Receiver`. Apps
-needing `async`/`tokio` integration should wrap `recv` calls in
-`spawn_blocking` for now; an async runner is on the 0.14.0 roadmap.
+needing `async`/`tokio` integration use the `nokhwa-tokio` crate's
+`TokioCameraRunner`, which exposes `tokio::sync::mpsc::Receiver`s
+directly. Pre-`nokhwa-tokio` 0.14.0 builds can wrap `recv` calls in
+`spawn_blocking` instead.
 
 ### Custom backends
 

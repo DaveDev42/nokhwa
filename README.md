@@ -1,4 +1,4 @@
-[![CI](https://github.com/DaveDev42/nokhwa/actions/workflows/lint.yml/badge.svg)](https://github.com/DaveDev42/nokhwa/actions/workflows/lint.yml) [![Build](https://github.com/DaveDev42/nokhwa/actions/workflows/build-matrix.yml/badge.svg)](https://github.com/DaveDev42/nokhwa/actions/workflows/build-matrix.yml) [![docs.rs](https://img.shields.io/docsrs/nokhwa)](https://docs.rs/nokhwa/latest/nokhwa/)
+[![CI](https://github.com/DaveDev42/nokhwa/actions/workflows/lint.yml/badge.svg)](https://github.com/DaveDev42/nokhwa/actions/workflows/lint.yml) [![Build](https://github.com/DaveDev42/nokhwa/actions/workflows/build-matrix.yml/badge.svg)](https://github.com/DaveDev42/nokhwa/actions/workflows/build-matrix.yml)
 # nokhwa
 Nokhwa(녹화): Korean word meaning "to record".
 
@@ -8,11 +8,13 @@ A Simple-to-use, cross-platform Rust Webcam Capture Library
 
 ## Using nokhwa
 
-Since this fork is not published to crates.io, add it as a git dependency:
+Since this fork is not published to crates.io, add it as a git dependency.
+Pin to a tag for reproducible builds; track `branch = "main"` only if you
+explicitly want every push to land in your build.
 ```toml
 [dependencies.nokhwa]
 git = "https://github.com/DaveDev42/nokhwa.git"
-branch = "main"
+tag = "v0.14.5"
 # Use the native input backend for your platform
 features = ["input-native"]
 ```
