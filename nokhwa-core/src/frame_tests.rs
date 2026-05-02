@@ -1,4 +1,4 @@
-use crate::buffer::Buffer;
+use crate::buffer::{Buffer, TimestampKind};
 use crate::error::NokhwaError;
 #[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
 use crate::format_types::Mjpeg;
@@ -8,6 +8,7 @@ use crate::frame::{
     IntoLuma, IntoRgb, IntoRgba,
 };
 use crate::types::{FrameFormat, Resolution};
+use std::time::Duration;
 
 // ---------------------------------------------------------------------------
 // Frame construction
@@ -54,6 +55,79 @@ fn frame_try_new_matching_succeeds() {
     let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::GRAY);
     let result = Frame::<Gray>::try_new(buf);
     assert!(result.is_ok());
+}
+
+#[test]
+#[should_panic(expected = "Buffer FrameFormat")]
+fn frame_new_panics_on_format_mismatch() {
+    // `Frame::new` is the infallible variant — it must `assert_eq!`
+    // that the buffer's `FrameFormat` matches `F::FRAME_FORMAT`. If
+    // the assert is silently weakened to e.g. a `debug_assert!`,
+    // release builds would silently produce a `Frame` with
+    // type-tag/data disagreement and decode to garbage. Pin the
+    // panic so any future regression that drops the runtime check
+    // is caught in CI.
+    let data = vec![0u8; 4];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::GRAY);
+    let _frame: Frame<RawRgb> = Frame::new(buf);
+}
+
+#[test]
+fn frame_accessors_delegate_to_buffer() {
+    // Pin `Frame::resolution()`, `buffer()`, and `as_buffer()` as
+    // delegating to the underlying `Buffer` — a refactor that
+    // forgets to forward, or that reads from a stale field on
+    // `Frame`, would silently desync the typed handle from its
+    // payload.
+    let data: Vec<u8> = (0..12u8).collect();
+    let res = Resolution::new(2, 2);
+    let buf = Buffer::new(res, &data, FrameFormat::RAWRGB);
+    let frame: Frame<RawRgb> = Frame::new(buf);
+
+    assert_eq!(frame.resolution(), res);
+    assert_eq!(frame.buffer(), &data[..]);
+    assert_eq!(frame.as_buffer().resolution(), res);
+    assert_eq!(frame.as_buffer().buffer(), &data[..]);
+    assert_eq!(frame.as_buffer().source_frame_format(), FrameFormat::RAWRGB);
+}
+
+#[test]
+fn frame_capture_timestamp_passthrough_some() {
+    // `Frame::capture_timestamp{,_with_kind}` must forward the
+    // backend-provided timestamp from the underlying `Buffer`. A
+    // refactor that drops the kind, returns `None`, or rebuilds
+    // the `Duration` with a different reference clock would
+    // silently mis-stamp every frame.
+    let data = vec![0u8; 4];
+    let ts = Duration::from_millis(12_345);
+    let buf = Buffer::with_timestamp(
+        Resolution::new(2, 2),
+        &data,
+        FrameFormat::GRAY,
+        Some((ts, TimestampKind::MonotonicClock)),
+    );
+    let frame: Frame<Gray> = Frame::new(buf);
+
+    assert_eq!(frame.capture_timestamp(), Some(ts));
+    assert_eq!(
+        frame.capture_timestamp_with_kind(),
+        Some((ts, TimestampKind::MonotonicClock))
+    );
+}
+
+#[test]
+fn frame_capture_timestamp_passthrough_none() {
+    // The `None` case must also be forwarded — a regression that
+    // synthesises a fake "now" timestamp when the backend didn't
+    // provide one would let downstream code believe every frame
+    // is timestamped, which is the whole reason the field is an
+    // `Option`.
+    let data = vec![0u8; 4];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::GRAY);
+    let frame: Frame<Gray> = Frame::new(buf);
+
+    assert_eq!(frame.capture_timestamp(), None);
+    assert_eq!(frame.capture_timestamp_with_kind(), None);
 }
 
 // ---------------------------------------------------------------------------
