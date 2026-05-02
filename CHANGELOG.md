@@ -82,6 +82,24 @@
 
 ### Testing
 
+* **Expand `tests/device_tests.rs` with 4 new integration tests
+  (info+backend reflection, numeric-string `open()` dispatch,
+  non-empty frame payload, `is_open()` lifecycle).** Covers four
+  surface-level guarantees that the existing 14 device tests didn't
+  pin: (1) `OpenedCamera::backend()` matches `native_api_backend()`
+  and `info().index()` echoes the requested index — catches a
+  wrapper that returns stale or default `CameraInfo`; (2)
+  `open(CameraIndex::String("0"))` reaches the same native backend
+  as `open(CameraIndex::Index(0))` — the dual-form contract through
+  the public `open()` dispatcher rather than just the unit-tested
+  `as_index()` layer; (3) `frame()` returns non-empty bytes —
+  `frame_metadata_is_stable` only checked metadata, an empty-payload
+  regression slipped past every existing test; (4) `is_open()` is
+  false → true → false across `open()`/`close()` —
+  hardcoded-`true` or never-cleared regressions silently break
+  re-init logic. Runs on the v4l-loopback CI runner and the
+  self-hosted `macos-camera` runner; compile-checked on every
+  `Build (windows)` job.
 * **Pin `CameraIndex` numeric-string ↔ index dual form +
   `TryFrom<u32>` / `TryFrom<usize>` conversions.** `CameraIndex` is
   the public input to `open()` — every backend path bottoms out in

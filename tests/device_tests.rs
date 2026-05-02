@@ -413,6 +413,106 @@ fn set_format_from_compatible_round_trip() {
     );
 }
 
+/// `info()` and `backend()` must reflect the device that was opened —
+/// `info().index()` matches the index passed to `open()`, and
+/// `backend()` matches the platform's `native_api_backend()`. Catches
+/// a regression where a wrapper's `info()` returns stale or
+/// constructor-default data instead of pass-through to the backend.
+#[test]
+fn opened_camera_info_and_backend_reflect_request() {
+    let cam = open_first();
+    let (backend, info) = match &cam {
+        OpenedCamera::Stream(c) => (c.backend(), c.info()),
+        OpenedCamera::Shutter(c) => (c.backend(), c.info()),
+        OpenedCamera::Hybrid(c) => (c.backend(), c.info()),
+    };
+    assert_eq!(
+        backend,
+        native_backend(),
+        "OpenedCamera::backend() must match native_api_backend() for an index-opened device"
+    );
+    assert_eq!(
+        info.index(),
+        &CameraIndex::Index(0),
+        "OpenedCamera::info().index() must echo the index passed to open()"
+    );
+    assert!(
+        !info.human_name().is_empty(),
+        "OpenedCamera::info().human_name() must be non-empty for a real device"
+    );
+}
+
+/// The dual-form `CameraIndex` contract — a numeric `String` is a
+/// valid index, by parsing — must hold through the public `open()`
+/// dispatcher, not just at the `as_index()` unit-test layer.
+/// `open(CameraIndex::String("0"))` must reach the same native
+/// backend as `open(CameraIndex::Index(0))`. Regression here would
+/// silently route numeric-string callers to GStreamer's URL path
+/// (which expects `rtsp://`/`http://`/`file://`) and produce a
+/// backend mismatch on the resulting `OpenedCamera`.
+#[test]
+fn open_numeric_string_routes_to_native_backend() {
+    let cam = open(CameraIndex::String("0".to_string()), OpenRequest::any())
+        .expect("open(CameraIndex::String(\"0\")) must dispatch to the native backend");
+    let backend = match &cam {
+        OpenedCamera::Stream(c) => c.backend(),
+        OpenedCamera::Shutter(c) => c.backend(),
+        OpenedCamera::Hybrid(c) => c.backend(),
+    };
+    assert_eq!(
+        backend,
+        native_backend(),
+        "open(String(\"0\")) reached the wrong backend; numeric-string dispatch is broken"
+    );
+}
+
+/// `frame()` must return non-empty bytes. `frame_metadata_is_stable`
+/// already pins resolution + source format across frames; this is the
+/// matching pin for the actual payload. A regression that returns
+/// `Buffer { buffer: Cow::Borrowed(&[]), .. }` would slip past every
+/// existing test because they only inspect metadata.
+#[test]
+fn frame_buffer_is_non_empty() {
+    let OpenedCamera::Stream(mut cam) = open_first() else {
+        eprintln!("frame_buffer_is_non_empty: backend is not Stream-capable; skipping.");
+        return;
+    };
+    cam.open().expect("StreamCamera::open");
+    let buf = cam.frame().expect("StreamCamera::frame");
+    assert!(
+        !buf.buffer().is_empty(),
+        "frame() returned a Buffer with zero payload bytes — backend is producing empty frames"
+    );
+    cam.close().expect("StreamCamera::close");
+}
+
+/// `is_open()` must reflect the open/close lifecycle: false before
+/// `open()`, true after `open()`, false again after `close()`. A
+/// regression where `is_open()` is hardcoded `true` (or never updated
+/// on `close()`) would silently break callers that branch on this
+/// flag for re-init logic.
+#[test]
+fn stream_camera_is_open_lifecycle() {
+    let OpenedCamera::Stream(mut cam) = open_first() else {
+        eprintln!("stream_camera_is_open_lifecycle: backend is not Stream-capable; skipping.");
+        return;
+    };
+    assert!(
+        !cam.is_open(),
+        "is_open() must be false before StreamCamera::open()"
+    );
+    cam.open().expect("StreamCamera::open");
+    assert!(
+        cam.is_open(),
+        "is_open() must be true after StreamCamera::open()"
+    );
+    cam.close().expect("StreamCamera::close");
+    assert!(
+        !cam.is_open(),
+        "is_open() must be false after StreamCamera::close()"
+    );
+}
+
 // The file is already gated by `device-test` at the top, so this
 // submodule's effective gate is `device-test AND runner` — i.e. it
 // compiles only when both features are enabled.
