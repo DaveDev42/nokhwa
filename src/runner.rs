@@ -709,4 +709,40 @@ mod tests {
         assert!(cfg.events_capacity > 0);
         assert_eq!(cfg.overflow, Overflow::DropNewest);
     }
+
+    /// Pin the exact default values for `RunnerConfig`. The
+    /// existing `default_runnerconfig_is_bounded` only checks that
+    /// the channel capacities are non-zero; the specific numbers
+    /// (`4` / `8` / `32`) and the polling cadences (`10ms` /
+    /// `50ms` / `5s`) are part of the runner's documented behaviour
+    /// and a regression that silently halves `frames_capacity` (or
+    /// switches the overflow policy) would change the
+    /// memory-vs-latency trade-off downstream consumers depend on.
+    /// Pin the exact shape so the change requires updating both
+    /// this test and the documentation in lock-step.
+    #[test]
+    fn default_runnerconfig_exact_values() {
+        let cfg = super::RunnerConfig::default();
+        assert_eq!(cfg.poll_interval, Duration::from_millis(10));
+        assert_eq!(cfg.event_tick, Duration::from_millis(50));
+        assert_eq!(cfg.shutter_timeout, Duration::from_secs(5));
+        assert_eq!(cfg.frames_capacity, 4);
+        assert_eq!(cfg.pictures_capacity, 8);
+        assert_eq!(cfg.events_capacity, 32);
+        assert_eq!(cfg.overflow, Overflow::DropNewest);
+    }
+
+    /// `Overflow::default()` is the source of truth for what
+    /// happens when the user picks bounded channels but doesn't
+    /// specify an overflow policy. `DropNewest` is the lowest-
+    /// overhead choice (no relay thread spawned) and the runner's
+    /// documented default — a regression that flipped to
+    /// `DropOldest` or `Block` would silently change runner
+    /// memory-and-stall behaviour for every default caller. Pin the
+    /// derive's choice so a refactor of the enum (e.g. reordering
+    /// variants and removing `#[default]`) gets caught here.
+    #[test]
+    fn overflow_default_is_drop_newest() {
+        assert_eq!(Overflow::default(), Overflow::DropNewest);
+    }
 }
