@@ -1709,6 +1709,24 @@ fn yuyv422_predicted_size_rounds_partial_chunks_down() {
     assert_eq!(yuyv422_predicted_size(5, true), 8);
 }
 
+#[test]
+fn yuyv422_predicted_size_matches_actual_yuyv422_to_rgb_output() {
+    // `yuyv422_predicted_size` is what callers use to pre-size the
+    // destination buffer for `yuyv422_to_rgb`; if the formulas drift
+    // (e.g. someone changes one but not the other), every caller
+    // gets either a buffer overrun or wasted memory. Cross-check by
+    // running both functions on the same input and asserting the
+    // predicted size equals the actual output length, for both RGB
+    // and RGBA paths and for an input that exceeds the SIMD chunk
+    // size so the partial-chunk + main-loop split is exercised.
+    let data: Vec<u8> = (0..64u8).collect(); // 64 bytes = 16 YUYV chunks = 32 pixels
+    let rgb = yuyv422_to_rgb(&data, false).expect("convert RGB must succeed");
+    assert_eq!(yuyv422_predicted_size(data.len(), false), rgb.len());
+
+    let rgba = yuyv422_to_rgb(&data, true).expect("convert RGBA must succeed");
+    assert_eq!(yuyv422_predicted_size(data.len(), true), rgba.len());
+}
+
 // `yuyv444_to_rgb` is the per-pixel kernel for YCbCr-4:4:4 → RGB888
 // (BT.601 video-range matrix). Pin the contract through the canonical
 // reference points + the saturation/clamp behaviour so a typo in the

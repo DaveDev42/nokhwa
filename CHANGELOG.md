@@ -129,6 +129,24 @@
 
 ### Testing
 
+* **Pin size-prediction invariants with 3 unit tests across
+  `nokhwa-core/src/types_tests.rs` and `traits_tests.rs`.**
+  Two distinct size-prediction formulas drive destination-buffer
+  allocation in callers, and each had silent-drift exposure:
+  (a) `yuyv422_predicted_size` is paired with `yuyv422_to_rgb`
+  but only had per-formula tests, never a cross-check that the
+  predicted size matches the actual output length — if one
+  formula is changed without the other, callers get buffer
+  overruns or wasted memory; (b) `FrameSource::decoded_buffer_size`
+  was tested at 640×480 / 1920×1080 only, so the 1×1 GRAY+alpha
+  case (the only configuration where `pxwidth + 1 = 2` rather
+  than 4) and the 0×0 zero-resolution invariant — which feeds
+  the wgpu upload boundary — were both uncovered. New tests pin:
+  (1) `yuyv422_predicted_size` agrees with `yuyv422_to_rgb` for
+  both RGB and RGBA on a 64-byte input; (2) 1×1 GRAY+alpha returns
+  exactly 2 bytes (GRAY's per-pixel width is unmasked at small
+  resolutions); (3) zero-resolution returns 0 for every
+  `FrameFormat` × alpha combination.
 * **Pin `Frame<F>` accessors and format-mismatch panic guard with
   4 unit tests in `nokhwa-core/src/frame_tests.rs`.** The infallible
   `Frame::new` constructor relies on a runtime `assert_eq!` to
