@@ -565,6 +565,44 @@ fn verify_setter_float_range_wrong_type() {
 }
 
 #[test]
+fn verify_setter_float_range_out_of_bounds_and_non_finite() {
+    // Companion to `verify_setter_float_range_in_bounds`: confirms
+    // values below `min` are rejected, and NaN / infinity are
+    // rejected via the step-alignment math (NaN % step == NaN,
+    // which is `!= 0_f64`).
+    let desc = ControlValueDescription::FloatRange {
+        min: 0.0,
+        max: 1.0,
+        value: 0.5,
+        step: 0.5,
+        default: 0.0,
+    };
+    // Below min.
+    assert!(!desc.verify_setter(&ControlValueSetter::Float(-0.5)));
+    // NaN — step-alignment math yields NaN % step = NaN, which is
+    // not equal to 0_f64.
+    assert!(!desc.verify_setter(&ControlValueSetter::Float(f64::NAN)));
+    // Infinity — same logic, infinity % step == NaN.
+    assert!(!desc.verify_setter(&ControlValueSetter::Float(f64::INFINITY)));
+    assert!(!desc.verify_setter(&ControlValueSetter::Float(f64::NEG_INFINITY)));
+}
+
+#[test]
+fn verify_setter_float_non_finite_rejected() {
+    // The unbounded `Float` variant — same step-alignment math —
+    // must also reject NaN / infinity for consistency with the
+    // bounded `FloatRange` and `Point` variants.
+    let desc = ControlValueDescription::Float {
+        value: 0.5,
+        default: 0.5,
+        step: 0.5,
+    };
+    assert!(!desc.verify_setter(&ControlValueSetter::Float(f64::NAN)));
+    assert!(!desc.verify_setter(&ControlValueSetter::Float(f64::INFINITY)));
+    assert!(!desc.verify_setter(&ControlValueSetter::Float(f64::NEG_INFINITY)));
+}
+
+#[test]
 fn verify_setter_key_value_pair() {
     let desc = ControlValueDescription::KeyValuePair {
         key: 1,
