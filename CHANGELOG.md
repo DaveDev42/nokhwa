@@ -116,6 +116,27 @@
 
 ### Testing
 
+* **Pin V4L hotplug `reconcile_and_emit` diff semantics with 5 unit
+  tests in `nokhwa-bindings-linux-v4l/src/hotplug.rs::tests`.** The
+  reconcile function (called once per inotify wake to translate the
+  diff between two `query()` snapshots into `HotplugEvent`s) had
+  zero direct coverage — its only exercise was via the worker thread,
+  which needs real `/dev/video*` nodes. Refactor: split the
+  internals into `reconcile_and_emit_with(tx, previous, current)`
+  so tests can inject synthetic `BTreeMap<String, CameraInfo>`
+  snapshots; the existing `reconcile_and_emit` becomes a one-line
+  wrapper that calls `snapshot()` then delegates. New tests pin:
+  (1) `previous` is replaced with `current` after the call (cache
+  swap), (2) arrivals and removals are both emitted, (3) **arrivals
+  precede removals** (the documented ordering invariant — a re-plug
+  landing in a single inotify wake must surface as `Disconnected`
+  → `Connected` on the consumer side, but our newcomers loop runs
+  before the removals loop, so we have to verify the order rather
+  than assume it from reading the function), (4) identical snapshots
+  emit zero events, and (5) the function returns `false` when the
+  channel is closed mid-emission (so the worker exits early instead
+  of looping over a dead channel). No behaviour change — pure
+  test-extracted seam.
 * **Pin `nokhwa-tokio` forwarder behaviour with 3 unit tests in
   `nokhwa-tokio/src/lib.rs::tests`.** The `nokhwa-tokio` crate had
   zero unit tests despite owning the sync→async bridge that every
