@@ -23,7 +23,7 @@ use crate::traits::{
 };
 use crate::types::{
     ApiBackend, CameraControl, CameraFormat, CameraInfo, ControlValueSetter, FrameFormat,
-    KnownCameraControl,
+    KnownCameraControl, Resolution,
 };
 use std::borrow::Cow;
 use std::time::Duration;
@@ -136,4 +136,183 @@ fn shutter_capture_default_methods() {
     assert!(d.unlock_ui().is_ok());
     let r = d.capture(Duration::ZERO);
     assert!(matches!(r, Err(NokhwaError::TimeoutError(_))));
+}
+
+struct FormatStub {
+    info: CameraInfo,
+    fmt: CameraFormat,
+}
+
+impl CameraDevice for FormatStub {
+    fn backend(&self) -> ApiBackend {
+        ApiBackend::Browser
+    }
+    fn info(&self) -> &CameraInfo {
+        &self.info
+    }
+    fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        Ok(vec![])
+    }
+    fn set_control(
+        &mut self,
+        _id: KnownCameraControl,
+        _value: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+}
+
+impl FrameSource for FormatStub {
+    fn negotiated_format(&self) -> CameraFormat {
+        self.fmt
+    }
+    fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
+        self.fmt = f;
+        Ok(())
+    }
+    fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+        Ok(vec![])
+    }
+    fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
+        Ok(vec![])
+    }
+    fn open(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+    fn is_open(&self) -> bool {
+        false
+    }
+    fn frame(&mut self) -> Result<Buffer, NokhwaError> {
+        unimplemented!()
+    }
+    fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
+        Ok(Cow::Borrowed(&[]))
+    }
+    fn close(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+}
+
+fn stub(format: FrameFormat, w: u32, h: u32) -> FormatStub {
+    FormatStub {
+        info: sample_info(),
+        fmt: CameraFormat::new(Resolution::new(w, h), format, 30),
+    }
+}
+
+#[test]
+fn decoded_buffer_size_three_byte_formats_alpha_off() {
+    for f in [
+        FrameFormat::MJPEG,
+        FrameFormat::YUYV,
+        FrameFormat::RAWRGB,
+        FrameFormat::RAWBGR,
+        FrameFormat::NV12,
+    ] {
+        let s = stub(f, 640, 480);
+        assert_eq!(
+            s.decoded_buffer_size(false),
+            640 * 480 * 3,
+            "format {f:?} alpha=false"
+        );
+    }
+}
+
+#[test]
+fn decoded_buffer_size_three_byte_formats_alpha_on() {
+    for f in [
+        FrameFormat::MJPEG,
+        FrameFormat::YUYV,
+        FrameFormat::RAWRGB,
+        FrameFormat::RAWBGR,
+        FrameFormat::NV12,
+    ] {
+        let s = stub(f, 320, 240);
+        assert_eq!(
+            s.decoded_buffer_size(true),
+            320 * 240 * 4,
+            "format {f:?} alpha=true"
+        );
+    }
+}
+
+#[test]
+fn decoded_buffer_size_gray_alpha_off_is_one_byte_per_pixel() {
+    let s = stub(FrameFormat::GRAY, 1920, 1080);
+    assert_eq!(s.decoded_buffer_size(false), 1920 * 1080);
+}
+
+#[test]
+fn decoded_buffer_size_gray_alpha_on_is_two_bytes_per_pixel() {
+    let s = stub(FrameFormat::GRAY, 1920, 1080);
+    assert_eq!(s.decoded_buffer_size(true), 1920 * 1080 * 2);
+}
+
+struct FrameCallCounter {
+    info: CameraInfo,
+    fmt: CameraFormat,
+    frame_calls: u32,
+}
+
+impl CameraDevice for FrameCallCounter {
+    fn backend(&self) -> ApiBackend {
+        ApiBackend::Browser
+    }
+    fn info(&self) -> &CameraInfo {
+        &self.info
+    }
+    fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        Ok(vec![])
+    }
+    fn set_control(
+        &mut self,
+        _id: KnownCameraControl,
+        _value: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+}
+
+impl FrameSource for FrameCallCounter {
+    fn negotiated_format(&self) -> CameraFormat {
+        self.fmt
+    }
+    fn set_format(&mut self, _f: CameraFormat) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+    fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+        Ok(vec![])
+    }
+    fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
+        Ok(vec![])
+    }
+    fn open(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+    fn is_open(&self) -> bool {
+        false
+    }
+    fn frame(&mut self) -> Result<Buffer, NokhwaError> {
+        self.frame_calls += 1;
+        Ok(Buffer::new(self.fmt.resolution(), &[], self.fmt.format()))
+    }
+    fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
+        Ok(Cow::Borrowed(&[]))
+    }
+    fn close(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+}
+
+#[test]
+fn frame_timeout_default_forwards_to_frame() {
+    let mut c = FrameCallCounter {
+        info: sample_info(),
+        fmt: CameraFormat::new(Resolution::new(640, 480), FrameFormat::YUYV, 30),
+        frame_calls: 0,
+    };
+    let _ = c.frame_timeout(Duration::from_millis(50));
+    assert_eq!(c.frame_calls, 1);
+    let _ = c.frame_timeout(Duration::from_millis(50));
+    assert_eq!(c.frame_calls, 2);
 }
