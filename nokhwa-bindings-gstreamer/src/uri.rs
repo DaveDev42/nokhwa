@@ -313,3 +313,98 @@ fn sample_format(sample: &gstreamer::Sample) -> Result<CameraFormat, NokhwaError
 pub(crate) fn compatible_fourcc_from_negotiated(fmt: CameraFormat) -> Vec<FrameFormat> {
     vec![fmt.format()]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{compatible_fourcc_from_negotiated, looks_like_uri};
+    use nokhwa_core::types::{CameraFormat, FrameFormat, Resolution};
+
+    #[test]
+    fn looks_like_uri_detects_all_known_schemes() {
+        for s in [
+            "rtsp://example.com/stream",
+            "rtsps://example.com/stream",
+            "rtmp://example.com/live",
+            "rtmps://example.com/live",
+            "http://example.com/video.mp4",
+            "https://example.com/video.mp4",
+            "file:///tmp/video.mp4",
+            "srt://example.com:8080",
+            "udp://239.0.0.1:5004",
+            "tcp://example.com:1234",
+        ] {
+            assert!(looks_like_uri(s), "expected URL: {s}");
+        }
+    }
+
+    #[test]
+    fn looks_like_uri_rejects_non_uri_inputs() {
+        for s in [
+            "",
+            "/dev/video0",
+            "video0",
+            "Logitech BRIO",
+            "ftp://example.com/file",
+            "ws://example.com",
+            "rtsp",
+            "http:/foo",
+        ] {
+            assert!(!looks_like_uri(s), "expected non-URL: {s}");
+        }
+    }
+
+    #[test]
+    fn looks_like_uri_is_case_insensitive() {
+        for s in [
+            "RTSP://example.com",
+            "Http://example.com",
+            "FILE:///tmp/x",
+            "RtMpS://example.com",
+        ] {
+            assert!(looks_like_uri(s), "expected URL (mixed case): {s}");
+        }
+    }
+
+    // The session.rs `looks_like_uri_scheme` function has a doc note saying
+    // "Kept in sync with the scheme list in
+    // `nokhwa-bindings-gstreamer::uri::looks_like_uri`." This test pins the
+    // scheme list shape (count + canonical lower-case forms) so a divergence
+    // between the two implementations would be visible at the binding-crate
+    // level. The mirror test in `nokhwa::session` covers the other side.
+    #[test]
+    fn scheme_list_shape_is_stable() {
+        // Each of these MUST be detected. The set is intentionally narrow:
+        // we don't want to treat a display name with `:` as a URL.
+        let mirror = [
+            "rtsp://", "rtsps://", "rtmp://", "rtmps://", "http://", "https://", "file://",
+            "srt://", "udp://", "tcp://",
+        ];
+        for prefix in mirror {
+            assert!(looks_like_uri(prefix), "{prefix} should be a URL prefix");
+        }
+        // And these intentionally are NOT in the list. If anyone adds them,
+        // they have to update both implementations and this test.
+        for unsupported in ["ftp://", "ws://", "wss://", "data:", "mms://"] {
+            assert!(
+                !looks_like_uri(unsupported),
+                "{unsupported} unexpectedly recognised"
+            );
+        }
+    }
+
+    #[test]
+    fn compatible_fourcc_from_negotiated_returns_singleton() {
+        for f in [
+            FrameFormat::MJPEG,
+            FrameFormat::YUYV,
+            FrameFormat::NV12,
+            FrameFormat::GRAY,
+            FrameFormat::RAWRGB,
+            FrameFormat::RAWBGR,
+        ] {
+            let cf = CameraFormat::new(Resolution::new(640, 480), f, 30);
+            let v = compatible_fourcc_from_negotiated(cf);
+            assert_eq!(v, vec![f], "wrong singleton for {f:?}");
+        }
+    }
+}
