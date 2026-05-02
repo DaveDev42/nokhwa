@@ -1,5 +1,7 @@
 use crate::buffer::Buffer;
-use crate::format_types::{Gray, Mjpeg, Nv12, RawBgr, RawRgb, Yuyv};
+#[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
+use crate::format_types::Mjpeg;
+use crate::format_types::{Gray, Nv12, RawBgr, RawRgb, Yuyv};
 use crate::frame::{Frame, IntoLuma, IntoRgb, IntoRgba};
 use crate::types::{FrameFormat, Resolution};
 

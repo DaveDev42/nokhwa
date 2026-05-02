@@ -1138,7 +1138,16 @@ impl ControlValueDescription {
                 None => false,
             },
             ControlValueDescription::RGB { max, .. } => match setter.as_rgb() {
-                Some(v) => *v.0 >= max.0 && *v.1 >= max.1 && *v.2 >= max.2,
+                // Each channel must be a finite value within `0.0 ..= max`.
+                // The previous predicate was `>= max` which only accepted
+                // values *at or above* the upper bound, the inverse of
+                // what range-validation should do — every other range
+                // variant in this match (Integer/Float Range) uses
+                // `value >= min && value <= max`.
+                Some(v) => {
+                    let in_range = |x: f64, lim: f64| x.is_finite() && x >= 0.0 && x <= lim;
+                    in_range(*v.0, max.0) && in_range(*v.1, max.1) && in_range(*v.2, max.2)
+                }
                 None => false,
             },
         }

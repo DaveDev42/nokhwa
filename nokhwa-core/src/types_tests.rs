@@ -642,17 +642,31 @@ fn verify_setter_float() {
 
 #[test]
 fn verify_setter_rgb() {
-    // FIXME: RGB verify_setter checks *v >= max for each channel, which appears inverted.
-    // It likely should be *v <= max (values within range), but currently only values
-    // AT or ABOVE max pass. This test documents the actual (buggy?) behavior.
+    // RGB verify_setter accepts any finite (non-NaN, non-infinite)
+    // triple where each channel is within `0.0 ..= max`. Mirrors the
+    // `value >= min && value <= max` shape used by IntegerRange /
+    // FloatRange. See the inline comment in
+    // `ControlValueDescription::verify_setter` for why this used to
+    // be inverted.
     let desc = ControlValueDescription::RGB {
         value: (0.5, 0.5, 0.5),
         max: (1.0, 1.0, 1.0),
         default: (0.0, 0.0, 0.0),
     };
+    // In-range values pass: at lower bound, at upper bound, in the middle.
+    assert!(desc.verify_setter(&ControlValueSetter::RGB(0.0, 0.0, 0.0)));
+    assert!(desc.verify_setter(&ControlValueSetter::RGB(0.5, 0.5, 0.5)));
     assert!(desc.verify_setter(&ControlValueSetter::RGB(1.0, 1.0, 1.0)));
-    assert!(desc.verify_setter(&ControlValueSetter::RGB(2.0, 2.0, 2.0)));
-    assert!(!desc.verify_setter(&ControlValueSetter::RGB(0.5, 0.5, 0.5)));
+    // Above max fails on any channel.
+    assert!(!desc.verify_setter(&ControlValueSetter::RGB(2.0, 1.0, 1.0)));
+    assert!(!desc.verify_setter(&ControlValueSetter::RGB(1.0, 2.0, 1.0)));
+    assert!(!desc.verify_setter(&ControlValueSetter::RGB(1.0, 1.0, 2.0)));
+    // Negative on any channel fails.
+    assert!(!desc.verify_setter(&ControlValueSetter::RGB(-0.1, 0.5, 0.5)));
+    // Non-finite (NaN, infinity) fails.
+    assert!(!desc.verify_setter(&ControlValueSetter::RGB(f64::NAN, 0.5, 0.5)));
+    assert!(!desc.verify_setter(&ControlValueSetter::RGB(0.5, f64::INFINITY, 0.5)));
+    // Wrong setter variant always fails.
     assert!(!desc.verify_setter(&ControlValueSetter::Integer(1)));
 }
 
@@ -850,8 +864,12 @@ fn control_value_roundtrip_enum() {
 
 #[test]
 fn control_value_roundtrip_rgb() {
+    // The current value lies strictly inside the [0, max] cube on each
+    // channel — verify_setter should accept it. (Previously this test
+    // relied on the inverted `>= max` predicate; see
+    // `verify_setter_rgb` for the full coverage.)
     let desc = ControlValueDescription::RGB {
-        value: (2.0, 3.0, 4.0),
+        value: (0.25, 0.5, 0.75),
         max: (1.0, 1.0, 1.0),
         default: (0.0, 0.0, 0.0),
     };
@@ -863,8 +881,7 @@ fn control_value_roundtrip_rgb() {
         true,
     );
     let setter = control.value();
-    assert_eq!(setter, ControlValueSetter::RGB(2.0, 3.0, 4.0));
-    // RGB verify_setter checks *v >= max, so (2,3,4) >= (1,1,1) should be true
+    assert_eq!(setter, ControlValueSetter::RGB(0.25, 0.5, 0.75));
     assert!(desc.verify_setter(&setter));
 }
 
