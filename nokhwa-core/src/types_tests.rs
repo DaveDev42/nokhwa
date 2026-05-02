@@ -1340,6 +1340,42 @@ fn frame_format_to_fourcc_is_four_bytes() {
     }
 }
 
+// ─── FrameFormat::decoded_pixel_byte_width ───
+
+#[test]
+fn frame_format_decoded_pixel_byte_width_gray_is_one() {
+    assert_eq!(FrameFormat::GRAY.decoded_pixel_byte_width(), 1);
+}
+
+#[test]
+fn frame_format_decoded_pixel_byte_width_color_formats_are_three() {
+    for &fmt in &[
+        FrameFormat::MJPEG,
+        FrameFormat::YUYV,
+        FrameFormat::RAWRGB,
+        FrameFormat::RAWBGR,
+        FrameFormat::NV12,
+    ] {
+        assert_eq!(
+            fmt.decoded_pixel_byte_width(),
+            3,
+            "{fmt:?} expected 3 bytes/pixel after decode"
+        );
+    }
+}
+
+#[test]
+fn frame_format_decoded_pixel_byte_width_total_coverage() {
+    // Catches a future variant added without being classified.
+    for &fmt in frame_formats() {
+        let bpp = fmt.decoded_pixel_byte_width();
+        assert!(
+            bpp == 1 || bpp == 3,
+            "{fmt:?} returned unexpected bpp {bpp} — must be 1 (gray) or 3 (color)"
+        );
+    }
+}
+
 // ─── FrameFormat FromStr ───
 //
 // `from_fourcc` parses 4-byte FourCC tokens (e.g. "MJPG", "RGB3"), but

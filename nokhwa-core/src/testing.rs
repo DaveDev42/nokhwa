@@ -55,14 +55,7 @@ pub fn mock_info(index: u32) -> CameraInfo {
 /// helper.
 #[must_use]
 pub fn mock_frame(width: u32, height: u32, format: FrameFormat) -> Buffer {
-    let bpp: usize = match format {
-        FrameFormat::MJPEG
-        | FrameFormat::YUYV
-        | FrameFormat::RAWRGB
-        | FrameFormat::RAWBGR
-        | FrameFormat::NV12 => 3,
-        FrameFormat::GRAY => 1,
-    };
+    let bpp = format.decoded_pixel_byte_width();
     let len = (width as usize) * (height as usize) * bpp;
     let data = vec![0u8; len];
     Buffer::from_vec(Resolution::new(width, height), data, format)

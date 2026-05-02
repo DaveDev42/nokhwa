@@ -89,18 +89,9 @@ pub trait FrameSource: CameraDevice {
     fn decoded_buffer_size(&self, alpha: bool) -> usize {
         let cfmt = self.negotiated_format();
         let resolution = cfmt.resolution();
-        let pxwidth = match cfmt.format() {
-            FrameFormat::MJPEG
-            | FrameFormat::YUYV
-            | FrameFormat::RAWRGB
-            | FrameFormat::RAWBGR
-            | FrameFormat::NV12 => 3,
-            FrameFormat::GRAY => 1,
-        };
-        if alpha {
-            return (resolution.width() * resolution.height() * (pxwidth + 1)) as usize;
-        }
-        (resolution.width() * resolution.height() * pxwidth) as usize
+        let pxwidth = cfmt.format().decoded_pixel_byte_width();
+        let bpp = if alpha { pxwidth + 1 } else { pxwidth };
+        (resolution.width() as usize) * (resolution.height() as usize) * bpp
     }
 
     /// Pull one frame, convert to RGBA, and upload it to a freshly-
