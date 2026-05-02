@@ -4,6 +4,19 @@
 
 ### Bug Fixes
 
+* **MSMF `compatible_fourcc` silently truncated to 2 entries.**
+  `nokhwa-bindings-windows-msmf::capture::compatible_fourcc`
+  contained a `if frame_format_list.len() == 2 { break; }` early exit
+  with a stale `// TODO: Update as we get more frame formats!`
+  comment. Dating back to the upstream era when `FrameFormat` had only
+  MJPEG + YUYV, the break silently dropped NV12 and GRAY (both
+  emitted by `lib.rs::compatible_format_list` via
+  `MF_VIDEO_FORMAT_NV12` / `MF_VIDEO_FORMAT_GRAY` mappings) whenever
+  MJPEG + YUYV happened to come first in the device's
+  `IMFAttributes` enumeration. Removed the break; the loop now walks
+  the full list and the dedup-via-`contains` check yields whatever
+  the device actually advertises (max 4 today: MJPEG / YUYV / NV12 /
+  GRAY). Mirrors the V4L backend's `compatible_fourcc` shape.
 * **`ControlValueDescription::RGB::verify_setter` accepted only
   out-of-range values.** The predicate was `*v.0 >= max.0 && *v.1
   >= max.1 && *v.2 >= max.2` — i.e. it returned `true` exactly
