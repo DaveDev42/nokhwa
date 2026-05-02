@@ -1816,3 +1816,126 @@ fn control_value_description_display_rgb() {
         "Current: (1, 2, 3), Max: (255, 255, 255), Default: (0, 0, 0)"
     );
 }
+
+// ─── ControlValueSetter Display rendering ───
+//
+// Like `ControlValueDescription`, `ControlValueSetter::Display` has
+// hand-written rendering arms per variant. The setter is what
+// callers pass to `CameraDevice::set_control`, and the rendered
+// shape lands in `NokhwaError::SetPropertyError` payloads when the
+// underlying backend rejects a value. Pin all 10 variant renderings
+// so a refactor of one variant doesn't silently change error
+// diagnostics that downstream consumers grep on.
+
+#[test]
+fn control_value_setter_display_none() {
+    assert_eq!(ControlValueSetter::None.to_string(), "Value: None");
+}
+
+#[test]
+fn control_value_setter_display_integer() {
+    assert_eq!(
+        ControlValueSetter::Integer(42).to_string(),
+        "IntegerValue: 42"
+    );
+    assert_eq!(
+        ControlValueSetter::Integer(-1).to_string(),
+        "IntegerValue: -1"
+    );
+}
+
+#[test]
+fn control_value_setter_display_float() {
+    assert_eq!(
+        ControlValueSetter::Float(1.5).to_string(),
+        "FloatValue: 1.5"
+    );
+}
+
+#[test]
+fn control_value_setter_display_boolean() {
+    assert_eq!(
+        ControlValueSetter::Boolean(true).to_string(),
+        "BoolValue: true"
+    );
+    assert_eq!(
+        ControlValueSetter::Boolean(false).to_string(),
+        "BoolValue: false"
+    );
+}
+
+#[test]
+fn control_value_setter_display_string() {
+    assert_eq!(
+        ControlValueSetter::String("hello".to_string()).to_string(),
+        "StrValue: hello"
+    );
+}
+
+#[test]
+fn control_value_setter_display_bytes() {
+    assert_eq!(
+        ControlValueSetter::Bytes(vec![0x01, 0xab, 0xff]).to_string(),
+        "BytesValue: [1, ab, ff]"
+    );
+}
+
+#[test]
+fn control_value_setter_display_key_value() {
+    assert_eq!(
+        ControlValueSetter::KeyValue(1, 2).to_string(),
+        "KVValue: (1, 2)"
+    );
+}
+
+#[test]
+fn control_value_setter_display_point() {
+    assert_eq!(
+        ControlValueSetter::Point(1.5, 2.5).to_string(),
+        "PointValue: (1.5, 2.5)"
+    );
+}
+
+#[test]
+fn control_value_setter_display_enum_value() {
+    assert_eq!(ControlValueSetter::EnumValue(7).to_string(), "EnumValue: 7");
+}
+
+#[test]
+fn control_value_setter_display_rgb() {
+    assert_eq!(
+        ControlValueSetter::RGB(0.5, 1.0, 0.25).to_string(),
+        "RGBValue: (0.5, 1, 0.25)"
+    );
+}
+
+// ─── CameraControl Display rendering ───
+//
+// `CameraControl::Display` composes the renderings of
+// `KnownCameraControl::Display` (variant name), the control's name
+// field, `ControlValueDescription::Display`, the flag list via
+// `Debug`, and the active boolean. This is the canonical log line
+// shape backends emit when listing controls; pin it so a regression
+// that re-orders the fields breaks the unit test rather than every
+// downstream log parser.
+
+#[test]
+fn camera_control_display_renders_canonical_log_line() {
+    let ctrl = CameraControl::new(
+        KnownCameraControl::Brightness,
+        "Brightness".to_string(),
+        ControlValueDescription::IntegerRange {
+            min: 0,
+            max: 100,
+            value: 50,
+            step: 1,
+            default: 50,
+        },
+        vec![KnownCameraControlFlag::Manual],
+        true,
+    );
+    assert_eq!(
+        ctrl.to_string(),
+        "Control: Brightness, Name: Brightness, Value: (Current: 50, Default: 50, Step: 1, Range: (0, 100)), Flag: [Manual], Active: true"
+    );
+}
