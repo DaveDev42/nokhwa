@@ -74,6 +74,17 @@
   `Buffer::typed::<F>()` consumers don't see mid-stream renegotiation).
   Linux gets these for free on every PR via the `v4l-loopback` job;
   Windows/macOS get them on the self-hosted runners and gated PRs.
+* **`tests/device_tests.rs`: two more invariants on Stream-capable
+  cameras.** `compatible_fourcc_is_subset_of_compatible_formats`
+  asserts every `FrameFormat` returned by
+  `StreamCamera::compatible_fourcc()` also appears in
+  `compatible_formats()` — exactly the invariant the MSMF
+  `compatible_fourcc` truncation in #194 violated, so this would have
+  caught the bug. `set_format_from_compatible_round_trip` picks an
+  entry from `compatible_formats()`, feeds it back through
+  `set_format()`, and asserts `negotiated_format()` reports the same
+  value — guards against future drift between what a backend says it
+  supports and what it actually accepts.
 
 ### Documentation
 

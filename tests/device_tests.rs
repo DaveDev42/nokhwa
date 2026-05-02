@@ -313,6 +313,72 @@ fn frame_metadata_is_stable() {
     cam.close().expect("StreamCamera::close");
 }
 
+/// `compatible_fourcc()` must enumerate at least one entry, and every
+/// entry must be a `FrameFormat` that also appears in
+/// `compatible_formats()`. This is the invariant that the MSMF
+/// truncation bug in #194 violated — `compatible_fourcc` returned at
+/// most 2 entries while `compatible_formats` could expose all 4
+/// (MJPEG / YUYV / NV12 / GRAY), so a UI that branched on
+/// `compatible_fourcc` saw a strict subset of what the device
+/// actually supported.
+#[test]
+fn compatible_fourcc_is_subset_of_compatible_formats() {
+    let OpenedCamera::Stream(mut cam) = open_first() else {
+        eprintln!(
+            "compatible_fourcc_is_subset_of_compatible_formats: backend is not Stream-capable; skipping."
+        );
+        return;
+    };
+    let fourccs = cam
+        .compatible_fourcc()
+        .expect("StreamCamera::compatible_fourcc");
+    assert!(!fourccs.is_empty(), "compatible_fourcc() returned empty");
+
+    let formats = cam
+        .compatible_formats()
+        .expect("StreamCamera::compatible_formats");
+    let formats_fourccs: std::collections::HashSet<FrameFormat> =
+        formats.iter().map(|f| f.format()).collect();
+    for ff in &fourccs {
+        assert!(
+            formats_fourccs.contains(ff),
+            "compatible_fourcc returned {ff:?} which is not in compatible_formats() = {formats_fourccs:?}"
+        );
+    }
+}
+
+/// Round-trip an arbitrary entry from `compatible_formats()` through
+/// `set_format()` and confirm `negotiated_format()` reports the same
+/// values. Catches drift between `compatible_formats` (what the
+/// backend says it supports) and `set_format` (what the backend
+/// actually accepts) — these can diverge if a backend's
+/// `compatible_formats` returns synthesised entries the driver can't
+/// honour at `set_format` time.
+#[test]
+fn set_format_from_compatible_round_trip() {
+    let OpenedCamera::Stream(mut cam) = open_first() else {
+        eprintln!(
+            "set_format_from_compatible_round_trip: backend is not Stream-capable; skipping."
+        );
+        return;
+    };
+    let formats = cam
+        .compatible_formats()
+        .expect("StreamCamera::compatible_formats");
+    let Some(target) = formats.into_iter().next() else {
+        eprintln!("set_format_from_compatible_round_trip: no compatible formats; skipping.");
+        return;
+    };
+    cam.set_format(target).unwrap_or_else(|e| {
+        panic!("set_format({target:?}) returned error on a value from compatible_formats(): {e}")
+    });
+    let got = cam.negotiated_format();
+    assert_eq!(
+        got, target,
+        "negotiated_format mismatched after set_format({target:?}); got {got:?}"
+    );
+}
+
 // The file is already gated by `device-test` at the top, so this
 // submodule's effective gate is `device-test AND runner` — i.e. it
 // compiles only when both features are enabled.
