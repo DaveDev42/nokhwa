@@ -129,6 +129,21 @@
 
 ### Testing
 
+* **Pin GRAY → RGB / RGBA expansion happy paths with 4 unit tests
+  in `nokhwa-core/src/frame_tests.rs`.** `Frame<Gray>` does not
+  implement `IntoRgb` / `IntoRgba` (gray is luma-only at the type
+  level), so the GRAY arms in `convert_to_rgb`,
+  `convert_to_rgb_buffer`, `convert_to_rgba`, and
+  `convert_to_rgba_buffer` are reachable only via the
+  crate-internal dispatcher. Existing tests pinned the
+  reject-paths but every happy path was uncovered. New tests
+  pin: (1) GRAY → RGB replicates each luma byte to `[Y, Y, Y]`;
+  (2) the buffer variant writes the same triplet via index-based
+  assignment; (3) GRAY → RGBA replicates to `[Y, Y, Y, 255]` —
+  alpha is **always** 255, never `pxv` or 0; (4) the buffer
+  variant matches. Catches a regression that swaps the channel
+  replication or hard-codes the wrong alpha — both would silently
+  corrupt every monochrome capture downstream.
 * **Pin `verify_setter` RGB asymmetric per-channel max with 3
   unit tests in `nokhwa-core/src/types_tests.rs`.** RGB
   `verify_setter` checks `x <= max.0`, `x <= max.1`, `x <= max.2`

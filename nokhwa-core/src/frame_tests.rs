@@ -4,7 +4,8 @@ use crate::error::NokhwaError;
 use crate::format_types::Mjpeg;
 use crate::format_types::{Gray, Nv12, RawBgr, RawRgb, Yuyv};
 use crate::frame::{
-    convert_to_rgb_buffer, convert_to_rgba_buffer, Frame, IntoLuma, IntoRgb, IntoRgba,
+    convert_to_rgb, convert_to_rgb_buffer, convert_to_rgba, convert_to_rgba_buffer, Frame,
+    IntoLuma, IntoRgb, IntoRgba,
 };
 use crate::types::{FrameFormat, Resolution};
 
@@ -458,6 +459,90 @@ fn convert_to_rgba_buffer_gray_rejects_mismatched_dest() {
     let err = convert_to_rgba_buffer(FrameFormat::GRAY, Resolution::new(2, 2), &data, &mut dest)
         .unwrap_err();
     assert_process_frame_err(err, FrameFormat::GRAY, "RGBA", "Bad buffer length");
+}
+
+// `Frame<Gray>` does not implement `IntoRgb` / `IntoRgba` (luma-only
+// at the type level), so the GRAY happy paths in `convert_to_rgb`,
+// `convert_to_rgb_buffer`, `convert_to_rgba`, and
+// `convert_to_rgba_buffer` are reachable only via the
+// crate-internal dispatcher. The reject-paths are pinned above;
+// without these, a regression that swaps the channel-replication
+// (e.g. `[pxv, 0, pxv]`) or hard-codes the wrong alpha (e.g.
+// `[pxv, pxv, pxv, 0]` instead of 255) would silently corrupt
+// every monochrome capture on a downstream RGB / RGBA conversion.
+
+#[test]
+fn convert_to_rgb_gray_replicates_luma_to_rgb_triplet() {
+    // GRAY → RGB expands each luma byte to `[Y, Y, Y]`. Pin the
+    // replication shape so a future `[pxv, 0, pxv]` typo or
+    // off-by-one chunk stride is caught.
+    let data = vec![10u8, 50, 200, 255];
+    let rgb = convert_to_rgb(FrameFormat::GRAY, Resolution::new(2, 2), &data)
+        .expect("GRAY → RGB happy path");
+    assert_eq!(rgb.len(), data.len() * 3);
+    assert_eq!(
+        rgb,
+        vec![10, 10, 10, 50, 50, 50, 200, 200, 200, 255, 255, 255]
+    );
+}
+
+#[test]
+fn convert_to_rgb_buffer_gray_writes_luma_triplet_to_dest() {
+    // Same replication contract as the `Vec`-returning variant
+    // but writing into a caller-owned buffer. Pinned so a
+    // regression that uses `chunks_exact_mut(4)` instead of
+    // index-based writing for RGB is caught.
+    let data = vec![10u8, 50, 200, 255];
+    let mut dest = vec![0u8; data.len() * 3];
+    convert_to_rgb_buffer(FrameFormat::GRAY, Resolution::new(2, 2), &data, &mut dest)
+        .expect("GRAY → RGB buffer happy path");
+    assert_eq!(
+        dest,
+        vec![10, 10, 10, 50, 50, 50, 200, 200, 200, 255, 255, 255]
+    );
+}
+
+#[test]
+fn convert_to_rgba_gray_replicates_luma_with_opaque_alpha() {
+    // GRAY → RGBA expands each luma byte to `[Y, Y, Y, 255]`.
+    // The alpha channel is **always** 255 — pin so a future
+    // tweak that uses 0 (transparent) or `pxv` (luma-as-alpha)
+    // surfaces here, not as invisible monochrome frames in user
+    // applications.
+    let data = vec![10u8, 50, 200, 255];
+    let rgba = convert_to_rgba(FrameFormat::GRAY, Resolution::new(2, 2), &data)
+        .expect("GRAY → RGBA happy path");
+    assert_eq!(rgba.len(), data.len() * 4);
+    assert_eq!(
+        rgba,
+        vec![
+            10, 10, 10, 255, //
+            50, 50, 50, 255, //
+            200, 200, 200, 255, //
+            255, 255, 255, 255,
+        ]
+    );
+}
+
+#[test]
+fn convert_to_rgba_buffer_gray_writes_luma_with_opaque_alpha() {
+    // Same `[Y, Y, Y, 255]` contract but to a caller-owned
+    // dest. Indexes into `dest[i+3] = 255` directly; pin so a
+    // regression to `dest[i+3] = pxv` doesn't sneak through
+    // unnoticed.
+    let data = vec![10u8, 50, 200, 255];
+    let mut dest = vec![0u8; data.len() * 4];
+    convert_to_rgba_buffer(FrameFormat::GRAY, Resolution::new(2, 2), &data, &mut dest)
+        .expect("GRAY → RGBA buffer happy path");
+    assert_eq!(
+        dest,
+        vec![
+            10, 10, 10, 255, //
+            50, 50, 50, 255, //
+            200, 200, 200, 255, //
+            255, 255, 255, 255,
+        ]
+    );
 }
 
 #[test]
