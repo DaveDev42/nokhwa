@@ -116,6 +116,22 @@
 
 ### Testing
 
+* **Pin `ControlValueSetter::Display` (10 variants) and
+  `CameraControl::Display` rendering in
+  `nokhwa-core/src/types_tests.rs`.** `ControlValueSetter::Display`
+  has hand-written rendering arms per variant — the setter is what
+  callers pass to `CameraDevice::set_control`, so the rendered
+  shape lands in `NokhwaError::SetPropertyError` payloads when the
+  underlying backend rejects a value. `CameraControl::Display`
+  composes the renderings of `KnownCameraControl::Display` /
+  `ControlValueDescription::Display` / the flag list (via `Debug`)
+  / the active boolean into the canonical log line shape backends
+  emit when listing controls. Pin all 10 setter variants
+  (`None` / `Integer` / `Float` / `Boolean` / `String` / `Bytes` /
+  `KeyValue` / `Point` / `EnumValue` / `RGB`) plus the
+  `CameraControl` composition (`"Control: …, Name: …, Value: …,
+  Flag: …, Active: …"`) so a regression that re-orders the fields
+  breaks the unit test rather than every downstream log parser.
 * **Pin `ControlValueDescription::Display` rendering for all 11
   variants in `nokhwa-core/src/types_tests.rs`.** Unlike the four
   Debug-piping `Display` impls in `types.rs`, each
