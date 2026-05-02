@@ -116,6 +116,22 @@
 
 ### Testing
 
+* **Pin `FrameFormat::FromStr` parser with 4 unit tests in
+  `nokhwa-core/src/types_tests.rs`.** `FrameFormat` has two
+  string-to-format mappings — `from_fourcc` (4-byte FourCC tokens
+  like `"MJPG"`) and `FromStr` (human-readable variant names like
+  `"MJPEG"`) — and they are deliberately distinct. The FourCC table
+  was already covered round-trip; FromStr had zero coverage. New
+  tests pin: (1) every variant in `frame_formats()` round-trips
+  through its Debug name; (2) unknown input returns
+  `NokhwaError::StructureError` with `structure = "FrameFormat"`
+  and the offending string echoed in the error message;
+  (3) parsing is case-sensitive (`"mjpeg"` / `"Mjpeg"` both fail)
+  so a future "be lenient" tweak is a deliberate, reviewed change;
+  and (4) the FromStr table is **disjoint** from the FourCC table
+  (`"MJPG"` parses as a FourCC but not via FromStr; `"MJPEG"` parses
+  via FromStr but not as a FourCC). Catches a regression where the
+  two tables get accidentally merged.
 * **Pin V4L hotplug `reconcile_and_emit` diff semantics with 5 unit
   tests in `nokhwa-bindings-linux-v4l/src/hotplug.rs::tests`.** The
   reconcile function (called once per inotify wake to translate the
