@@ -304,14 +304,14 @@ pub(crate) fn resolve_format(
         })
 }
 
-/// Distinct `FrameFormat`s across a candidate list, preserving
-/// enumeration order (stable for the `compatible_fourcc()` contract).
+/// Distinct `FrameFormat`s across a candidate list, sorted in
+/// `FrameFormat`'s `Ord` order. Mirrors the V4L / AVFoundation / MSMF
+/// shape (`collect → sort → dedup`) so callers see a stable
+/// cross-backend ordering regardless of how the underlying API
+/// enumerated its caps.
 pub(crate) fn compatible_fourcc(candidates: &[CameraFormat]) -> Vec<FrameFormat> {
-    let mut out = Vec::new();
-    for f in candidates {
-        if !out.contains(&f.format()) {
-            out.push(f.format());
-        }
-    }
+    let mut out: Vec<FrameFormat> = candidates.iter().map(CameraFormat::format).collect();
+    out.sort();
+    out.dedup();
     out
 }
