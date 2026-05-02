@@ -69,10 +69,6 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   - `NokhwaError` → JS Error translation
   - browser capture API (`getUserMedia` + `MediaStreamTrackProcessor` vs
     `ImageCapture`)
-- [ ] Expand platform integration tests in `tests/device_tests.rs`.
-  Already covers query, multi-frame streaming, control enumeration,
-  `CameraRunner` smoke, control round-trip. Linux is auto-covered on
-  every PR via `v4l2loopback`.
 
 ## Closed — not returning
 

@@ -33,6 +33,23 @@
   `cargo test -p nokhwa-core` invocation emitted
   `warning: unused import: \`Mjpeg\`` until now.
 
+### Testing
+
+* **Expand `tests/device_tests.rs`.** Adds four integration tests that
+  exercise corners of the `nokhwa::open` / `OpenedCamera` surface
+  previously left uncovered: `open_invalid_index_errors` (a far-OOB
+  `CameraIndex::Index` must surface `NokhwaError`),
+  `compatible_formats_nonempty` (`StreamCamera::compatible_formats()`
+  must enumerate ≥1 entry on real hardware),
+  `set_format_invalid_does_not_round_trip` (a `1×1@1` MJPEG request
+  must either error or fail to round-trip — V4L2 may snap to the
+  nearest valid format, MSMF tends to error; both behaviours pass),
+  and `frame_metadata_is_stable` (consecutive `frame()`s must report a
+  stable `resolution()` + `source_frame_format()` so downstream
+  `Buffer::typed::<F>()` consumers don't see mid-stream renegotiation).
+  Linux gets these for free on every PR via the `v4l-loopback` job;
+  Windows/macOS get them on the self-hosted runners and gated PRs.
+
 ### Performance
 
 * **Event-driven V4L hotplug via `inotify`.** Replaces the 500 ms
