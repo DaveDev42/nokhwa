@@ -82,6 +82,17 @@
 
 ### Testing
 
+* **Pin `init` no-op stubs for non-AVFoundation builds.** `src/init.rs`
+  exposes `nokhwa_initialize` and `nokhwa_check`, both of which collapse
+  to compile-time no-ops on every platform / feature combo where
+  `input-avfoundation` is not active (the vast majority of users —
+  Linux + Windows + every macOS build that opts out of AVFoundation).
+  Added 2 cfg-gated tests pinning the stub contract: `nokhwa_check()`
+  returns `true`, and `nokhwa_initialize` invokes its callback
+  *synchronously* (before returning) with `ok = true`. Catches a future
+  refactor that would turn the stubs into deferred work or a
+  not-yet-supported error — both would silently break the documented
+  "you can skip nokhwa_initialize on non-macOS" pattern.
 * **Pin `query::native_api_backend` + `query::query` disabled-arm errors.**
   `src/query.rs` had zero tests despite being the dispatcher for `open()`
   and the public entry point most callers reach through `nokhwa::query`.
