@@ -174,6 +174,24 @@
 
 ### Testing
 
+* **Pin `Frame<RawBgr>::into_luma` end-to-end with 4 unit tests in
+  `nokhwa-core/src/frame_tests.rs`.** `Frame<RawBgr>` routes through
+  the `RAWRGB | RAWBGR` arm of `convert_to_luma` /
+  `convert_to_luma_buffer` because (B+G+R)/3 is commutative with
+  (R+G+B)/3, but the RAWBGR side had zero direct test coverage —
+  the symmetric RAWRGB suite was the only thing exercising that
+  arm. A future refactor that splits the arms (e.g. swizzling B/R
+  before averaging, or routing BGR through a separate path that
+  drops one channel) would silently produce subtly wrong luma on
+  every BGR camera and only manifest as confusing image output.
+  New tests mirror the RAWRGB suite: (1) `materialize()` happy
+  path with a uniform color produces the expected mean; (2)
+  `write_to` happy path with per-pixel-distinct B/G/R values
+  produces the per-pixel means (would fail loudly if the kernel
+  ever swizzled channels); (3) non-multiple-of-3 input length is
+  rejected with the actual buffer's `FrameFormat::RAWBGR` in the
+  error (not a fallback); (4) mismatched dest length is rejected
+  via the `dest.len() != pixel_count` guard.
 * **Pin `RequestedFormat::fulfill` `Closest` distance-tie tiebreaker
   with 1 unit test in `nokhwa-core/src/types_tests.rs`.** When two
   candidate resolutions are equidistant from the requested target,
