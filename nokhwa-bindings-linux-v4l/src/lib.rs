@@ -492,22 +492,31 @@ mod internal {
                                 // V4L Stepwise advertises a (min, max,
                                 // step) triple — every (min + k*step,
                                 // min + k*step) pair up to max is
-                                // legal. We expose only the endpoints
-                                // because expanding the full grid can
-                                // produce hundreds of synthetic
-                                // resolutions on drivers that allow
-                                // tiny steps (e.g. a 1×1 step over
-                                // 4096×4096), which floods the UI
-                                // surface with nonsense choices.
-                                // Consumers that need an arbitrary
-                                // intermediate resolution should call
-                                // `set_format` with the chosen
-                                // value — the driver still accepts it
-                                // even though it isn't enumerated.
-                                // See TODO.md for the full enumeration
-                                // follow-up.
-                                resolutions.push(Resolution::new(step.min_width, step.min_height));
-                                resolutions.push(Resolution::new(step.max_width, step.max_height));
+                                // legal. Naive full enumeration on a
+                                // 1×1-step / 4096×4096-max driver
+                                // produces millions of synthetic
+                                // resolutions, so we expose:
+                                //
+                                // 1. the min and max endpoints
+                                //    (always legal),
+                                // 2. each `COMMON_RESOLUTIONS` preset
+                                //    that fits inside the (min..=max)
+                                //    box AND aligns to the advertised
+                                //    width/height step.
+                                //
+                                // Drivers still accept arbitrary
+                                // intermediate resolutions via
+                                // `set_format`; this list is for UI
+                                // surfaces that need a sane shortlist.
+                                expand_stepwise_resolutions(
+                                    step.min_width,
+                                    step.max_width,
+                                    step.step_width,
+                                    step.min_height,
+                                    step.max_height,
+                                    step.step_height,
+                                    &mut resolutions,
+                                );
                             }
                         }
                     }
@@ -966,6 +975,61 @@ mod internal {
         )
     }
 
+    /// Common (width, height) presets exposed inside a Stepwise advertisement
+    /// when they (a) fit the (min..=max) box and (b) align to the advertised
+    /// width/height step. Ordered ascending by area.
+    const COMMON_RESOLUTIONS: &[(u32, u32)] = &[
+        (320, 240),
+        (640, 480),
+        (800, 600),
+        (1024, 768),
+        (1280, 720),
+        (1280, 960),
+        (1920, 1080),
+        (2560, 1440),
+        (3840, 2160),
+    ];
+
+    /// Append every legal resolution from a V4L2 Stepwise advertisement
+    /// that we want to surface. Always pushes the (min, min) and (max, max)
+    /// endpoints; in between, pushes any [`COMMON_RESOLUTIONS`] preset that
+    /// (a) fits inside the (min..=max) box on both axes and (b) aligns to
+    /// the advertised step on both axes. Step values of 0 are treated as
+    /// "any" (= alignment OK), matching what V4L2 drivers do in practice
+    /// when they advertise a continuous range.
+    ///
+    /// Output is in ascending area order with duplicates suppressed (a
+    /// preset that coincides with an endpoint is emitted once).
+    fn expand_stepwise_resolutions(
+        min_w: u32,
+        max_w: u32,
+        step_w: u32,
+        min_h: u32,
+        max_h: u32,
+        step_h: u32,
+        out: &mut Vec<Resolution>,
+    ) {
+        let push_unique = |v: &mut Vec<Resolution>, r: Resolution| {
+            if !v.contains(&r) {
+                v.push(r);
+            }
+        };
+        push_unique(out, Resolution::new(min_w, min_h));
+        let aligns = |v: u32, base: u32, step: u32| step == 0 || (v - base).is_multiple_of(step);
+        for &(w, h) in COMMON_RESOLUTIONS {
+            if w >= min_w
+                && w <= max_w
+                && h >= min_h
+                && h <= max_h
+                && aligns(w, min_w, step_w)
+                && aligns(h, min_h, step_h)
+            {
+                push_unique(out, Resolution::new(w, h));
+            }
+        }
+        push_unique(out, Resolution::new(max_w, max_h));
+    }
+
     /// Convert a V4L2 `CLOCK_MONOTONIC` timestamp to a wallclock Duration since `UNIX_EPOCH`.
     fn monotonic_to_wallclock(ts: v4l::Timestamp) -> Option<std::time::Duration> {
         let frame_mono = std::time::Duration::from(ts);
@@ -992,6 +1056,78 @@ mod internal {
         // frame_age = how long ago the frame was captured (monotonic delta)
         let frame_age = mono_now.checked_sub(frame_mono)?;
         wall_now.checked_sub(frame_age)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{expand_stepwise_resolutions, Resolution};
+
+        fn run(
+            min_w: u32,
+            max_w: u32,
+            step_w: u32,
+            min_h: u32,
+            max_h: u32,
+            step_h: u32,
+        ) -> Vec<Resolution> {
+            let mut out = Vec::new();
+            expand_stepwise_resolutions(min_w, max_w, step_w, min_h, max_h, step_h, &mut out);
+            out
+        }
+
+        #[test]
+        fn endpoints_only_when_no_presets_fit() {
+            // (max=300x200) is below the smallest preset (320x240).
+            let out = run(64, 300, 1, 64, 200, 1);
+            assert_eq!(
+                out,
+                vec![Resolution::new(64, 64), Resolution::new(300, 200)]
+            );
+        }
+
+        #[test]
+        fn min_equals_max_emits_single_endpoint() {
+            // Degenerate Stepwise: a Discrete in disguise. Avoid emitting
+            // the same point twice.
+            let out = run(640, 640, 0, 480, 480, 0);
+            assert_eq!(out, vec![Resolution::new(640, 480)]);
+        }
+
+        #[test]
+        fn presets_in_range_with_step_one_all_pass() {
+            // 320x240..=4096x4096 step 1: every preset that fits passes.
+            // min (320,240) coincides with the first preset, so dedup
+            // gives 9 distinct presets + the (4096,4096) max = 10.
+            let out = run(320, 4096, 1, 240, 4096, 1);
+            assert_eq!(out.len(), 10);
+            assert_eq!(out.first(), Some(&Resolution::new(320, 240)));
+            assert_eq!(out.last(), Some(&Resolution::new(4096, 4096)));
+            assert!(out.contains(&Resolution::new(1280, 720)));
+            assert!(out.contains(&Resolution::new(1920, 1080)));
+        }
+
+        #[test]
+        fn step_misalignment_drops_preset() {
+            // step_w = 16, min_w = 320: 1280 (= 320 + 60*16) aligns,
+            // 1920 (= 320 + 100*16) aligns, but 800 (= 320 + 30*16)
+            // also aligns. Pick a step that filters: step_w = 100,
+            // min_w = 320 → only 320, 420, 520, ... ; 1280 is 320 + 9.6*100
+            // → does not align. 1920 is 320 + 16*100 → aligns. 2560 →
+            // 320 + 22.4*100 → does not align.
+            let out = run(320, 4096, 100, 240, 4096, 1);
+            assert!(out.contains(&Resolution::new(1920, 1080)));
+            assert!(!out.contains(&Resolution::new(1280, 720)));
+            assert!(!out.contains(&Resolution::new(2560, 1440)));
+        }
+
+        #[test]
+        fn out_of_range_presets_excluded() {
+            // max 1280x720: presets above must not appear.
+            let out = run(320, 1280, 1, 240, 720, 1);
+            assert!(out.contains(&Resolution::new(1280, 720)));
+            assert!(!out.contains(&Resolution::new(1920, 1080)));
+            assert!(!out.contains(&Resolution::new(3840, 2160)));
+        }
     }
 }
 
