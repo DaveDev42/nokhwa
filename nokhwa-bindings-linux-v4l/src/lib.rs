@@ -30,7 +30,7 @@ mod internal {
         types::{
             ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo,
             ControlValueDescription, ControlValueSetter, FrameFormat, KnownCameraControl,
-            KnownCameraControlFlag, RequestedFormat, RequestedFormatType, Resolution,
+            KnownCameraControlFlag, RequestedFormat, Resolution,
         },
     };
     use std::{
@@ -446,28 +446,6 @@ mod internal {
             }
 
             Ok(v4l2)
-        }
-
-        /// Create a new `V4L2` Camera with desired settings. This may or may not work.
-        /// # Errors
-        /// This function will error if the camera is currently busy or if `V4L2` can't read device information.
-        #[deprecated(since = "0.10.0", note = "please use `new` instead.")]
-        #[allow(clippy::needless_pass_by_value)]
-        pub fn new_with(
-            index: CameraIndex,
-            width: u32,
-            height: u32,
-            fps: u32,
-            fourcc: FrameFormat,
-        ) -> Result<Self, NokhwaError> {
-            let camera_format = CameraFormat::new_from(width, height, fourcc, fps);
-            V4LCaptureDevice::new(
-                &index,
-                RequestedFormat::with_formats(
-                    RequestedFormatType::Exact(camera_format),
-                    vec![camera_format.format()].as_slice(),
-                ),
-            )
         }
 
         fn lock_device(&self) -> Result<std::sync::MutexGuard<'_, Device>, NokhwaError> {
@@ -1298,21 +1276,6 @@ mod internal {
         /// This function will error if the camera is currently busy or if `V4L2` can't read device information.
         #[allow(clippy::too_many_lines)]
         pub fn new(index: &CameraIndex, cam_fmt: RequestedFormat) -> Result<Self, NokhwaError> {
-            Err(not_on_this_platform())
-        }
-
-        /// Create a new `V4L2` Camera with desired settings. This may or may not work.
-        /// # Errors
-        /// This function will error if the camera is currently busy or if `V4L2` can't read device information.
-        #[deprecated(since = "0.10.0", note = "please use `new` instead.")]
-        #[allow(clippy::needless_pass_by_value)]
-        pub fn new_with(
-            index: CameraIndex,
-            width: u32,
-            height: u32,
-            fps: u32,
-            fourcc: FrameFormat,
-        ) -> Result<Self, NokhwaError> {
             Err(not_on_this_platform())
         }
 
