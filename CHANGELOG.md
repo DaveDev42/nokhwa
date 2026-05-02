@@ -129,6 +129,18 @@
 
 ### Testing
 
+* **Pin `verify_setter` RGB asymmetric per-channel max with 3
+  unit tests in `nokhwa-core/src/types_tests.rs`.** RGB
+  `verify_setter` checks `x <= max.0`, `x <= max.1`, `x <= max.2`
+  independently. The existing `verify_setter_rgb` test only used
+  the symmetric `max = (1.0, 1.0, 1.0)`, so a regression that
+  swapped channel indices (e.g. used `max.0` for green) would
+  pass every existing assertion. New tests pin: (1) asymmetric
+  `max = (100, 50, 1)` rejects per-channel index transposition;
+  (2) zero-max collapses the valid set to exactly `(0,0,0)` and
+  the inclusive-bound check (`x <= 0`) doesn't accidentally
+  become exclusive; (3) `f64::NEG_INFINITY` is rejected per
+  channel — both legs of `is_finite() && x >= 0.0` must fire.
 * **Pin `RequestedFormat::fulfill` no-match branches with 4 unit
   tests in `nokhwa-core/src/types_tests.rs`.** `fulfill` is the
   cross-backend selection algorithm that every backend's `open()`

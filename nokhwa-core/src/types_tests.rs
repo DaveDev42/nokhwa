@@ -868,6 +868,77 @@ fn verify_setter_rgb() {
     assert!(!desc.verify_setter(&ControlValueSetter::Integer(1)));
 }
 
+// `verify_setter` for RGB applies the upper-bound check
+// independently per channel using `max.0` / `max.1` / `max.2`. The
+// existing `verify_setter_rgb` test only uses the symmetric case
+// `max = (1.0, 1.0, 1.0)`, so a regression that swaps `max.0` and
+// `max.2` (or copies `max.0` to all three checks) would pass every
+// existing assertion. Pin asymmetric maxima so per-channel index
+// confusion surfaces here.
+
+#[test]
+fn verify_setter_rgb_asymmetric_per_channel_max() {
+    // Each channel has a different ceiling; only triples that
+    // respect each channel's own ceiling pass.
+    let desc = ControlValueDescription::RGB {
+        value: (50.0, 25.0, 0.5),
+        max: (100.0, 50.0, 1.0),
+        default: (0.0, 0.0, 0.0),
+    };
+    // In-range across all channels.
+    assert!(desc.verify_setter(&ControlValueSetter::RGB(100.0, 50.0, 1.0)));
+    assert!(desc.verify_setter(&ControlValueSetter::RGB(50.0, 25.0, 0.5)));
+
+    // R at G's ceiling but G at R's ceiling — would pass if the
+    // implementation used `max.0` for every channel. Must fail
+    // because G=100 > max.1=50.
+    assert!(!desc.verify_setter(&ControlValueSetter::RGB(50.0, 100.0, 0.5)));
+
+    // B at G's ceiling — would pass if the implementation used
+    // `max.1` for B. Must fail because B=50 > max.2=1.0.
+    assert!(!desc.verify_setter(&ControlValueSetter::RGB(50.0, 25.0, 50.0)));
+
+    // R at B's ceiling — would pass if the implementation used
+    // `max.2` for R. Must fail because R=1.0 is fine for R, but
+    // flip the check: R=200 with max.0=100 must fail.
+    assert!(!desc.verify_setter(&ControlValueSetter::RGB(200.0, 25.0, 0.5)));
+}
+
+#[test]
+fn verify_setter_rgb_zero_max_only_zero_passes() {
+    // Edge case: a per-channel max of 0.0 collapses the valid set
+    // to {0.0}. Useful if a backend reports a control as present
+    // but unconfigurable. Pin so the inclusive-upper-bound check
+    // (`x <= 0.0`) doesn't accidentally become exclusive (`x < 0.0`)
+    // and reject every value including the only valid one.
+    let desc = ControlValueDescription::RGB {
+        value: (0.0, 0.0, 0.0),
+        max: (0.0, 0.0, 0.0),
+        default: (0.0, 0.0, 0.0),
+    };
+    assert!(desc.verify_setter(&ControlValueSetter::RGB(0.0, 0.0, 0.0)));
+    // Anything positive on any channel must fail.
+    assert!(!desc.verify_setter(&ControlValueSetter::RGB(0.001, 0.0, 0.0)));
+    assert!(!desc.verify_setter(&ControlValueSetter::RGB(0.0, 0.001, 0.0)));
+    assert!(!desc.verify_setter(&ControlValueSetter::RGB(0.0, 0.0, 0.001)));
+}
+
+#[test]
+fn verify_setter_rgb_negative_infinity_fails_per_channel() {
+    // `f64::NEG_INFINITY` is non-finite *and* below zero — both
+    // legs of `is_finite() && x >= 0.0` must reject it. Pin per
+    // channel so the check isn't accidentally short-circuited
+    // for one position.
+    let desc = ControlValueDescription::RGB {
+        value: (0.5, 0.5, 0.5),
+        max: (1.0, 1.0, 1.0),
+        default: (0.0, 0.0, 0.0),
+    };
+    assert!(!desc.verify_setter(&ControlValueSetter::RGB(f64::NEG_INFINITY, 0.5, 0.5)));
+    assert!(!desc.verify_setter(&ControlValueSetter::RGB(0.5, f64::NEG_INFINITY, 0.5)));
+    assert!(!desc.verify_setter(&ControlValueSetter::RGB(0.5, 0.5, f64::NEG_INFINITY)));
+}
+
 // --- CameraControl value round-trip tests ---
 
 #[test]
