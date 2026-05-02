@@ -82,6 +82,22 @@
 
 ### Testing
 
+* **Pin MSMF `kcc_to_i32` mapping for every `KnownCameraControl`.**
+  The Windows backend's `kcc_to_i32` returns a four-variant
+  `MFControlId` (`ProcAmpRange` / `ProcAmpBoolean` / `CCRange` /
+  `CCValue`) that decides which of the four
+  `IAMVideoProcAmp` / `IAMCameraControl` Get/Set / GetRange routines
+  `set_control` calls. A drift like `Pan -> CCValue` (instead of
+  `CCRange`) would silently call `IAMCameraControl::Get` instead of
+  `GetRange` and the user would see wrong limits. Added 3 tests:
+  `[(KnownCameraControl, MFControlId); 15]` table-driven assertion
+  pinning the variant + raw `windows-rs` constant id for every
+  standard control; `Other(VideoProcAmp_ColorEnable.0 as u128)` is
+  recognised and round-trips to `ProcAmpRange`; an arbitrary
+  `Other(0xDEAD_BEEF)` falls through to `None` so callers can surface
+  `UnsupportedOperationError`. Compile-checked under
+  `Clippy (windows)` on every PR; run when a Windows host is
+  available.
 * **Pin V4L2 control-ID table + `KnownCameraControl` ↔ V4L2-CID
   round-trips.** `nokhwa-bindings-linux-v4l/src/lib.rs` carries a
   `V4L2_CONTROL_IDS: [u32; 15]` table whose row order *must* match

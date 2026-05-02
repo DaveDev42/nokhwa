@@ -1256,6 +1256,108 @@ pub mod wmf {
             let unknown = GUID::from_values(0, 0, 0, [0; 8]);
             assert_eq!(guid_to_frameformat(unknown), None);
         }
+
+        // Pin every KnownCameraControl -> MFControlId mapping. The variant
+        // (ProcAmpRange / ProcAmpBoolean / CCRange / CCValue) determines
+        // which of the four IAMVideoProcAmp / IAMCameraControl Get/Set
+        // routines `set_control` ends up calling. A Pan that drifts from
+        // CCRange to CCValue would silently call IAMCameraControl::Get
+        // instead of GetRange and the user would observe wrong limits.
+        // The exact i32 IDs come from windows-rs constants — we round-trip
+        // them so a future windows-rs major bump that renumbers these
+        // would be caught here rather than at runtime on a customer's box.
+        #[test]
+        fn kcc_to_i32_maps_every_standard_control() {
+            let expected: &[(KnownCameraControl, MFControlId)] = &[
+                (
+                    KnownCameraControl::Brightness,
+                    MFControlId::ProcAmpRange(VideoProcAmp_Brightness.0),
+                ),
+                (
+                    KnownCameraControl::Contrast,
+                    MFControlId::ProcAmpRange(VideoProcAmp_Contrast.0),
+                ),
+                (
+                    KnownCameraControl::Hue,
+                    MFControlId::ProcAmpRange(VideoProcAmp_Hue.0),
+                ),
+                (
+                    KnownCameraControl::Saturation,
+                    MFControlId::ProcAmpRange(VideoProcAmp_Saturation.0),
+                ),
+                (
+                    KnownCameraControl::Sharpness,
+                    MFControlId::ProcAmpRange(VideoProcAmp_Sharpness.0),
+                ),
+                (
+                    KnownCameraControl::Gamma,
+                    MFControlId::ProcAmpRange(VideoProcAmp_Gamma.0),
+                ),
+                (
+                    KnownCameraControl::WhiteBalance,
+                    MFControlId::ProcAmpRange(VideoProcAmp_WhiteBalance.0),
+                ),
+                (
+                    KnownCameraControl::BacklightComp,
+                    MFControlId::ProcAmpBoolean(VideoProcAmp_BacklightCompensation.0),
+                ),
+                (
+                    KnownCameraControl::Gain,
+                    MFControlId::ProcAmpRange(VideoProcAmp_Gain.0),
+                ),
+                (
+                    KnownCameraControl::Pan,
+                    MFControlId::CCRange(CameraControl_Pan.0),
+                ),
+                (
+                    KnownCameraControl::Tilt,
+                    MFControlId::CCRange(CameraControl_Tilt.0),
+                ),
+                (
+                    KnownCameraControl::Zoom,
+                    MFControlId::CCRange(CameraControl_Zoom.0),
+                ),
+                (
+                    KnownCameraControl::Exposure,
+                    MFControlId::CCValue(CameraControl_Exposure.0),
+                ),
+                (
+                    KnownCameraControl::Iris,
+                    MFControlId::CCValue(CameraControl_Iris.0),
+                ),
+                (
+                    KnownCameraControl::Focus,
+                    MFControlId::CCValue(CameraControl_Focus.0),
+                ),
+            ];
+            for (kcc, want) in expected {
+                let got = kcc_to_i32(*kcc).expect("standard control must map");
+                assert_eq!(got, *want, "wrong MFControlId for {kcc:?}");
+            }
+        }
+
+        #[test]
+        fn kcc_to_i32_other_color_enable_is_recognised() {
+            // ColorEnable is the only `Other(_)` value the MSMF backend
+            // accepts — it's a `VideoProcAmp_ColorEnable` boolean exposed
+            // to nokhwa as `Other(VideoProcAmp_ColorEnable.0 as u128)`.
+            // Pin that round-trip so the magic-number lookup doesn't
+            // silently regress.
+            let other = KnownCameraControl::Other(VideoProcAmp_ColorEnable.0 as u128);
+            assert_eq!(
+                kcc_to_i32(other),
+                Some(MFControlId::ProcAmpRange(VideoProcAmp_ColorEnable.0)),
+            );
+        }
+
+        #[test]
+        fn kcc_to_i32_unknown_other_returns_none() {
+            // A `KnownCameraControl::Other(_)` whose payload doesn't match
+            // ColorEnable must fall through to `None` so `set_control` /
+            // `control` can report `UnsupportedOperationError`.
+            let other = KnownCameraControl::Other(0xDEAD_BEEF);
+            assert_eq!(kcc_to_i32(other), None);
+        }
     }
 }
 
