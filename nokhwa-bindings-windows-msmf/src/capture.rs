@@ -182,15 +182,15 @@ impl FrameSource for MediaFoundationCaptureDevice {
     }
 
     fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
-        let mf_camera_format_list = self.inner.compatible_format_list()?;
-        let mut frame_format_list = vec![];
-
-        for camera_format in mf_camera_format_list {
-            if !frame_format_list.contains(&camera_format.format()) {
-                frame_format_list.push(camera_format.format());
-            }
-        }
-        Ok(frame_format_list)
+        let mut formats: Vec<FrameFormat> = self
+            .inner
+            .compatible_format_list()?
+            .into_iter()
+            .map(|fmt| fmt.format())
+            .collect();
+        formats.sort();
+        formats.dedup();
+        Ok(formats)
     }
 
     fn open(&mut self) -> Result<(), NokhwaError> {
