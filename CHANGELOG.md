@@ -129,6 +129,19 @@
 
 ### Testing
 
+* **Pin NV12 → RGB / RGBA pixel-correctness with 4 unit tests in
+  `nokhwa-core/src/frame_tests.rs`.** The `buf_nv12_to_rgb` error
+  guards were already pinned, but the actual color-decode kernel
+  (BT.601 video-range, channel order, alpha placement) had no
+  pixel-output assertion. A regression that swaps R / B, uses
+  studio-range coefficients on full-range Y, or zeroes the alpha
+  byte would silently corrupt every NV12 frame from popular
+  webcams. New tests pin: (1) video-range black (Y=16) decodes
+  to ~(0,0,0); (2) full-Y (Y=255) clamps cleanly to (255,255,255)
+  rather than wrapping via raw `as u8` truncation; (3) neutral
+  chroma (U=V=128) produces R=G=B (a true grayscale, catching any
+  channel transposition); (4) NV12 → RGBA always appends alpha
+  255 at the 4th byte, never `pxv` or 0.
 * **Pin runner `Overflow::Block` channel arm with 3 unit tests in
   `src/runner.rs`.** `make_channel`'s `Block` policy had zero
   coverage even though it sits in the same `Tx::send` arm as
