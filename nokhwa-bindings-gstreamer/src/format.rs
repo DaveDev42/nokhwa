@@ -167,6 +167,18 @@ fn dedupe(mut v: Vec<CameraFormat>) -> Vec<CameraFormat> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Once;
+
+    /// `gstreamer::Caps::builder` and `Caps::new_empty` require the
+    /// global GStreamer registry to be initialised. Tests that only
+    /// touch `Fraction` / `FractionRange` / `VideoFormat::from_string`
+    /// don't need this — initialising once per test process is enough.
+    fn ensure_gst_init() {
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            gstreamer::init().expect("gstreamer::init() must succeed in tests");
+        });
+    }
 
     #[test]
     fn yuy2_maps_to_yuyv() {
@@ -224,5 +236,231 @@ mod tests {
         );
         // min=0 → fraction_to_fps returns None → empty.
         assert_eq!(enumerate_range(range), Vec::<u32>::new());
+    }
+
+    #[test]
+    fn yuyv_round_trips() {
+        let rt =
+            frame_format_to_video_format(FrameFormat::YUYV).and_then(video_format_to_frame_format);
+        assert_eq!(rt, Some(FrameFormat::YUYV));
+    }
+
+    #[test]
+    fn gray_round_trips() {
+        let rt =
+            frame_format_to_video_format(FrameFormat::GRAY).and_then(video_format_to_frame_format);
+        assert_eq!(rt, Some(FrameFormat::GRAY));
+    }
+
+    #[test]
+    fn frame_format_to_video_format_unsupported_returns_none() {
+        // The session-2 caps path does not currently round-trip MJPEG /
+        // RAWRGB / RAWBGR through GStreamer's `video/x-raw` subset; the
+        // function must surface this with `None` so callers can skip
+        // those structures rather than panicking.
+        assert!(frame_format_to_video_format(FrameFormat::MJPEG).is_none());
+        assert!(frame_format_to_video_format(FrameFormat::RAWRGB).is_none());
+        assert!(frame_format_to_video_format(FrameFormat::RAWBGR).is_none());
+    }
+
+    #[test]
+    fn fraction_to_fps_rejects_zero_numerator() {
+        // `0/1` is what `videotestsrc` and other defaults advertise when
+        // they mean "no fixed framerate." We reject it rather than
+        // emitting a 0fps `CameraFormat` that would divide-by-zero
+        // downstream.
+        assert_eq!(fraction_to_fps(gstreamer::Fraction::new(0, 1)), None);
+    }
+
+    #[test]
+    fn fraction_to_fps_rejects_negative_numerator() {
+        assert_eq!(fraction_to_fps(gstreamer::Fraction::new(-30, 1)), None);
+    }
+
+    #[test]
+    fn fraction_to_fps_accepts_exact_multiple_denominator() {
+        // `60/2` is mathematically equal to 30/1 and rounds exactly, so
+        // we should accept it. Confirms the integer-division branch.
+        assert_eq!(fraction_to_fps(gstreamer::Fraction::new(60, 2)), Some(30));
+    }
+
+    #[test]
+    fn enumerate_range_below_common_set_returns_empty() {
+        // `[1/1, 4/1]` falls strictly below `COMMON_FPS`'s minimum (5),
+        // so we deliberately produce no rates rather than fabricate a
+        // 1fps option.
+        let range = gstreamer::FractionRange::new(
+            gstreamer::Fraction::new(1, 1),
+            gstreamer::Fraction::new(4, 1),
+        );
+        assert_eq!(enumerate_range(range), Vec::<u32>::new());
+    }
+
+    #[test]
+    fn enumerate_range_single_point_includes_only_that_rate() {
+        // A degenerate `[30/1, 30/1]` range — equivalent to a fixed
+        // framerate but advertised as a range — should produce exactly
+        // `[30]`, not the full `COMMON_FPS` table.
+        let range = gstreamer::FractionRange::new(
+            gstreamer::Fraction::new(30, 1),
+            gstreamer::Fraction::new(30, 1),
+        );
+        assert_eq!(enumerate_range(range), vec![30]);
+    }
+
+    #[test]
+    fn dedupe_collapses_duplicates_and_sorts() {
+        // `caps_to_camera_formats` can emit duplicate entries when a
+        // device's `Caps` carries the same `(width, height, format,
+        // framerate)` tuple in multiple structures; `dedupe` is the
+        // shared exit gate. Verify both halves: collapse + sort.
+        let res = Resolution::new(640, 480);
+        let a = CameraFormat::new(res, FrameFormat::YUYV, 30);
+        let b = CameraFormat::new(res, FrameFormat::YUYV, 60);
+        let c = CameraFormat::new(Resolution::new(1280, 720), FrameFormat::YUYV, 30);
+        let input = vec![b, a, a, c, b];
+        let out = dedupe(input);
+        // Sorted by `CameraFormat`'s derived `Ord` — `(resolution,
+        // format, frame_rate)` lexicographically. 640x480 < 1280x720
+        // because `Resolution::Ord` is `(width, height)`.
+        assert_eq!(out, vec![a, b, c]);
+    }
+
+    #[test]
+    fn dedupe_empty_returns_empty() {
+        assert_eq!(
+            dedupe(Vec::<CameraFormat>::new()),
+            Vec::<CameraFormat>::new()
+        );
+    }
+
+    #[test]
+    fn caps_to_camera_formats_single_yuy2_structure() {
+        ensure_gst_init();
+        let caps = gstreamer::Caps::builder("video/x-raw")
+            .field("format", "YUY2")
+            .field("width", 1280i32)
+            .field("height", 720i32)
+            .field("framerate", gstreamer::Fraction::new(30, 1))
+            .build();
+        let formats = caps_to_camera_formats(&caps);
+        assert_eq!(
+            formats,
+            vec![CameraFormat::new(
+                Resolution::new(1280, 720),
+                FrameFormat::YUYV,
+                30
+            )]
+        );
+    }
+
+    #[test]
+    fn caps_to_camera_formats_skips_non_video_x_raw() {
+        // `image/jpeg` is the typical compressed-MJPEG caps form; our
+        // session-2 path is uncompressed-only and must skip it without
+        // panicking. (The native MSMF / V4L backends already cover MJPEG
+        // for affected devices.)
+        ensure_gst_init();
+        let caps = gstreamer::Caps::builder("image/jpeg")
+            .field("width", 1280i32)
+            .field("height", 720i32)
+            .field("framerate", gstreamer::Fraction::new(30, 1))
+            .build();
+        assert!(caps_to_camera_formats(&caps).is_empty());
+    }
+
+    #[test]
+    fn caps_to_camera_formats_skips_unknown_video_format() {
+        // `I420` is a perfectly valid `video/x-raw` format but we don't
+        // currently wire it to a `FrameFormat` — must skip silently.
+        ensure_gst_init();
+        let caps = gstreamer::Caps::builder("video/x-raw")
+            .field("format", "I420")
+            .field("width", 640i32)
+            .field("height", 480i32)
+            .field("framerate", gstreamer::Fraction::new(30, 1))
+            .build();
+        assert!(caps_to_camera_formats(&caps).is_empty());
+    }
+
+    #[test]
+    fn caps_to_camera_formats_skips_non_positive_dimensions() {
+        // Defensive: a malformed structure advertising width=0 or
+        // height=0 must not produce a `Resolution::new(0, 0)` entry.
+        ensure_gst_init();
+        let caps = gstreamer::Caps::builder("video/x-raw")
+            .field("format", "YUY2")
+            .field("width", 0i32)
+            .field("height", 480i32)
+            .field("framerate", gstreamer::Fraction::new(30, 1))
+            .build();
+        assert!(caps_to_camera_formats(&caps).is_empty());
+    }
+
+    #[test]
+    fn caps_to_camera_formats_explodes_framerate_list() {
+        // Most local cameras advertise a `FractionList` of supported
+        // rates rather than a single `Fraction`. We must produce one
+        // `CameraFormat` per integer rate and drop the non-integer ones
+        // (e.g. NTSC's 30000/1001).
+        ensure_gst_init();
+        let caps = gstreamer::Caps::builder("video/x-raw")
+            .field("format", "NV12")
+            .field("width", 1920i32)
+            .field("height", 1080i32)
+            .field(
+                "framerate",
+                gstreamer::List::new([
+                    gstreamer::Fraction::new(30, 1),
+                    gstreamer::Fraction::new(60, 1),
+                    gstreamer::Fraction::new(30_000, 1001),
+                ]),
+            )
+            .build();
+        let formats = caps_to_camera_formats(&caps);
+        let res = Resolution::new(1920, 1080);
+        assert_eq!(
+            formats,
+            vec![
+                CameraFormat::new(res, FrameFormat::NV12, 30),
+                CameraFormat::new(res, FrameFormat::NV12, 60),
+            ]
+        );
+    }
+
+    #[test]
+    fn caps_to_camera_formats_dedupes_across_structures() {
+        // A device that advertises the same `(format, resolution,
+        // framerate)` in two separate `video/x-raw` structures must
+        // collapse to one entry — the post-flatten `dedupe` gate is
+        // what guarantees that.
+        ensure_gst_init();
+        let caps = gstreamer::Caps::builder("video/x-raw")
+            .field("format", "GRAY8")
+            .field("width", 320i32)
+            .field("height", 240i32)
+            .field("framerate", gstreamer::Fraction::new(30, 1))
+            .build();
+        let mut combined = caps.copy();
+        {
+            let combined_mut = combined.make_mut();
+            combined_mut.append(caps);
+        }
+        let formats = caps_to_camera_formats(&combined);
+        assert_eq!(
+            formats,
+            vec![CameraFormat::new(
+                Resolution::new(320, 240),
+                FrameFormat::GRAY,
+                30
+            )]
+        );
+    }
+
+    #[test]
+    fn caps_to_camera_formats_empty_caps_returns_empty() {
+        ensure_gst_init();
+        let caps = gstreamer::Caps::new_empty();
+        assert!(caps_to_camera_formats(&caps).is_empty());
     }
 }

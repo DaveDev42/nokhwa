@@ -82,6 +82,21 @@
 
 ### Testing
 
+* **Expand GStreamer `format` module unit coverage.** `format::caps_to_camera_formats`
+  is the heart of the session-2 enumeration path — the 200-line function that turns
+  raw `Caps` into the `Vec<CameraFormat>` exposed via `compatible_camera_formats()` —
+  and it had zero direct tests. Same for `format::dedupe` and the YUYV/GRAY
+  arms of `frame_format_to_video_format`. Added 17 tests in
+  `nokhwa-bindings-gstreamer/src/format.rs`'s existing `mod tests` block:
+  YUYV / GRAY round-trips, MJPEG / RAWRGB / RAWBGR `None` returns, fraction-to-fps
+  zero / negative / exact-multiple-denominator (`60/2 == 30`) edge cases,
+  `enumerate_range` below-COMMON_FPS / single-point-range cases, `dedupe`
+  collapse + sort, and seven `caps_to_camera_formats` cases (single struct,
+  non-`video/x-raw` skip, unknown format skip, zero dimension skip,
+  framerate `List` explosion with NTSC 30000/1001 dropped, cross-structure
+  dedupe via `Caps::append`, empty caps). Tests that build `Caps` go through
+  a `Once`-gated `gstreamer::init()` helper since the `Caps` constructor
+  asserts the registry is initialised.
 * **Cover URI-scheme detection on both sides of the dual
   implementation.** `nokhwa::session::looks_like_uri_scheme` and
   `nokhwa-bindings-gstreamer::uri::looks_like_uri` are two
