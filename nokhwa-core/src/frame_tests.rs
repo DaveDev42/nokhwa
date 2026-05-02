@@ -167,6 +167,43 @@ fn rawrgb_into_rgb_write_to() {
     assert_eq!(dest, data);
 }
 
+#[test]
+fn rawrgb_into_rgb_write_png_emits_valid_png() {
+    // `RgbConversion::write_png` is a public API that pipes through
+    // `image::DynamicImage::write_to(_, ImageFormat::Png)`. It had
+    // zero coverage: a regression that drops the PNG codec from the
+    // `image` dependency or that flips the `ImageFormat` argument
+    // would silently produce empty / wrong-format output, or worse,
+    // an `Err` that callers learn about only at runtime. Pin the
+    // happy path by writing into an in-memory `Cursor`, then assert
+    // (a) the call succeeds, (b) the output starts with the PNG
+    // magic bytes (`\x89PNG\r\n\x1a\n`), (c) the output is large
+    // enough to plausibly contain a 2×2 image (PNG signature alone
+    // is 8 bytes; a real image with IHDR/IDAT/IEND is ≥ ~50 bytes).
+    let data: Vec<u8> = (0..12u8).collect();
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::RAWRGB);
+    let frame: Frame<RawRgb> = Frame::new(buf);
+
+    let mut sink: std::io::Cursor<Vec<u8>> = std::io::Cursor::new(Vec::new());
+    frame
+        .into_rgb()
+        .write_png(&mut sink)
+        .expect("write_png must succeed for a valid 2x2 RAWRGB frame");
+
+    let bytes = sink.into_inner();
+    let png_magic = [0x89u8, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n'];
+    assert!(
+        bytes.starts_with(&png_magic),
+        "output must begin with PNG magic, got first 8 bytes: {:?}",
+        bytes.iter().take(8).collect::<Vec<_>>()
+    );
+    assert!(
+        bytes.len() >= 50,
+        "PNG output too small to be a real image (got {} bytes)",
+        bytes.len()
+    );
+}
+
 // ---------------------------------------------------------------------------
 // RGBA conversion
 // ---------------------------------------------------------------------------
