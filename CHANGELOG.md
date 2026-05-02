@@ -413,6 +413,17 @@
 
 ### Documentation
 
+* **`src/lib.rs` crate doc: fix `nokhwa-tokio` crates.io link +
+  fill the feature flags list.** The crate-level doc still pointed
+  at `https://crates.io/crates/nokhwa-tokio` even though this fork
+  is not published to crates.io (per `CLAUDE.md`). Replaced the
+  link with prose pointing at the workspace crate and noting that
+  consumers add it as a path / git dependency. The "Feature flags"
+  bullet list also missed `input-gstreamer` (the cross-platform
+  URL-source backend, mentioned earlier in the docs but absent from
+  the per-feature explanation) and `device-test` (the integration
+  test gate). Both added so `cargo doc` reflects the actual feature
+  surface a consumer sees in `Cargo.toml`.
 * **Resync example READMEs and badges with the post-0.13 API.** Three
   example READMEs (`examples/captesting`, `examples/capture`,
   `examples/threaded-capture`) still claimed to demonstrate the
