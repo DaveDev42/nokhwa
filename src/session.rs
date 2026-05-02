@@ -813,4 +813,30 @@ mod uri_scheme_tests {
             assert!(looks_like_uri_scheme(s), "expected URL (mixed case): {s}");
         }
     }
+
+    // Mirror of `nokhwa-bindings-gstreamer::uri::tests::scheme_list_shape_is_stable`.
+    // The two scheme lists are kept in sync by the doc comment on
+    // `looks_like_uri_scheme`; this test pins the shape from the
+    // session.rs side so a divergence between the two implementations
+    // is visible at the user-facing crate level too. Same prefix set,
+    // same negative cases.
+    #[test]
+    fn scheme_list_shape_is_stable() {
+        let mirror = [
+            "rtsp://", "rtsps://", "rtmp://", "rtmps://", "http://", "https://", "file://",
+            "srt://", "udp://", "tcp://",
+        ];
+        for prefix in mirror {
+            assert!(
+                looks_like_uri_scheme(prefix),
+                "{prefix} should be a URL prefix"
+            );
+        }
+        for unsupported in ["ftp://", "ws://", "wss://", "data:", "mms://"] {
+            assert!(
+                !looks_like_uri_scheme(unsupported),
+                "{unsupported} unexpectedly recognised"
+            );
+        }
+    }
 }

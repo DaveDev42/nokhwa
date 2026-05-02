@@ -116,6 +116,18 @@
 
 ### Testing
 
+* **Add `scheme_list_shape_is_stable` mirror test in
+  `nokhwa::session::uri_scheme_tests`.** `looks_like_uri_scheme` in
+  `src/session.rs` carries a doc note: "Kept in sync with the scheme
+  list in `nokhwa-bindings-gstreamer::uri::looks_like_uri`." The
+  binding crate already had a `scheme_list_shape_is_stable` test
+  pinning its scheme list shape (10 supported prefixes, 5 explicit
+  negatives). The session.rs side had detection / rejection /
+  case-insensitivity tests but no shape pin, so a divergence — e.g.
+  someone adding `mms://` to one side but not the other — would only
+  surface as a runtime routing bug instead of a CI failure. Mirror
+  test now lives on both sides; either crate-level test catches a
+  scheme-list drift.
 * **`tests/device_tests.rs`: add `compatible_fourcc_is_sorted_and_deduped`
   + `stream_camera_reopen_after_close`.** The first pins the
   cross-backend `FrameFormat::Ord`-sorted, deduplicated invariant
