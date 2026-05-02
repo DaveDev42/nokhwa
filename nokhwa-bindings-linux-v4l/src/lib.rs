@@ -1265,11 +1265,31 @@ mod internal {
 
     /// Non-Linux stub for `V4LCaptureDevice`.
     ///
-    /// Every constructor and method returns
-    /// [`NokhwaError::NotImplementedError`]. Exists purely so cross-platform
-    /// downstream code referencing the type compiles on macOS / Windows; do
-    /// not expect any of its trait methods to do useful work.
+    /// Exists so that cross-platform documentation builds and downstream
+    /// code that merely references the type can compile on macOS / Windows
+    /// hosts. Fallible methods return [`NokhwaError::NotImplementedError`];
+    /// infallible methods panic via `unreachable!()` — they cannot be
+    /// reached in practice because `V4LCaptureDevice::new` errors off
+    /// Linux, so no value of this stub type can exist at runtime via
+    /// the public constructor path.
+    ///
+    /// Mirrors the off-Windows stub used by `MediaFoundationCaptureDevice`.
     pub struct V4LCaptureDevice;
+
+    /// Shared error for fallible stub methods.
+    fn not_on_this_platform() -> NokhwaError {
+        NokhwaError::NotImplementedError("V4L2 only on Linux".to_string())
+    }
+
+    /// Shared panic for infallible stub methods. These methods cannot
+    /// return an error and should never be called in practice because
+    /// `V4LCaptureDevice::new` errors off Linux, so no `V4LCaptureDevice`
+    /// value can be produced through the public constructor path.
+    #[cold]
+    #[inline(never)]
+    fn stub_unreachable() -> ! {
+        unreachable!("V4L stub: only available on Linux")
+    }
 
     #[allow(unused_variables)]
     impl V4LCaptureDevice {
@@ -1278,9 +1298,7 @@ mod internal {
         /// This function will error if the camera is currently busy or if `V4L2` can't read device information.
         #[allow(clippy::too_many_lines)]
         pub fn new(index: &CameraIndex, cam_fmt: RequestedFormat) -> Result<Self, NokhwaError> {
-            Err(NokhwaError::NotImplementedError(
-                "V4L2 only on Linux".to_string(),
-            ))
+            Err(not_on_this_platform())
         }
 
         /// Create a new `V4L2` Camera with desired settings. This may or may not work.
@@ -1295,18 +1313,14 @@ mod internal {
             fps: u32,
             fourcc: FrameFormat,
         ) -> Result<Self, NokhwaError> {
-            Err(NokhwaError::NotImplementedError(
-                "V4L2 only on Linux".to_string(),
-            ))
+            Err(not_on_this_platform())
         }
 
         /// Force refreshes the inner [`CameraFormat`] state.
         /// # Errors
         /// If the internal representation in the driver is invalid, this will error.
         pub fn force_refresh_camera_format(&mut self) -> Result<(), NokhwaError> {
-            Err(NokhwaError::NotImplementedError(
-                "V4L2 only on Linux".to_string(),
-            ))
+            Err(not_on_this_platform())
         }
     }
 
@@ -1317,11 +1331,11 @@ mod internal {
         }
 
         fn info(&self) -> &CameraInfo {
-            todo!()
+            stub_unreachable()
         }
 
         fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
-            todo!()
+            Err(not_on_this_platform())
         }
 
         fn set_control(
@@ -1329,46 +1343,46 @@ mod internal {
             id: KnownCameraControl,
             value: ControlValueSetter,
         ) -> Result<(), NokhwaError> {
-            todo!()
+            Err(not_on_this_platform())
         }
     }
 
     #[allow(unused_variables)]
     impl FrameSource for V4LCaptureDevice {
         fn negotiated_format(&self) -> CameraFormat {
-            todo!()
+            stub_unreachable()
         }
 
         fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
-            todo!()
+            Err(not_on_this_platform())
         }
 
         fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
-            todo!()
+            Err(not_on_this_platform())
         }
 
         fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
-            todo!()
+            Err(not_on_this_platform())
         }
 
         fn open(&mut self) -> Result<(), NokhwaError> {
-            todo!()
+            Err(not_on_this_platform())
         }
 
         fn is_open(&self) -> bool {
-            todo!()
+            false
         }
 
         fn frame(&mut self) -> Result<Buffer, NokhwaError> {
-            todo!()
+            Err(not_on_this_platform())
         }
 
         fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
-            todo!()
+            Err(not_on_this_platform())
         }
 
         fn close(&mut self) -> Result<(), NokhwaError> {
-            todo!()
+            Err(not_on_this_platform())
         }
     }
 }

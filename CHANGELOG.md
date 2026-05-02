@@ -4,6 +4,22 @@
 
 ### Bug Fixes
 
+* **V4L non-Linux stub `V4LCaptureDevice` panicked via `todo!()`
+  on every trait method.** The off-Linux compile-shim impls of
+  `CameraDevice` and `FrameSource` for `V4LCaptureDevice` were each
+  `todo!()`. The unit struct (`pub struct V4LCaptureDevice;`) is
+  trivially constructable, so any cross-platform code that called a
+  trait method on a stub instance — e.g. a downstream test that
+  builds against `--features input-v4l` on macOS / Windows — would
+  panic rather than receive the expected
+  `NokhwaError::NotImplementedError`. Replaced every `todo!()` with
+  the canonical pattern already used by the off-Windows
+  `MediaFoundationCaptureDevice` stub: fallible methods return a
+  shared `not_on_this_platform()` error, infallible methods that
+  cannot exist meaningfully (`info()`, `negotiated_format()`)
+  collapse to a `#[cold]` `unreachable!()`, and `is_open()` returns
+  `false`. Compile-checked under `Build (windows)` and
+  `Build (macos)` on every PR.
 * **MSMF `compatible_fourcc` silently truncated to 2 entries.**
   `nokhwa-bindings-windows-msmf::capture::compatible_fourcc`
   contained a `if frame_format_list.len() == 2 { break; }` early exit
