@@ -4,6 +4,17 @@
 
 ### Bug Fixes
 
+* **`RgbConversion::write_png` returned an error in every build.**
+  `nokhwa-core` declared `image` with `default-features = false`
+  but did not opt into the `png` feature, so the underlying
+  `image::DynamicImage::write_to(_, ImageFormat::Png)` call
+  always returned `ImageError::Unsupported("The image format
+  ``Png`` is not supported")`. The function had been quietly
+  unusable since the `image = "0.25"` upgrade. Added the `png`
+  feature to the `nokhwa-core` `image` dependency so the encoder
+  is compiled in. Pinned the round-trip with a unit test that
+  encodes a 2×2 RAWRGB frame and asserts the PNG magic bytes
+  appear at the head of the output.
 * **V4L non-Linux stub `V4LCaptureDevice` panicked via `todo!()`
   on every trait method.** The off-Linux compile-shim impls of
   `CameraDevice` and `FrameSource` for `V4LCaptureDevice` were each
