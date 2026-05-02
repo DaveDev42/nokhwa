@@ -116,6 +116,21 @@
 
 ### Testing
 
+* **Pin `yuyv422_predicted_size` arithmetic with 3 unit tests in
+  `nokhwa-core/src/types_tests.rs`.** `yuyv422_predicted_size` is a
+  `pub` size predictor that callers pre-allocating a destination
+  buffer for `buf_yuyv422_to_rgb` rely on (Frame Buffer = `(input_size
+  / 4) * (2 * channels)` where channels is 3 for RGB and 4 for RGBA).
+  Until now the formula was only implicitly exercised through
+  `yuyv422_to_rgb`'s end-to-end pixel correctness tests. Three tiny
+  unit tests now pin the contract directly: (1) RGB output is
+  `input * 3 / 2` for whole chunks; (2) RGBA output is `input * 2`
+  for whole chunks; (3) sub-chunk inputs round down (the destination
+  must hold an integral number of pixels — 0/3 bytes → 0 output, 5
+  bytes → 1 chunk → 6/8 bytes RGB/RGBA). Catches a constant-flip
+  regression (3↔4) or a `/4` → `/2` arithmetic typo at the
+  unit-test layer rather than waiting on a downstream
+  index-out-of-bounds panic in the actual conversion.
 * **Expand `tests/device_tests.rs` with 3 more integration tests
   (`frame_raw()` payload, `query()` ↔ `open()` round-trip,
   compatible-format resolutions non-zero).** Pins three more
