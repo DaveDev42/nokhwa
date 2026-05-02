@@ -116,6 +116,19 @@
 
 ### Testing
 
+* **Pin the ABI shape of `CAP_FRAME` / `CAP_SHUTTER` / `CAP_EVENT`
+  capability bits in `src/session.rs::capability_bits_tests`.**
+  These constants are `#[doc(hidden)] pub const u32` but observable
+  across crate boundaries: the `nokhwa_backend!` macro expansion in
+  any backend crate (including downstream consumers that implement
+  custom backends) ORs them into a single `u32` capability mask,
+  and `OpenedCamera::from_device` branches on `caps & CAP_* != 0`.
+  Changing any value silently breaks the dispatch logic for
+  already-compiled backend crates. Four tests pin: every constant
+  non-zero; every constant a single-bit mask (`count_ones() == 1`);
+  pairwise distinct; and the OR of all three fits in the low byte
+  (headroom for ~5 more capability bits before the macro logic
+  needs to widen to `u64`).
 * **Pin format-uniqueness and `negotiated_format()` round-trip in
   `tests/device_tests.rs`.** Two new device tests cover gaps in the
   existing TODO Backlog:
