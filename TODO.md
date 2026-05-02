@@ -46,11 +46,9 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Perf follow-ups (correctness already fine)
 
-- [ ] V4L event-driven hotplug via `inotify` on `/dev/video*`. Current
-  impl polls `v4l::context::enum_devices()` every 500ms. Same
-  perf-only trade-off the MSMF impl used to have before #173.
 - [ ] AVFoundation event-driven hotplug via `IOKit` matching
-  notifications. Current impl is 500ms polling.
+  notifications. Current impl is 500ms polling. (Deferred to a
+  different host with macOS access.)
 
 ### Backlog
 
@@ -93,6 +91,11 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **Event-driven V4L hotplug** (`perf/v4l-inotify-hotplug`) —
+  `inotify(7)` watch on `/dev/` for `IN_CREATE`/`IN_DELETE` replaces
+  the 500ms polling loop. Same shape as MSMF #173: worker thread,
+  `poll(2)` with 1s timeout for shutdown responsiveness, re-`query()`
+  + diff on each kernel notification. Zero steady-state wake-ups.
 - **`v4l-loopback` CI fix** (#185) — four compounding bugs silently
   broke the job since the #183 era (job-level `failure` masked by
   run-level `continue-on-error: true`): wrong modules package

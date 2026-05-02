@@ -1,15 +1,25 @@
 //! Backend-level hotplug for the `Video4Linux` backend.
 //!
-//! Implements [`HotplugSource`] by **polling** `query()` on a dedicated
-//! thread every [`POLL_INTERVAL`] and diffing successive snapshots on
-//! the v4l node index.
+//! Event-driven implementation backed by Linux's `inotify(7)` watching
+//! `/dev/` for `IN_CREATE` / `IN_DELETE` on `video*` nodes. A dedicated
+//! worker thread blocks in `poll(2)` on the inotify fd with a short
+//! timeout (for shutdown responsiveness), then on each batch of events
+//! re-`query()`s and diffs against a cached snapshot to emit
+//! `HotplugEvent::Connected` / `Disconnected`.
 //!
-//! Polling parallels the `MediaFoundation` implementation in
-//! `nokhwa-bindings-windows-msmf::hotplug`: `inotify` on `/dev/` would
-//! be event-driven but requires a non-trivial read loop + shutdown
-//! plumbing, and hotplug latency budgets are seconds, not milliseconds.
-//! The poll loop is ten lines of logic and never misses an event
-//! because `query()` reads the *current* device set.
+//! Why event-driven over polling: zero wake-ups in the steady state,
+//! immediate notification instead of up-to-500ms latency. Mirrors the
+//! MSMF backend's `RegisterDeviceNotificationW` design (#173) — the
+//! polling version this replaces was the last remaining 2×/sec wake-up
+//! source on the Linux side.
+//!
+//! `inotify` semantics: we get a kernel notification the instant the
+//! device node appears in `/dev/`. The v4l driver creates the node
+//! late in `usb_register` so by the time we re-`query()` the device is
+//! enumerable. On removal the node disappears before the kernel tears
+//! down the underlying USB device, so `query()` may briefly still see
+//! the device on the first tick — the diff loop handles that
+//! self-correctingly on the next event.
 
 #[cfg(target_os = "linux")]
 mod real {
@@ -21,6 +31,7 @@ mod real {
     };
     use std::{
         collections::BTreeMap,
+        os::fd::{AsRawFd, FromRawFd, OwnedFd},
         sync::{
             atomic::{AtomicBool, Ordering},
             mpsc::{self, Receiver, Sender},
@@ -30,17 +41,24 @@ mod real {
         time::Duration,
     };
 
-    /// How often the polling thread re-enumerates `Video4Linux`
-    /// devices. 500ms matches the MSMF backend and is a compromise
-    /// between "noticeable latency" and "burn CPU churning through
-    /// `/dev/video*`". Tune here if users report perceivable lag on
-    /// hot-unplug.
-    const POLL_INTERVAL: Duration = Duration::from_millis(500);
+    /// `poll(2)` timeout. Worker wakes this often to check the shutdown
+    /// flag — drop latency is bounded above by this. Short enough to
+    /// feel snappy, long enough that an idle thread is genuinely idle
+    /// (one syscall/sec instead of the old 2×/sec re-enumeration).
+    const POLL_TIMEOUT_MS: i32 = 1_000;
+
+    /// Buffer size for `read(2)` from the inotify fd. One
+    /// `inotify_event` is `sizeof(inotify_event) + NAME_MAX + 1`
+    /// worst-case = 16 + 256 = 272 bytes. 4 KiB comfortably batches
+    /// many events without truncation (kernel returns whole events or
+    /// `EINVAL`).
+    const READ_BUF_BYTES: usize = 4096;
 
     /// Backend-level hotplug source for `Video4Linux`. Cheap to
-    /// construct — the polling thread is only spawned when
-    /// [`take_hotplug_events`](HotplugSource::take_hotplug_events) is
-    /// called, and is joined when the returned poller is dropped.
+    /// construct — the worker thread + inotify fd are only created
+    /// when [`take_hotplug_events`](HotplugSource::take_hotplug_events)
+    /// is called, and are torn down when the returned poller is
+    /// dropped.
     #[derive(Default)]
     pub struct V4LHotplugContext {
         taken: bool,
@@ -65,9 +83,10 @@ mod real {
         }
     }
 
-    /// Concrete [`HotplugEventPoll`]. Owns a background thread running
-    /// the poll loop + an mpsc channel + an [`AtomicBool`] shutdown
-    /// flag. Dropping the poll flips the flag and joins the thread.
+    /// Concrete [`HotplugEventPoll`]. Owns the worker thread + an mpsc
+    /// channel + an [`AtomicBool`] shutdown flag. Dropping flips the
+    /// flag; the worker notices on its next `poll(2)` timeout and
+    /// exits, at which point we join it.
     struct V4LHotplugPoll {
         rx: Receiver<HotplugEvent>,
         stop: Arc<AtomicBool>,
@@ -81,7 +100,7 @@ mod real {
             let stop_thread = Arc::clone(&stop);
             let join = thread::Builder::new()
                 .name("nokhwa-v4l-hotplug".to_string())
-                .spawn(move || poll_loop(&tx, &stop_thread))
+                .spawn(move || worker_loop(&tx, &stop_thread))
                 .map_err(|e| NokhwaError::general(format!("spawn hotplug thread: {e}")))?;
             Ok(Self {
                 rx,
@@ -104,59 +123,215 @@ mod real {
         fn drop(&mut self) {
             self.stop.store(true, Ordering::Release);
             if let Some(h) = self.join.take() {
-                // The background thread sleeps up to POLL_INTERVAL
-                // between checks, so the join tops out at that.
+                // Worker blocks in poll() up to POLL_TIMEOUT_MS, so
+                // join latency is bounded by that.
                 let _ = h.join();
             }
         }
     }
 
-    /// Build an initial device snapshot, then enter the diff loop. The
-    /// seed snapshot is silent — consumers see *changes*, not the
-    /// population of the device registry at subscription time (that is
-    /// what `query()` is for).
-    fn poll_loop(tx: &Sender<HotplugEvent>, stop: &Arc<AtomicBool>) {
-        let mut previous = snapshot();
-        while !stop.load(Ordering::Acquire) {
-            thread::sleep(POLL_INTERVAL);
+    /// Worker thread: open the inotify fd, watch `/dev/`, then loop
+    /// on `poll(2)` and translate inotify events into hotplug events.
+    /// The first thing we do on a relevant event is re-`query()` and
+    /// diff — inotify tells us *something* changed; `query()` tells
+    /// us *what is currently visible*.
+    fn worker_loop(tx: &Sender<HotplugEvent>, stop: &Arc<AtomicBool>) {
+        let fd = match init_inotify() {
+            Ok(fd) => fd,
+            Err(e) => {
+                eprintln!("nokhwa v4l hotplug: inotify init failed: {e}");
+                return;
+            }
+        };
+
+        // Seed the cache. Consumers see hotplug deltas, not the
+        // initial population (they call `query()` directly to learn
+        // what's already plugged in).
+        let mut previous: BTreeMap<String, CameraInfo> = snapshot();
+
+        let raw_fd = fd.as_raw_fd();
+        loop {
             if stop.load(Ordering::Acquire) {
                 break;
             }
-            let current = snapshot();
-
-            // Emit arrivals before removals so a rapid re-plug can be
-            // observed as Disconnected → Connected on the consumer
-            // side even if both changes land in one poll window.
-            for (key, info) in &current {
-                if !previous.contains_key(key)
-                    && tx.send(HotplugEvent::Connected(info.clone())).is_err()
-                {
-                    return; // consumer dropped the poller
+            match poll_inotify(raw_fd, POLL_TIMEOUT_MS) {
+                PollOutcome::Ready => {
+                    if !drain_inotify(raw_fd) {
+                        // Read failed — bail rather than spin.
+                        break;
+                    }
+                    if !reconcile_and_emit(tx, &mut previous) {
+                        // Channel closed (consumer dropped poller).
+                        break;
+                    }
+                }
+                PollOutcome::Timeout => {
+                    // Loop back, check stop flag.
+                }
+                PollOutcome::Error => {
+                    // poll() error other than EINTR — give up
+                    // rather than tight-loop on a permanent fault.
+                    break;
                 }
             }
-            for (key, info) in &previous {
-                if !current.contains_key(key)
-                    && tx.send(HotplugEvent::Disconnected(info.clone())).is_err()
-                {
-                    return;
-                }
-            }
-            previous = current;
         }
+        // fd dropped here, closes via OwnedFd.
+        drop(fd);
+    }
+
+    /// Open an inotify instance and add a watch on `/dev/` for
+    /// `IN_CREATE | IN_DELETE`. We don't filter by name in the kernel
+    /// — `/dev/` doesn't churn enough for the userspace filter cost
+    /// to matter, and we'd have to handle moves anyway.
+    fn init_inotify() -> Result<OwnedFd, String> {
+        // SAFETY: inotify_init1 returns a new fd or -1 on error. We
+        // wrap into OwnedFd so it's closed on drop. IN_NONBLOCK so
+        // read() returns EAGAIN instead of blocking — we use poll()
+        // for blocking with timeout. IN_CLOEXEC so the fd doesn't
+        // leak across exec.
+        let fd = unsafe { libc::inotify_init1(libc::IN_NONBLOCK | libc::IN_CLOEXEC) };
+        if fd < 0 {
+            return Err(format!(
+                "inotify_init1: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        // SAFETY: fd is a freshly-returned valid fd; ownership transfers
+        // to OwnedFd which closes it on drop.
+        let owned = unsafe { OwnedFd::from_raw_fd(fd) };
+
+        let path = std::ffi::CString::new("/dev").map_err(|e| e.to_string())?;
+        // SAFETY: owned.as_raw_fd() is valid for the duration of this
+        // call; path is a valid CString. Returns watch descriptor or
+        // -1 on error. We don't keep the wd because we never call
+        // inotify_rm_watch — the watch is implicitly removed when the
+        // inotify fd closes.
+        let wd = unsafe {
+            libc::inotify_add_watch(
+                owned.as_raw_fd(),
+                path.as_ptr(),
+                libc::IN_CREATE | libc::IN_DELETE,
+            )
+        };
+        if wd < 0 {
+            return Err(format!(
+                "inotify_add_watch /dev: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        Ok(owned)
+    }
+
+    enum PollOutcome {
+        Ready,
+        Timeout,
+        Error,
+    }
+
+    /// Block in `poll(2)` waiting for the inotify fd to be readable,
+    /// up to `timeout_ms`. Treats `EINTR` as a timeout (the worker
+    /// loop will check the stop flag and re-arm).
+    fn poll_inotify(fd: i32, timeout_ms: i32) -> PollOutcome {
+        let mut pfd = libc::pollfd {
+            fd,
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        // SAFETY: pfd is a valid pointer to a single pollfd; nfds=1
+        // matches. Returns >0 on event, 0 on timeout, -1 on error.
+        let rv = unsafe { libc::poll(&raw mut pfd, 1, timeout_ms) };
+        match rv.cmp(&0) {
+            std::cmp::Ordering::Greater => PollOutcome::Ready,
+            std::cmp::Ordering::Equal => PollOutcome::Timeout,
+            std::cmp::Ordering::Less => {
+                let err = std::io::Error::last_os_error();
+                if err.raw_os_error() == Some(libc::EINTR) {
+                    PollOutcome::Timeout
+                } else {
+                    PollOutcome::Error
+                }
+            }
+        }
+    }
+
+    /// Drain pending inotify events. We don't actually parse the
+    /// events for filename — any `/dev/` churn triggers a full
+    /// re-`query()`, which is the source of truth. Returns false if
+    /// the read failed in a way that means the fd is unusable.
+    fn drain_inotify(fd: i32) -> bool {
+        let mut buf = [0u8; READ_BUF_BYTES];
+        loop {
+            // SAFETY: buf is a valid mutable buffer of len READ_BUF_BYTES
+            // and fd is a valid inotify fd. read() returns bytes read
+            // or -1 on error.
+            let n = unsafe { libc::read(fd, buf.as_mut_ptr().cast(), buf.len()) };
+            if n > 0 {
+                // Could parse events here, but we re-query
+                // unconditionally so it's wasted work.
+                continue;
+            }
+            if n == 0 {
+                // EOF on inotify fd shouldn't happen, but treat as
+                // unusable.
+                return false;
+            }
+            // n < 0
+            let err = std::io::Error::last_os_error();
+            match err.raw_os_error() {
+                // On Linux, EAGAIN == EWOULDBLOCK; both mean "no
+                // more events ready, come back when poll() fires
+                // again." EINTR is a benign signal interruption —
+                // fall through to the next loop iteration.
+                Some(libc::EAGAIN) => return true,
+                Some(libc::EINTR) => {}
+                _ => return false,
+            }
+        }
+    }
+
+    /// Re-snapshot + diff against the cached one. Emits `Connected`
+    /// for newcomers and `Disconnected` for removals, then swaps the
+    /// cache. Returns false if the channel is closed (consumer
+    /// dropped the poller) so the worker can exit early.
+    ///
+    /// Emit arrivals before removals so a rapid re-plug can be
+    /// observed as `Disconnected` → `Connected` on the consumer side
+    /// even if both changes land in one inotify wake.
+    fn reconcile_and_emit(
+        tx: &Sender<HotplugEvent>,
+        previous: &mut BTreeMap<String, CameraInfo>,
+    ) -> bool {
+        let current = snapshot();
+        for (key, info) in &current {
+            if !previous.contains_key(key)
+                && tx.send(HotplugEvent::Connected(info.clone())).is_err()
+            {
+                return false;
+            }
+        }
+        for (key, info) in previous.iter() {
+            if !current.contains_key(key)
+                && tx.send(HotplugEvent::Disconnected(info.clone())).is_err()
+            {
+                return false;
+            }
+        }
+        *previous = current;
+        true
     }
 
     /// One `Video4Linux` enumeration pass, indexed by
     /// [`CameraIndex::to_string`]. The v4l node index is the stable
     /// identifier surfaced by `enum_devices` and maps 1:1 to
-    /// `/dev/videoN`. Re-plugging a device can reuse the same index —
-    /// consumers will then see `Disconnected(N)` followed by
-    /// `Connected(N)` which is the right semantic.
+    /// `/dev/videoN`. Re-plugging a device can reuse the same index
+    /// — consumers will then see `Disconnected(N)` followed by
+    /// `Connected(N)`, which is the right semantic.
     ///
     /// Errors from `query()` are swallowed — a transient enumeration
     /// failure should not tear down the hotplug thread. An empty
-    /// snapshot will look like "every device disappeared"; next tick
-    /// we will re-emit them as `Connected`. That is noisy but not
-    /// incorrect.
+    /// snapshot will look like "every device disappeared"; the next
+    /// inotify wake we will re-emit them as `Connected`. Noisy but
+    /// not incorrect.
     fn snapshot() -> BTreeMap<String, CameraInfo> {
         match query() {
             Ok(list) => list

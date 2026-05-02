@@ -54,6 +54,39 @@ fn msmf_hotplug_take_and_steady_state() {
     drop(poll);
 }
 
+/// V4L hotplug plumbing: same shape as the MSMF test. Exercises the
+/// `take_hotplug_events()` contract, the steady-state silence
+/// guarantee on an inotify-driven worker (no spurious wakeups
+/// translating into events), and clean Drop-time join. The
+/// v4l-loopback CI job auto-validates the actual `Connected` /
+/// `Disconnected` emission via `modprobe -r/+r v4l2loopback`.
+#[cfg(all(feature = "input-v4l", target_os = "linux"))]
+#[test]
+fn v4l_hotplug_take_and_steady_state() {
+    use nokhwa::backends::hotplug::V4LHotplugContext;
+    use nokhwa_core::traits::HotplugSource;
+    use std::time::Duration;
+
+    let mut ctx = V4LHotplugContext::new();
+    let mut poll = ctx
+        .take_hotplug_events()
+        .expect("first take_hotplug_events must succeed");
+
+    assert!(
+        ctx.take_hotplug_events().is_err(),
+        "second take_hotplug_events must error per the trait contract"
+    );
+
+    // Three poll windows (~1.5s) with no plug/unplug → no events.
+    let evt = poll.next_timeout(Duration::from_millis(1500));
+    assert!(
+        evt.is_none(),
+        "expected no hotplug event on steady state, got {evt:?}"
+    );
+
+    drop(poll);
+}
+
 #[test]
 fn query_reports_at_least_one_device() {
     let devices = query(native_backend()).expect("query() returned an error");
