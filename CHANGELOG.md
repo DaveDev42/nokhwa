@@ -119,6 +119,13 @@
   `Float(INFINITY)` through. Mirrors the explicit NaN / infinity
   coverage already on `verify_setter_rgb` and
   `verify_setter_point_rejects_nan`.
+* **`Resolution::Ord` equal-width fall-through.** The pre-existing
+  `resolution_ordering` test only exercised the strict-width-less-than
+  path. Added `resolution_ordering_equal_width_falls_through_to_height`
+  to pin the tie-break behaviour (equal widths → height comparison;
+  equal both axes → `Ordering::Equal`). Guards against a silent
+  reorder of the derived `Ord` arms breaking callers that sort by
+  `Resolution` (e.g. `compatible_formats()` consumers).
 
 ### Documentation
 
