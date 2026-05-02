@@ -117,6 +117,52 @@ fn camera_format_display() {
     assert!(!display.is_empty());
 }
 
+/// Pin the exact `CameraFormat::Display` rendering. The format string
+/// `"{resolution}@{fps}FPS, {format} Format"` is used by
+/// `RequestedFormat::Display` (which embeds it via `{self:?}` →
+/// `Debug`, but the rendered request lands in user-visible error
+/// messages like `"Cannot fulfill request: …"`) and is also a
+/// natural log-line shape. A regression that flips the order or
+/// drops the `FPS`/`Format` literals would silently break dashboards
+/// that grep for these tokens.
+#[test]
+fn camera_format_display_renders_resolution_at_fps_then_format() {
+    let fmt = CameraFormat::new_from(1920, 1080, FrameFormat::MJPEG, 30);
+    assert_eq!(format!("{fmt}"), "1920x1080@30FPS, MJPEG Format");
+    let yuyv = CameraFormat::new_from(640, 480, FrameFormat::YUYV, 60);
+    assert_eq!(format!("{yuyv}"), "640x480@60FPS, YUYV Format");
+}
+
+/// Pin the exact `CameraInfo::Display` rendering. The format string
+/// `"Name: {n}, Description: {d}, Extra: {m}, Index: {i}"` is the
+/// canonical shape backends use when logging device discovery, and
+/// user code may parse it (e.g. a CLI that lists cameras with
+/// `format!("{info}")`). A regression that re-orders the fields or
+/// renames the labels would break downstream parsers.
+#[test]
+fn camera_info_display_renders_name_description_extra_index() {
+    let info = CameraInfo::new(
+        "Logitech BRIO",
+        "USB Video Class Device",
+        "/dev/video0",
+        CameraIndex::Index(2),
+    );
+    assert_eq!(
+        format!("{info}"),
+        "Name: Logitech BRIO, Description: USB Video Class Device, Extra: /dev/video0, Index: 2"
+    );
+    let url_info = CameraInfo::new(
+        "RTSP Stream",
+        "GStreamer URL Source",
+        "",
+        CameraIndex::String("rtsp://example.com/cam".to_string()),
+    );
+    assert_eq!(
+        format!("{url_info}"),
+        "Name: RTSP Stream, Description: GStreamer URL Source, Extra: , Index: rtsp://example.com/cam"
+    );
+}
+
 #[test]
 fn camera_format_ordering_is_lexicographic_resolution_format_framerate() {
     let small_low_fps = CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30);
