@@ -2,8 +2,15 @@
 
 0.13.0 is a structural refactor release. The single `CaptureBackendTrait`
 has been split into capability-based traits, and the user-facing `Camera`
-and `CallbackCamera` types have been replaced by `CameraSession` (with an
-`OpenedCamera` enum) and `CameraRunner`.
+and `CallbackCamera` types have been replaced by the top-level `open()`
+function (with an `OpenedCamera` enum) and `CameraRunner`.
+
+> **Note** the original 0.13.0 release exposed this entrypoint as a
+> `CameraSession::open(…)` associated function. Subsequent 0.13.x and
+> 0.14.x releases dropped the `CameraSession` unit struct in favour of
+> a top-level `nokhwa::open(…)` free function. This document describes
+> the current, shipped surface; if you are reading the rendered
+> 0.13.0-tag version of this file you may see `CameraSession` instead.
 
 ## Why
 
@@ -22,9 +29,9 @@ custom backends with a shutter-capture model.
 use nokhwa::Camera;
 let mut cam = Camera::new(index, requested_format)?;
 
-// 0.13
-use nokhwa::{CameraSession, OpenedCamera, OpenRequest};
-let opened = CameraSession::open(index, OpenRequest::any())?;
+// 0.13+
+use nokhwa::{open, OpenedCamera, OpenRequest};
+let opened = open(index, OpenRequest::any())?;
 let mut cam = match opened {
     OpenedCamera::Stream(c) => c,
     _ => panic!("expected stream camera"),
@@ -60,9 +67,9 @@ Use `controls()` for the full control list.
 use nokhwa::CallbackCamera;
 let cam = CallbackCamera::new(idx, fmt, |buf| { /* ... */ })?;
 
-// 0.13
-use nokhwa::{CameraRunner, CameraSession, OpenRequest, RunnerConfig};
-let opened = CameraSession::open(idx, OpenRequest::any())?;
+// 0.13+
+use nokhwa::{open, CameraRunner, OpenRequest, RunnerConfig};
+let opened = open(idx, OpenRequest::any())?;
 let runner = CameraRunner::spawn(opened, RunnerConfig::default())?;
 for buf in runner.frames().unwrap().iter() { /* ... */ }
 ```
@@ -121,11 +128,17 @@ overflow policy are planned for 0.14. If you were constructing a
 `RunnerConfig` manually, use the `Default` impl or the three remaining
 fields.
 
-## `CameraSession`
+## Opening a camera (post-0.13.0 cleanup)
 
-`CameraSession` is now a unit struct; the no-op `CameraSession::new(req)`
-constructor was removed. Open a camera directly via
-`CameraSession::open(index, req)`.
+The 0.13.0 release shipped a `CameraSession` unit struct whose only
+useful method was `CameraSession::open(index, req)`. Subsequent 0.13.x
+and 0.14.x releases dropped the unit struct in favour of a top-level
+free function. Use `nokhwa::open(index, req)` directly:
+
+```rust
+use nokhwa::{open, OpenRequest};
+let opened = open(index, OpenRequest::any())?;
+```
 
 ## Windows / MSMF COM apartment change
 
