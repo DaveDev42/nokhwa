@@ -116,6 +116,21 @@
 
 ### Testing
 
+* **Pin `nokhwa-tokio` forwarder behaviour with 3 unit tests in
+  `nokhwa-tokio/src/lib.rs::tests`.** The `nokhwa-tokio` crate had
+  zero unit tests despite owning the sync→async bridge that every
+  async consumer depends on. New tests pin: (1)
+  `FORWARDER_CAPACITY = 32` (the documented buffer size for the
+  tokio-side mpsc channel — a regression to a smaller number would
+  silently change the memory-vs-throughput trade-off);
+  (2) `spawn_forwarder` preserves item order across the
+  sync→async bridge (catches a regression where the forwarder
+  accidentally batches or reorders items); and (3) when the sync
+  producer disconnects, the async receiver observes `None` and the
+  forwarder task exits cleanly (catches a regression where the
+  forwarder swallows the `Err` branch from `sync_rx.recv()` and
+  stays alive holding the tokio sender, which would prevent the
+  async side from observing closure).
 * **Pin exact `RunnerConfig::default()` values and `Overflow::default()`
   in `src/runner.rs::tests`.** The pre-existing
   `default_runnerconfig_is_bounded` test only checks that channel
