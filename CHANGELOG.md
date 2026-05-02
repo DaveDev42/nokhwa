@@ -129,6 +129,19 @@
 
 ### Testing
 
+* **Pin runner `Overflow::Block` channel arm with 3 unit tests in
+  `src/runner.rs`.** `make_channel`'s `Block` policy had zero
+  coverage even though it sits in the same `Tx::send` arm as
+  `BoundedDropOldest` (`tx.send` blocking semantics) and shares
+  no relay-thread machinery with `DropOldest`. A regression that
+  mis-routes `Block` into the `DropNewest` arm (silently
+  discarding overflow) or the `DropOldest` arm (leaking a relay
+  thread) would slip through every existing runner test. New
+  tests pin: (1) `relay` is `None` so no extra thread leaks; (2)
+  within capacity, sends preserve FIFO order and consumers
+  observe every item; (3) producer `send` returns `Err` after
+  the consumer is dropped so the worker treats it as a shutdown
+  signal instead of stalling indefinitely on a closed channel.
 * **Pin GRAY → RGB / RGBA expansion happy paths with 4 unit tests
   in `nokhwa-core/src/frame_tests.rs`.** `Frame<Gray>` does not
   implement `IntoRgb` / `IntoRgba` (gray is luma-only at the type

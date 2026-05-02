@@ -701,6 +701,65 @@ mod tests {
         assert!(tx.send(1).is_err());
     }
 
+    // `Overflow::Block` had zero coverage. The arm collapses the
+    // `BoundedDropOldest | BoundedBlock` into the same `tx.send`
+    // path in `Tx::send`, so a regression that mis-routes `Block`
+    // into the relay-thread branch (or strips the relay-handle
+    // contract that `Block` has none) would slip through every
+    // existing runner test. Pin the three observable contracts:
+    // (1) `relay` is `None`; (2) sends within capacity preserve
+    // FIFO order; (3) a send after the consumer is dropped
+    // returns `Err`.
+
+    #[test]
+    fn block_capacity_returns_no_relay_handle() {
+        // Unlike `DropOldest`, `Block` does not need a relay
+        // thread because `SyncSender::send` does the blocking
+        // for us. The contract is "no extra thread, no extra
+        // shutdown work" — pin it so a future refactor that
+        // adds a relay for symmetry doesn't silently leak a
+        // thread on every `CameraRunner` start.
+        let (_tx, _rx, relay) = make_channel::<u32>(2, Overflow::Block);
+        assert!(
+            relay.is_none(),
+            "Overflow::Block must not spawn a relay thread"
+        );
+    }
+
+    #[test]
+    fn block_bounded_preserves_fifo_within_capacity() {
+        // Within capacity, `Block` is just a `sync_channel`:
+        // sends succeed, receives observe items in producer
+        // order. Pin so a regression in the `Tx::send` arm
+        // (e.g. accidentally folding `Block` into `DropNewest`
+        // which silently discards on full) shows up as out-of-
+        // order or missing items.
+        let (tx, rx, _) = make_channel::<u32>(4, Overflow::Block);
+        for i in 0..4u32 {
+            tx.send(i).unwrap();
+        }
+        for i in 0..4u32 {
+            assert_eq!(rx.recv().unwrap(), i);
+        }
+        // No more items pending.
+        assert!(rx.recv_timeout(Duration::from_millis(50)).is_err());
+    }
+
+    #[test]
+    fn tx_send_err_on_consumer_drop_bounded_block() {
+        // `Tx::send` for `BoundedBlock` calls `SyncSender::send`
+        // which returns `Err(SendError)` once the receiver is
+        // dropped. Pin so the conversion (`map_err(|_| ())`) is
+        // not lost in a refactor — without it, the worker
+        // thread would stall indefinitely on a closed channel.
+        let (tx, rx, _) = make_channel::<u32>(2, Overflow::Block);
+        drop(rx);
+        assert!(
+            tx.send(1).is_err(),
+            "Block producer send must surface Err after consumer drop"
+        );
+    }
+
     #[test]
     fn default_runnerconfig_is_bounded() {
         let cfg = super::RunnerConfig::default();
