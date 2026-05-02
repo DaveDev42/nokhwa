@@ -129,6 +129,24 @@
 
 ### Testing
 
+* **Pin `Frame<F>` accessors and format-mismatch panic guard with
+  4 unit tests in `nokhwa-core/src/frame_tests.rs`.** The infallible
+  `Frame::new` constructor relies on a runtime `assert_eq!` to
+  enforce the `Buffer::source_frame_format() == F::FRAME_FORMAT`
+  invariant, but the assert was never exercised — a refactor that
+  silently weakened it to `debug_assert!` would let release builds
+  produce a `Frame` with type-tag/data disagreement and decode to
+  garbage. Accessor delegation (`resolution`, `buffer`, `as_buffer`,
+  `capture_timestamp`, `capture_timestamp_with_kind`) was also
+  uncovered at the `Frame` layer (only the underlying `Buffer`
+  was tested), so a refactor that forgot to forward, or one that
+  synthesised a fake "now" timestamp when the backend didn't
+  provide one, would silently desync the typed handle from its
+  payload. New tests pin: (1) `Frame::new` panics on format
+  mismatch (`#[should_panic]`); (2) `resolution`/`buffer`/
+  `as_buffer` all delegate to the underlying `Buffer`; (3) timestamp
+  passthrough preserves the `(Duration, TimestampKind)` pair when
+  present; (4) `None` timestamp is forwarded as-is.
 * **Pin extraction / channel-swap pixel-correctness with 3 unit
   tests in `nokhwa-core/src/types_tests.rs`.** The existing tests
   for `buf_yuyv_extract_luma`, `buf_nv12_extract_luma`, and
