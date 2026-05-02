@@ -69,3 +69,51 @@ pub fn nokhwa_initialize(on_complete: impl Fn(bool) + Send + Sync + 'static) {
 pub fn nokhwa_check() -> bool {
     status_avfoundation()
 }
+
+#[cfg(test)]
+#[cfg(not(all(
+    feature = "input-avfoundation",
+    any(target_os = "macos", target_os = "ios")
+)))]
+mod tests {
+    //! On platforms / feature combos where `AVFoundation` is *not* available
+    //! the init module degrades to no-op stubs. These tests pin that
+    //! degradation so a refactor can't accidentally turn the stubs into
+    //! "not-yet-supported" errors or deferred work — non-`AVFoundation`
+    //! callers must observe synchronous, success-immediate behaviour.
+
+    use super::{nokhwa_check, nokhwa_initialize};
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
+
+    #[test]
+    fn nokhwa_check_returns_true_without_avfoundation() {
+        assert!(nokhwa_check());
+    }
+
+    #[test]
+    fn nokhwa_initialize_invokes_callback_synchronously_with_true() {
+        let fired = Arc::new(AtomicBool::new(false));
+        let result = Arc::new(AtomicBool::new(false));
+        {
+            let fired = Arc::clone(&fired);
+            let result = Arc::clone(&result);
+            nokhwa_initialize(move |ok| {
+                result.store(ok, Ordering::SeqCst);
+                fired.store(true, Ordering::SeqCst);
+            });
+        }
+        // Stub is synchronous: the callback must have already fired
+        // by the time `nokhwa_initialize` returned.
+        assert!(
+            fired.load(Ordering::SeqCst),
+            "non-AVFoundation init stub must call its callback synchronously"
+        );
+        assert!(
+            result.load(Ordering::SeqCst),
+            "non-AVFoundation init stub must report success"
+        );
+    }
+}
