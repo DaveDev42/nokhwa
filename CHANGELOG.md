@@ -107,6 +107,18 @@
   parity to all three native backends. Runs on the self-hosted
   `macos-camera` runner only; gated `#[cfg(all(feature =
   "input-avfoundation", target_os = "macos"))]`.
+* **`ControlValueDescription` float edge cases.** Adds
+  `verify_setter_float_range_out_of_bounds_and_non_finite` (covers
+  below-min rejection plus NaN / ±infinity rejection on the bounded
+  variant) and `verify_setter_float_non_finite_rejected` (same
+  NaN / infinity rejection on the unbounded `Float` variant). The
+  existing rejection happens implicitly through the step-alignment
+  math (`NaN % step == NaN != 0_f64`), but the previous tests didn't
+  cover it — these new tests pin the behaviour so a future cleanup
+  of the alignment math doesn't accidentally let `Float(NaN)` or
+  `Float(INFINITY)` through. Mirrors the explicit NaN / infinity
+  coverage already on `verify_setter_rgb` and
+  `verify_setter_point_rejects_nan`.
 
 ### Documentation
 
