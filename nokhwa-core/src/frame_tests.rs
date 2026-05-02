@@ -1,8 +1,11 @@
 use crate::buffer::Buffer;
+use crate::error::NokhwaError;
 #[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
 use crate::format_types::Mjpeg;
 use crate::format_types::{Gray, Nv12, RawBgr, RawRgb, Yuyv};
-use crate::frame::{Frame, IntoLuma, IntoRgb, IntoRgba};
+use crate::frame::{
+    convert_to_rgb_buffer, convert_to_rgba_buffer, Frame, IntoLuma, IntoRgb, IntoRgba,
+};
 use crate::types::{FrameFormat, Resolution};
 
 // ---------------------------------------------------------------------------
@@ -344,4 +347,154 @@ fn mjpeg_empty_returns_error() {
     let buf = Buffer::new(Resolution::new(2, 2), &[], FrameFormat::MJPEG);
     let frame: Frame<Mjpeg> = Frame::new(buf);
     assert!(frame.into_rgb().materialize().is_err());
+}
+
+// ---------------------------------------------------------------------------
+// `write_to` destination-buffer guards
+//
+// `convert_to_{rgb,rgba,luma}_buffer` reject mismatched destination buffer
+// sizes and non-multiple-of-3 RAWRGB/RAWBGR data. Previously every test
+// passed a correctly-sized destination, so those guards were uncovered —
+// a regression in the size-check arithmetic would not have failed CI.
+// ---------------------------------------------------------------------------
+
+fn assert_process_frame_err(
+    err: NokhwaError,
+    expected_src: FrameFormat,
+    expected_dst: &str,
+    needle: &str,
+) {
+    match err {
+        NokhwaError::ProcessFrameError {
+            src,
+            destination,
+            error,
+        } => {
+            assert_eq!(src, expected_src);
+            assert_eq!(destination, expected_dst);
+            assert!(
+                error.contains(needle),
+                "error message {error:?} did not contain {needle:?}"
+            );
+        }
+        other => panic!("expected ProcessFrameError, got {other:?}"),
+    }
+}
+
+#[test]
+fn rawrgb_into_rgb_write_to_rejects_mismatched_dest() {
+    let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::RAWRGB);
+    let frame: Frame<RawRgb> = Frame::new(buf);
+    let mut dest = vec![0u8; 11]; // off by one
+    let err = frame.into_rgb().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::RAWRGB, "RGB", "destination buffer size");
+}
+
+// `Frame<Gray>` does not implement `IntoRgb`/`IntoRgba` (gray is luma-only),
+// so the GRAY-branch guards in `convert_to_rgb_buffer` / `convert_to_rgba_buffer`
+// are reachable only through the crate-internal dispatcher.
+#[test]
+fn convert_to_rgb_buffer_gray_rejects_mismatched_dest() {
+    let data = vec![10u8, 20, 30, 40];
+    let mut dest = vec![0u8; 11]; // expected 4 * 3 = 12
+    let err = convert_to_rgb_buffer(FrameFormat::GRAY, Resolution::new(2, 2), &data, &mut dest)
+        .unwrap_err();
+    assert_process_frame_err(err, FrameFormat::GRAY, "RGB", "Bad buffer length");
+}
+
+#[test]
+fn rawrgb_into_rgba_rejects_non_multiple_of_3_data() {
+    let data = vec![1, 2, 3, 4]; // length 4, not a multiple of 3
+    let buf = Buffer::new(Resolution::new(1, 1), &data, FrameFormat::RAWRGB);
+    let frame: Frame<RawRgb> = Frame::new(buf);
+    let err = frame.into_rgba().materialize().unwrap_err();
+    assert_process_frame_err(err, FrameFormat::RAWRGB, "RGBA", "not a multiple of 3");
+}
+
+#[test]
+fn rawbgr_into_rgba_rejects_non_multiple_of_3_data() {
+    let data = vec![1, 2, 3, 4, 5];
+    let buf = Buffer::new(Resolution::new(1, 1), &data, FrameFormat::RAWBGR);
+    let frame: Frame<RawBgr> = Frame::new(buf);
+    let err = frame.into_rgba().materialize().unwrap_err();
+    assert_process_frame_err(err, FrameFormat::RAWBGR, "RGBA", "not a multiple of 3");
+}
+
+#[test]
+fn rawrgb_into_rgba_write_to_rejects_non_multiple_of_3_data() {
+    let data = vec![1, 2, 3, 4]; // length 4, not a multiple of 3
+    let buf = Buffer::new(Resolution::new(1, 1), &data, FrameFormat::RAWRGB);
+    let frame: Frame<RawRgb> = Frame::new(buf);
+    let mut dest = vec![0u8; 4];
+    let err = frame.into_rgba().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::RAWRGB, "RGBA", "not a multiple of 3");
+}
+
+#[test]
+fn rawrgb_into_rgba_write_to_rejects_mismatched_dest() {
+    let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]; // 12 bytes -> 16 RGBA
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::RAWRGB);
+    let frame: Frame<RawRgb> = Frame::new(buf);
+    let mut dest = vec![0u8; 15]; // expected 16
+    let err = frame.into_rgba().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::RAWRGB, "RGBA", "destination buffer size");
+}
+
+#[test]
+fn rawbgr_into_rgba_write_to_rejects_mismatched_dest() {
+    let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::RAWBGR);
+    let frame: Frame<RawBgr> = Frame::new(buf);
+    let mut dest = vec![0u8; 15];
+    let err = frame.into_rgba().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::RAWBGR, "RGBA", "destination buffer size");
+}
+
+#[test]
+fn convert_to_rgba_buffer_gray_rejects_mismatched_dest() {
+    let data = vec![10u8, 20, 30, 40];
+    let mut dest = vec![0u8; 15]; // expected 4 * 4 = 16
+    let err = convert_to_rgba_buffer(FrameFormat::GRAY, Resolution::new(2, 2), &data, &mut dest)
+        .unwrap_err();
+    assert_process_frame_err(err, FrameFormat::GRAY, "RGBA", "Bad buffer length");
+}
+
+#[test]
+fn rawrgb_into_luma_rejects_non_multiple_of_3_data() {
+    let data = vec![1, 2, 3, 4];
+    let buf = Buffer::new(Resolution::new(1, 1), &data, FrameFormat::RAWRGB);
+    let frame: Frame<RawRgb> = Frame::new(buf);
+    let err = frame.into_luma().materialize().unwrap_err();
+    assert_process_frame_err(err, FrameFormat::RAWRGB, "Luma", "not a multiple of 3");
+}
+
+#[test]
+fn rawrgb_into_luma_write_to_rejects_non_multiple_of_3_data() {
+    let data = vec![1, 2, 3, 4];
+    let buf = Buffer::new(Resolution::new(1, 1), &data, FrameFormat::RAWRGB);
+    let frame: Frame<RawRgb> = Frame::new(buf);
+    let mut dest = vec![0u8; 1];
+    let err = frame.into_luma().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::RAWRGB, "Luma", "not a multiple of 3");
+}
+
+#[test]
+fn rawrgb_into_luma_write_to_rejects_mismatched_dest() {
+    let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]; // 4 pixels -> 4 luma
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::RAWRGB);
+    let frame: Frame<RawRgb> = Frame::new(buf);
+    let mut dest = vec![0u8; 3]; // expected 4
+    let err = frame.into_luma().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::RAWRGB, "Luma", "destination buffer size");
+}
+
+#[test]
+fn gray_into_luma_write_to_rejects_mismatched_dest() {
+    let data = vec![10, 20, 30, 40];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::GRAY);
+    let frame: Frame<Gray> = Frame::new(buf);
+    let mut dest = vec![0u8; 3]; // expected 4
+    let err = frame.into_luma().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::GRAY, "Luma", "destination buffer size");
 }

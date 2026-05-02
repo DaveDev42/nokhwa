@@ -82,6 +82,18 @@
 
 ### Testing
 
+* **Cover `frame::convert_to_{rgb,rgba,luma}_buffer` size-mismatch
+  guards.** The four dispatchers behind `RgbConversion::write_to` /
+  `RgbaConversion::write_to` / `LumaConversion::write_to` reject
+  mismatched destination buffer sizes ("Bad buffer length",
+  "destination buffer size mismatch") and non-multiple-of-3
+  RAWRGB/RAWBGR data ("not a multiple of 3"), but every existing test
+  passed a correctly-sized destination so a regression in the
+  size-check arithmetic would not have failed CI. Added 13 new tests
+  in `frame_tests.rs` exercising each guard. The two GRAY branches of
+  `convert_to_rgb_buffer` / `convert_to_rgba_buffer` are unreachable
+  through the typed `Frame<Gray>` API (gray is luma-only), so those
+  two tests call the crate-internal dispatchers directly.
 * **`nokhwa-core::testing` mock helpers gain direct unit coverage.**
   `mock_frame`'s per-format byte-per-pixel table (3 for MJPEG / YUYV /
   RAWRGB / RAWBGR / NV12, 1 for GRAY) and `mock_info`'s
