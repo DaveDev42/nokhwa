@@ -1487,3 +1487,101 @@ fn yuyv444_to_rgba_matches_rgb_with_alpha_255() {
         assert_eq!(yuyv444_to_rgba(y, u, v), [r, g, b, 255]);
     }
 }
+
+// ===== ApiBackend Display + equality =====
+
+/// Each built-in `ApiBackend` variant must have a stable `Display`
+/// rendering matching its variant name. `NokhwaError` variants embed
+/// `ApiBackend` in `Display` output ("Could not initialize {backend}:
+/// …", "Error (backend {b}): …", etc.) and downstream consumers
+/// (logs, telemetry, error matchers) parse those strings — a rename
+/// would silently break log-based dashboards. This pins the rendering
+/// for every built-in variant + the `Custom` payload form.
+#[test]
+fn api_backend_display_renders_variant_name() {
+    assert_eq!(ApiBackend::Auto.to_string(), "Auto");
+    assert_eq!(ApiBackend::AVFoundation.to_string(), "AVFoundation");
+    assert_eq!(ApiBackend::Video4Linux.to_string(), "Video4Linux");
+    assert_eq!(ApiBackend::MediaFoundation.to_string(), "MediaFoundation");
+    assert_eq!(ApiBackend::GStreamer.to_string(), "GStreamer");
+    assert_eq!(ApiBackend::Browser.to_string(), "Browser");
+    assert_eq!(
+        ApiBackend::Custom("MyBackend".to_string()).to_string(),
+        "Custom(\"MyBackend\")"
+    );
+}
+
+/// `ApiBackend` is `Eq` / `Hash`, used as a key in CI workflow
+/// dispatch (e.g. `tests/device_tests.rs::native_backend()` matches
+/// against it). The seven built-in variants must all compare unequal
+/// to one another, and `Custom(s)` must compare equal only when the
+/// payload string matches. A regression that derived something other
+/// than structural equality (e.g. an old hand-rolled `PartialEq` that
+/// ignored `Custom`'s payload) would silently make every custom
+/// backend collide.
+#[test]
+fn api_backend_equality_is_structural_and_pairwise_distinct() {
+    let builtins = [
+        ApiBackend::Auto,
+        ApiBackend::AVFoundation,
+        ApiBackend::Video4Linux,
+        ApiBackend::MediaFoundation,
+        ApiBackend::GStreamer,
+        ApiBackend::Browser,
+    ];
+    for (i, a) in builtins.iter().enumerate() {
+        assert_eq!(a, a, "{a:?} is not equal to itself");
+        for (j, b) in builtins.iter().enumerate() {
+            if i != j {
+                assert_ne!(a, b, "{a:?} and {b:?} compare equal");
+            }
+        }
+    }
+    // Payload structure for Custom.
+    assert_eq!(
+        ApiBackend::Custom("a".to_string()),
+        ApiBackend::Custom("a".to_string())
+    );
+    assert_ne!(
+        ApiBackend::Custom("a".to_string()),
+        ApiBackend::Custom("b".to_string())
+    );
+    // Custom must not collide with a built-in even when the string matches.
+    assert_ne!(
+        ApiBackend::Custom("Auto".to_string()),
+        ApiBackend::Auto,
+        "Custom(\"Auto\") must not collide with the built-in Auto variant"
+    );
+}
+
+/// `ApiBackend` derives `Ord`. The derive places variants in
+/// declaration order: `Auto < AVFoundation < Video4Linux <
+/// MediaFoundation < GStreamer < Browser < Custom`. This test pins
+/// that ordering — a re-ordering of the enum (e.g. an alphabetised
+/// refactor) would silently break code that uses the type as a
+/// `BTreeMap<ApiBackend, _>` key with stable iteration order.
+#[test]
+fn api_backend_derived_ord_is_declaration_order() {
+    let mut variants = [
+        ApiBackend::Browser,
+        ApiBackend::AVFoundation,
+        ApiBackend::Custom("z".to_string()),
+        ApiBackend::Auto,
+        ApiBackend::MediaFoundation,
+        ApiBackend::Video4Linux,
+        ApiBackend::GStreamer,
+    ];
+    variants.sort();
+    assert_eq!(
+        variants,
+        [
+            ApiBackend::Auto,
+            ApiBackend::AVFoundation,
+            ApiBackend::Video4Linux,
+            ApiBackend::MediaFoundation,
+            ApiBackend::GStreamer,
+            ApiBackend::Browser,
+            ApiBackend::Custom("z".to_string()),
+        ]
+    );
+}
