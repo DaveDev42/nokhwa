@@ -82,6 +82,23 @@
 
 ### Testing
 
+* **Pin `CameraIndex` numeric-string ↔ index dual form +
+  `TryFrom<u32>` / `TryFrom<usize>` conversions.** `CameraIndex` is
+  the public input to `open()` — every backend path bottoms out in
+  `as_index()` / `as_string()` to resolve a device. Existing tests
+  covered the trivial `Index(_)` round-trip plus one `as_index()`
+  failure on a non-numeric `String`, but the dual-form contract (a
+  `String("3")` is also a valid index, by parsing) and the
+  `TryFrom<CameraIndex>` impls for `u32` and `usize` had no tests.
+  Added 7 tests covering: `String("3").as_index() == Ok(3)`,
+  `Index(_).as_string()` produces canonical decimal form,
+  `TryFrom<CameraIndex>` for both `u32` and `usize` over both
+  `Index` and numeric-`String` inputs, and the matching error paths
+  for non-numeric strings on both `TryFrom` impls. Catches a future
+  refactor that, say, narrows `as_index()` to only succeed on the
+  `Index(_)` variant — which would silently break GStreamer URL-mode
+  callers that hand a numeric string through and expect either form
+  to work.
 * **Pin V4L `monotonic_to_wallclock` zero-timestamp `None` early
   return.** `monotonic_to_wallclock` in
   `nokhwa-bindings-linux-v4l/src/lib.rs` converts a V4L2

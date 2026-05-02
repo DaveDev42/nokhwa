@@ -1175,6 +1175,65 @@ fn camera_index_display() {
     assert!(s.contains('5'));
 }
 
+#[test]
+fn camera_index_as_index_parses_numeric_string() {
+    // CameraIndex::String is the GStreamer URL escape hatch — but a
+    // String("3") still represents an index, and as_index() must parse
+    // it. This pins the dual-form contract: callers can store the
+    // index-form as either variant and still resolve a u32.
+    let idx = CameraIndex::String("3".to_string());
+    assert_eq!(idx.as_index().unwrap(), 3);
+}
+
+#[test]
+fn camera_index_as_string_stringifies_index() {
+    // The Display impl delegates to as_string, so this also pins
+    // the canonical decimal form (no leading zeros, no "0x" prefix)
+    // that callers like nokhwa-bindings-* depend on when round-tripping
+    // through device IDs.
+    assert_eq!(CameraIndex::Index(0).as_string(), "0");
+    assert_eq!(CameraIndex::Index(42).as_string(), "42");
+}
+
+#[test]
+fn camera_index_try_from_u32_index() {
+    let n: u32 = u32::try_from(CameraIndex::Index(7)).unwrap();
+    assert_eq!(n, 7);
+}
+
+#[test]
+fn camera_index_try_from_u32_numeric_string() {
+    // The TryFrom path collapses to as_index(), so a String("9")
+    // must convert successfully — the same contract callers rely on
+    // when fishing a u32 out of a CameraIndex of either variant.
+    let n: u32 = u32::try_from(CameraIndex::String("9".to_string())).unwrap();
+    assert_eq!(n, 9);
+}
+
+#[test]
+fn camera_index_try_from_u32_non_numeric_string_errs() {
+    let result: Result<u32, _> = u32::try_from(CameraIndex::String("/dev/video0".to_string()));
+    assert!(result.is_err());
+}
+
+#[test]
+fn camera_index_try_from_usize_index() {
+    let n: usize = usize::try_from(CameraIndex::Index(11)).unwrap();
+    assert_eq!(n, 11);
+}
+
+#[test]
+fn camera_index_try_from_usize_numeric_string() {
+    let n: usize = usize::try_from(CameraIndex::String("12".to_string())).unwrap();
+    assert_eq!(n, 12);
+}
+
+#[test]
+fn camera_index_try_from_usize_non_numeric_string_errs() {
+    let result: Result<usize, _> = usize::try_from(CameraIndex::String("abc".to_string()));
+    assert!(result.is_err());
+}
+
 // --- ControlValueSetter additional accessors ---
 
 #[test]
