@@ -82,6 +82,20 @@
 
 ### Testing
 
+* **Pin V4L `monotonic_to_wallclock` zero-timestamp `None` early
+  return.** `monotonic_to_wallclock` in
+  `nokhwa-bindings-linux-v4l/src/lib.rs` converts a V4L2
+  `CLOCK_MONOTONIC` buffer timestamp into a wallclock
+  `Duration since UNIX_EPOCH`. When a driver doesn't fill in the
+  monotonic timestamp (or the buffer hasn't been timestamped at all)
+  the `v4l::Timestamp` arrives as all-zero. Treating that as "0s
+  since boot" would yield a wallclock pinned to the kernel's boot
+  epoch — wildly wrong but plausible-looking. The function rejects
+  it up-front by returning `None`, leaving callers to omit the
+  timestamp instead of fabricating one. Added one test
+  (`monotonic_to_wallclock_zero_timestamp_returns_none`) pinning that
+  contract so a future "let's use `Default::default()` for missing
+  timestamps" refactor can't silently regress it.
 * **Pin MSMF `kcc_to_i32` mapping for every `KnownCameraControl`.**
   The Windows backend's `kcc_to_i32` returns a four-variant
   `MFControlId` (`ProcAmpRange` / `ProcAmpBoolean` / `CCRange` /

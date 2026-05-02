@@ -1062,7 +1062,7 @@ mod internal {
     mod tests {
         use super::{
             expand_stepwise_resolutions, id_to_known_camera_control, known_camera_control_to_id,
-            KnownCameraControl, Resolution, V4L2_CONTROL_IDS,
+            monotonic_to_wallclock, KnownCameraControl, Resolution, V4L2_CONTROL_IDS,
         };
         use v4l::v4l_sys::{
             V4L2_CID_BACKLIGHT_COMPENSATION, V4L2_CID_BRIGHTNESS, V4L2_CID_CONTRAST,
@@ -1071,6 +1071,7 @@ mod internal {
             V4L2_CID_SHARPNESS, V4L2_CID_TILT_RELATIVE, V4L2_CID_WHITE_BALANCE_TEMPERATURE,
             V4L2_CID_ZOOM_RELATIVE,
         };
+        use v4l::Timestamp;
 
         fn run(
             min_w: u32,
@@ -1220,6 +1221,17 @@ mod internal {
             // discriminant either side of the FFI boundary.
             let back = id_to_known_camera_control(id);
             assert_eq!(back, KnownCameraControl::Other(u128::from(id)));
+        }
+
+        #[test]
+        fn monotonic_to_wallclock_zero_timestamp_returns_none() {
+            // Drivers that don't fill in V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC
+            // (or buffers that haven't been timestamped at all) leave the
+            // timestamp at all-zero. The conversion must reject these
+            // up-front rather than treating "0s since boot" as a valid
+            // capture moment — an honest "we don't know" beats a wallclock
+            // pinned to the kernel's boot epoch.
+            assert_eq!(monotonic_to_wallclock(Timestamp::new(0, 0)), None);
         }
     }
 }
