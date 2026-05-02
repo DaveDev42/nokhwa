@@ -116,6 +116,26 @@
 
 ### Testing
 
+* **Pin `ApiBackend` `Display` / `Eq` / `Ord` contracts with 3 unit
+  tests in `nokhwa-core/src/types_tests.rs`.** `ApiBackend` is the
+  cross-backend dispatch token used by every error variant
+  (`InitializeError`, `OpenStreamError`, `StreamShutdownError`,
+  `UnsupportedOperationError`, `GeneralError`, `ReadFrameError`),
+  by `tests/device_tests.rs::native_backend()`, and as a stable key
+  in CI workflow dispatch. Until now its `Display` rendering, the
+  pairwise inequality of the seven built-in variants, and the
+  declaration-order derived `Ord` were all untested. Three direct
+  tests pin: (1) every variant's `to_string()` matches its name,
+  including the `Custom("…")` payload form; (2) all seven built-in
+  variants compare unequal to one another, `Custom` is structural,
+  and `Custom("Auto")` does not collide with the built-in `Auto`;
+  (3) sorting a permuted set of variants produces the canonical
+  declaration order (`Auto < AVFoundation < Video4Linux <
+  MediaFoundation < GStreamer < Browser < Custom`). Catches a
+  variant rename (would break log-based dashboards parsing error
+  strings), a hand-rolled `PartialEq` that ignored the `Custom`
+  payload, or an alphabetised re-ordering of the enum (would break
+  any `BTreeMap<ApiBackend, _>` callers).
 * **Add `scheme_list_shape_is_stable` mirror test in
   `nokhwa::session::uri_scheme_tests`.** `looks_like_uri_scheme` in
   `src/session.rs` carries a doc note: "Kept in sync with the scheme
