@@ -42,6 +42,17 @@
   enumerated its `IMFAttributes` formats. No behaviour change beyond
   ordering and the (negligible) speed-up on the 4-element list MSMF
   emits today.
+* **GStreamer `compatible_fourcc` uses `sort() + dedup()`.** The
+  fourth and last backend still using the inline O(n²)
+  `!contains()` dedup pattern (`pipeline::compatible_fourcc`).
+  Swapped for the canonical `collect → sort → dedup` so all four
+  backends (V4L / AVFoundation / MSMF / GStreamer) now emit
+  `FrameFormat`-`Ord`-sorted, deduplicated lists. The previous
+  comment claimed "preserving enumeration order" was meaningful for
+  the `compatible_fourcc()` contract; it was not — the trait makes
+  no ordering guarantee, and inconsistency between backends was the
+  bug, not a feature. URL-mode (`compatible_fourcc_from_negotiated`)
+  is unchanged: single-element vec, no dedup needed.
 
 ### Cleanup
 
