@@ -129,6 +129,24 @@
 
 ### Testing
 
+* **Pin error-guard branches in `buf_yuyv422_to_rgb` /
+  `buf_nv12_to_rgb` / `buf_yuyv_extract_luma` /
+  `buf_nv12_extract_luma` / `buf_bgr_to_rgb` with 7 unit tests in
+  `nokhwa-core/src/types_tests.rs`.** All five `buf_*` conversion
+  functions sit directly in front of SIMD kernels that read/write
+  raw byte slices; the guards (multiple-of-4 input for YUYV, even
+  width/height for NV12 and BGR, exact-size input + output) are
+  the only thing standing between a malformed USB transfer and a
+  SIMD out-of-bounds write. Happy paths were exercised through
+  `frame.rs` integration tests, but the rejection branches had
+  zero coverage. New tests pin: (1) YUYV non-multiple-of-4 input
+  rejection; (2) YUYV RGB-vs-RGBA dest-size mismatch; (3) NV12
+  odd-resolution rejection (both axes); (4) NV12 input-size and
+  rgba-flag-dependent output-size mismatches; (5) YUYV luma
+  extraction guards; (6) NV12 luma extraction guards; (7) BGR
+  odd-resolution + input/output size mismatches. Catches a future
+  "let's relax this assertion" tweak before it surfaces in a SIMD
+  UB report.
 * **Pin V4L `FourCC` ↔ `FrameFormat` shim with 3 unit tests in
   `nokhwa-bindings-linux-v4l/src/lib.rs`.** Every V4L2 ioctl boundary
   (set_format, format enumeration, frame metadata) flows through
