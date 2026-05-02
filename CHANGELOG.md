@@ -137,6 +137,19 @@
   equal both axes → `Ordering::Equal`). Guards against a silent
   reorder of the derived `Ord` arms breaking callers that sort by
   `Resolution` (e.g. `compatible_formats()` consumers).
+* **`NokhwaError::Display` formatting.** Four variants
+  (`GeneralError`, `OpenStreamError`, `ReadFrameError`,
+  `StreamShutdownError`) carry conditional format strings — the
+  optional `backend` / `format` field appears in parentheses iff
+  `Some`. Until now there were no tests covering the formatting at
+  all. Added `nokhwa-core/src/error_tests.rs` with 12 tests: the
+  Some/None pair for each conditional variant, plus
+  `TimeoutError`/`UnsupportedOperationError`/`ProcessFrameError`
+  formatting and a `helper_constructors_default_optional_context_to_none`
+  test pinning that `general()` / `open_stream()` / `read_frame()`
+  / `stream_shutdown()` set their optional contexts to `None`. Pins
+  the `Error` user-facing message shape so a future
+  `#[error(...)]`-attribute edit doesn't silently drop a backend tag.
 
 ### Documentation
 
