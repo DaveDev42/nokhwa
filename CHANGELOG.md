@@ -116,6 +116,21 @@
 
 ### Testing
 
+* **Pin `KnownCameraControl` / `KnownCameraControlFlag` /
+  `RequestedFormatType` / `RequestedFormat` `Display` rendering with
+  4 unit tests in `nokhwa-core/src/types_tests.rs`.** All four
+  `Display` impls in `types.rs` delegate to `{self:?}`, so the
+  rendered shape is whatever `Debug` happens to produce. That shape
+  ends up in user-visible error messages
+  (`NokhwaError::SetPropertyError { property: format!("{control}"), … }`)
+  and request rejection diagnostics, and a derive-level rename or
+  field reorder would silently change the rendered token. Direct
+  tests now lock: `KnownCameraControl::Brightness` →
+  `"Brightness"`, `Other(42)` → `"Other(42)"`, every
+  `KnownCameraControlFlag` variant name, and that
+  `RequestedFormatType` / `RequestedFormat` Display continues to
+  match `Debug` (so any future move away from Debug-piping is a
+  deliberate, reviewed change).
 * **Pin `CameraFormat::Display` and `CameraInfo::Display` exact
   rendering with 2 unit tests in `nokhwa-core/src/types_tests.rs`.**
   `CameraFormat::Display` (`"{resolution}@{fps}FPS, {format} Format"`)
