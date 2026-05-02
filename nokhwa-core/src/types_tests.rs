@@ -40,6 +40,39 @@ fn resolution_ordering_equal_width_falls_through_to_height() {
 }
 
 #[test]
+fn resolution_ordering_is_lexicographic_not_area() {
+    // Width is the primary key, area is irrelevant — a 1×0
+    // resolution must be greater than a 0×huge resolution. This
+    // pins the lex-ascending contract that the upstream docstring
+    // used to mis-describe ("flipped from highest to lowest" — the
+    // code never matched) and that `RequestedFormat::fulfill`
+    // relies on via `Iterator::max`. A regression that switched to
+    // area-based ordering would silently change which resolution
+    // `max()` picks for `AbsoluteHighestResolution` requests.
+    let huge_height_zero_width = Resolution::new(0, u32::MAX);
+    let one_pixel_wide = Resolution::new(1, 0);
+    assert!(huge_height_zero_width < one_pixel_wide);
+}
+
+#[test]
+fn resolution_iter_max_picks_largest_width_then_height() {
+    // End-to-end pinning of the `Vec::iter().max()` path used by
+    // `RequestedFormat::fulfill` for `AbsoluteHighestResolution`.
+    // A comparator inversion (someone "fixing" the misleading
+    // upstream "flipped" docstring by reversing `cmp`) would
+    // silently make `fulfill` return the *lowest* resolution.
+    let candidates = [
+        Resolution::new(640, 480),
+        Resolution::new(1920, 1080),
+        Resolution::new(1280, 720),
+        Resolution::new(1920, 2160),
+        Resolution::new(1024, 768),
+    ];
+    let winner = candidates.iter().max().copied();
+    assert_eq!(winner, Some(Resolution::new(1920, 2160)));
+}
+
+#[test]
 fn resolution_equality() {
     let a = Resolution::new(640, 480);
     let b = Resolution::new(640, 480);
@@ -67,6 +100,42 @@ fn color_frame_formats_subset_of_all() {
     let all = frame_formats();
     for fmt in color_frame_formats() {
         assert!(all.contains(fmt), "{fmt:?} not in frame_formats()");
+    }
+}
+
+#[test]
+fn color_frame_formats_excludes_gray() {
+    // The semantic contract of `color_frame_formats()` is "every
+    // chroma-bearing format" — `GRAY` must be excluded because it
+    // drives format-filter branches in
+    // `RequestedFormat::fulfill`. A future refactor that
+    // accidentally adds `GRAY` to the list (e.g. copy-pasting from
+    // `frame_formats()`) would silently route GRAY cameras through
+    // a color decode pipeline. The existing
+    // `color_frame_formats_subset_of_all` test only verifies the
+    // forward direction (every entry is in `frame_formats`); it
+    // says nothing about which entries must NOT appear.
+    assert!(
+        !color_frame_formats().contains(&FrameFormat::GRAY),
+        "color_frame_formats() must not contain GRAY"
+    );
+}
+
+#[test]
+fn color_frame_formats_includes_every_non_gray_format() {
+    // The reverse contract: every non-GRAY entry in
+    // `frame_formats()` must appear in `color_frame_formats()`.
+    // Pins the bijection so a refactor that drops a chroma format
+    // (e.g. removing NV12 from one list but not the other) is
+    // caught immediately.
+    for fmt in frame_formats() {
+        if *fmt == FrameFormat::GRAY {
+            continue;
+        }
+        assert!(
+            color_frame_formats().contains(fmt),
+            "{fmt:?} is non-GRAY but missing from color_frame_formats()"
+        );
     }
 }
 
