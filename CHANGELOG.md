@@ -116,6 +116,22 @@
 
 ### Testing
 
+* **Pin exact `RunnerConfig::default()` values and `Overflow::default()`
+  in `src/runner.rs::tests`.** The pre-existing
+  `default_runnerconfig_is_bounded` test only checks that channel
+  capacities are non-zero; the specific numbers
+  (`frames_capacity = 4`, `pictures_capacity = 8`,
+  `events_capacity = 32`) and polling cadences
+  (`poll_interval = 10ms`, `event_tick = 50ms`,
+  `shutter_timeout = 5s`) are part of the runner's documented
+  behaviour. A regression that silently halves `frames_capacity` or
+  switches the overflow policy would change the memory-vs-latency
+  trade-off downstream consumers depend on. Two new tests pin: (1)
+  every `RunnerConfig::default()` field's exact value, and (2)
+  `Overflow::default()` resolves to `DropNewest` (the
+  lowest-overhead, no-relay-thread choice) — so a refactor of the
+  enum (e.g. reordering variants and removing `#[default]`) is
+  caught at the unit-test layer.
 * **Pin the ABI shape of `CAP_FRAME` / `CAP_SHUTTER` / `CAP_EVENT`
   capability bits in `src/session.rs::capability_bits_tests`.**
   These constants are `#[doc(hidden)] pub const u32` but observable
