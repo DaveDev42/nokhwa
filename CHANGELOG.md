@@ -68,6 +68,26 @@
   forward-looking "async runner is on the 0.14.0 roadmap" line is
   updated to point at the now-shipped `nokhwa-tokio` crate.
 
+### Features
+
+* **V4L Stepwise resolutions: enumerate common presets.**
+  `get_resolution_list` now also surfaces every entry from a fixed
+  common-preset table (320×240, 640×480, 800×600, 1024×768, 1280×720,
+  1280×960, 1920×1080, 2560×1440, 3840×2160) that (a) fits inside the
+  Stepwise (min..=max) box on both axes and (b) aligns to the
+  advertised width/height step. Previously only the (min, min) and
+  (max, max) endpoints were exposed, on the rationale that fully
+  enumerating a 1×1-step / 4096×4096-max advertisement produces
+  millions of synthetic resolutions; the preset filter is the
+  practical middle ground for UI consumers (`get_resolution_list`
+  feeds `RequestedFormat` matching, which is fed to UIs that want a
+  sane shortlist). Drivers still accept arbitrary intermediate
+  resolutions via `set_format`. Pure helper
+  `expand_stepwise_resolutions` lives next to the other V4L FourCC
+  helpers and is covered by five unit tests
+  (endpoints-only / degenerate `min=max` / step-1 full pass /
+  step-misalignment dropping presets / out-of-range exclusion).
+
 ### Performance
 
 * **Event-driven V4L hotplug via `inotify`.** Replaces the 500 ms
