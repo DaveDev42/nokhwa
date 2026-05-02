@@ -4,6 +4,26 @@
 
 ### Bug Fixes
 
+* **`ShutterCapture::capture()` could leak the UI lock when
+  `trigger` failed.** The default `capture()` was documented as
+  "`unlock_ui` always attempted (errors discarded if the inner
+  sequence failed)", but the impl used the `?` operator on
+  `trigger`, so a `trigger` failure short-circuited the function
+  before `unlock_ui` ran — leaving the camera's physical UI
+  controls locked even though `lock_ui` had succeeded. Reshaped
+  the body so `unlock_ui` always runs once `lock_ui` succeeds,
+  regardless of whether `trigger`/`take_picture` returned
+  `Err`: the inner sequence's `Result` is captured in a `let`
+  (via `trigger().and_then(take_picture)`), `unlock_ui` is run
+  unconditionally, and the inner result is returned. `lock_ui`
+  failure still short-circuits without calling `unlock_ui` (no
+  lock was acquired). Pinned the four branching contracts —
+  lock-fail short-circuits before `trigger`, trigger-fail still
+  runs `unlock_ui`, take-fail returns `take_picture`'s error not
+  `unlock_ui`'s, and an unlock-only failure with otherwise-
+  successful inner sequence still returns `Ok` — with a
+  `RefCell`-logged `Scripted` mock in
+  `nokhwa-core/src/traits_tests.rs`.
 * **`RgbConversion::write_png` returned an error in every build.**
   `nokhwa-core` declared `image` with `default-features = false`
   but did not opt into the `png` feature, so the underlying
