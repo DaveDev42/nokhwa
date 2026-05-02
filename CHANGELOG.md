@@ -53,6 +53,17 @@
   no ordering guarantee, and inconsistency between backends was the
   bug, not a feature. URL-mode (`compatible_fourcc_from_negotiated`)
   is unchanged: single-element vec, no dedup needed.
+* **GStreamer `format::dedupe` uses `CameraFormat`'s derived `Ord`.**
+  The hand-rolled `sort_by(|a, b| (a.width(), a.height(), a.format(),
+  a.frame_rate()).cmp(&(b.width(), b.height(), b.format(),
+  b.frame_rate())))` is exactly what `CameraFormat`'s derived `Ord`
+  produces — `CameraFormat` is `(resolution, format, frame_rate)`,
+  `Resolution::Ord` is `(width, height)`, so the tuple-cmp is the
+  same total order. Replaced with `v.sort()`. New
+  `camera_format_ordering_is_lexicographic_resolution_format_framerate`
+  test in `nokhwa-core` pins the equivalence so a future struct-field
+  reorder of `CameraFormat` is caught by a failing unit test rather
+  than a silent change in dedupe ordering.
 
 ### Cleanup
 
