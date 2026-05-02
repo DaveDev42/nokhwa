@@ -23,9 +23,6 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Infrastructure / CI
 
-- [ ] **Ruleset context names** — after the `chore/clippy-pedantic-all-crates`
-  PR merges, update the branch ruleset required-status-check contexts from
-  `Clippy` to `Clippy (linux)`, `Clippy (windows)`, `Clippy (macos)`.
 - [ ] **Windows GStreamer CI** blocked on `gstreamer.freedesktop.org`'s
   `go-away` JS challenge (PR #174 closed). Paths forward: (a) private
   artifact mirror the CI can pull from, (b) wait for `winget` to gain a
@@ -96,6 +93,20 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **`v4l-loopback` CI fix** (#185, in-flight) — `videodev.ko` is in
+  base `linux-modules-<kernel>` (not `-extra`) on Azure 6.17.x;
+  `awalsh128/cache-apt-pkgs-action` skips `postinst` so `depmod -a`
+  never runs on cache hit. Both addressed; cache key bumped. The job
+  was silently `failure` (run-level green via `continue-on-error`)
+  since the #183 era.
+- **`clippy::pedantic` matrix lint CI** (#183) — extended pedantic
+  enforcement to `nokhwa-bindings-{linux-v4l, macos-avfoundation,
+  windows-msmf}` (previously only `nokhwa-core` + `nokhwa` had it).
+  `lint.yml` expanded to a 3-OS matrix; ruleset required-status
+  contexts updated to `Clippy (linux/windows/macos)`. Removed
+  `required_signatures` from the ruleset (release-please bot can't
+  sign; web-flow auto-signs squash merges so verification is
+  preserved).
 - **0.14.3** (2026-04-22) — GStreamer sessions 3/4/5 + OpenCV removal.
 - **0.14.2** (2026-04-21) — MSMF / V4L / AVFoundation hotplug, OpenCV
   IP-camera re-open fix, MSMF OBS spike docs, GStreamer session 1/2,

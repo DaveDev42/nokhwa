@@ -41,6 +41,7 @@ jobs:
         run: |
           KERNEL="$(uname -r)"
           echo "version=$KERNEL" >> "$GITHUB_OUTPUT"
+          echo "modules-base=linux-modules-$KERNEL" >> "$GITHUB_OUTPUT"
           echo "modules=linux-modules-extra-$KERNEL" >> "$GITHUB_OUTPUT"
 
       - name: Install system dependencies (cached)
@@ -49,22 +50,78 @@ jobs:
         # runs on a new kernel still do the full apt-get dance and
         # pay the 50MB linux-modules-extra cost; every other run
         # hits the cache and installs in ~10s instead of ~90s.
+        #
+        # linux-headers-azure is included so DKMS can compile
+        # v4l2loopback.ko against the running kernel on cache-hit
+        # runs (see "Ensure v4l2loopback DKMS module is built" step).
+        #
+        # ffmpeg is intentionally NOT cached here: it transitively
+        # depends on libblas3/libgfortran5/libavfilter etc., and
+        # awalsh128/cache-apt-pkgs-action restores only the listed
+        # package binaries, not their unlisted transitive shared-lib
+        # deps. On cache hit ffmpeg ends up missing libblas.so.3 at
+        # runtime. Install ffmpeg fresh in the next step instead so
+        # apt resolves the full dependency closure.
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: >-
+            ${{ steps.kernel.outputs.modules-base }}
             ${{ steps.kernel.outputs.modules }}
+            linux-headers-azure
             libv4l-dev
             v4l-utils
             v4l2loopback-dkms
-            ffmpeg
-          version: kernel-${{ steps.kernel.outputs.version }}
+          version: kernel4-${{ steps.kernel.outputs.version }}
+
+      - name: Install ffmpeg (uncached, needs full dep closure)
+        # Intentionally outside the apt cache action: ffmpeg's
+        # transitive shared-lib dependencies (libblas3, libgfortran5,
+        # libavfilter etc.) are not enumerated in the cache action's
+        # package list and are not restored on cache hit, leaving
+        # ffmpeg unable to load libblas.so.3 at runtime. apt-get
+        # install resolves the full closure correctly. ~5-10s.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - name: Ensure v4l2loopback DKMS module is built
+        # awalsh128/cache-apt-pkgs-action defaults to
+        # execute_install_scripts: false. On cache hit the dpkg DB and
+        # /usr/src/v4l2loopback-<ver>/ are restored but the
+        # v4l2loopback-dkms postinst (which runs `dkms install`) never
+        # re-executes, so /lib/modules/<kernel>/updates/dkms/v4l2loopback.ko
+        # for the *current* kernel is missing. Call `dkms install`
+        # explicitly with the current kernel as target. Idempotent: a
+        # no-op (~0s) when the postinst already ran on a cold install,
+        # a ~10–15s compile on cache-hit runs.
+        run: |
+          KERNEL="$(uname -r)"
+          if sudo dkms status v4l2loopback/0.12.7 -k "$KERNEL" 2>/dev/null \
+              | grep -q "installed"; then
+            echo "v4l2loopback/0.12.7 already installed for $KERNEL — skipping dkms install"
+          else
+            sudo dkms install v4l2loopback/0.12.7 -k "$KERNEL"
+          fi
+
+      - name: Rebuild kernel module dependency index
+        # awalsh128/cache-apt-pkgs-action skips package postinst scripts
+        # by default (execute_install_scripts: false). The linux-modules*
+        # postinst normally runs `depmod -a` to regenerate
+        # /lib/modules/<kernel>/modules.dep. Without it, modprobe
+        # reports "not found" by name even when the .ko file is on
+        # disk. The `dkms install` step above also runs depmod
+        # internally, but an explicit call here covers the
+        # linux-modules* .ko index regardless of ordering and is
+        # idempotent (~500ms).
+        run: sudo depmod -a
 
       - name: Load v4l2loopback module
         run: |
           # v4l2loopback depends on symbols from videodev (v4l2_fh_exit,
-          # video_device_*). On ubuntu-latest the videodev module is not
-          # autoloaded, so insmod fails with "Unknown symbol". Ensure the
-          # prerequisite modules are loaded first.
+          # video_device_*). videodev.ko ships in linux-modules-<kernel>
+          # (the base package), not linux-modules-extra. On ubuntu-latest
+          # it is not autoloaded, so insmod fails with "Unknown symbol".
+          # Ensure the prerequisite modules are loaded first.
           sudo modprobe videodev
           # exclusive_caps=1 makes the node advertise either capture or
           # output caps depending on which side opens first — required
