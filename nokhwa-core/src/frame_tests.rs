@@ -456,6 +456,65 @@ fn rawrgb_into_luma_averages() {
     assert_eq!(img.get_pixel(0, 0).0, [60]);
 }
 
+// `Frame<RawBgr>::into_luma` routes through the same
+// `RAWRGB | RAWBGR` arm of `convert_to_luma{,_buffer}` because
+// (B+G+R)/3 == (R+G+B)/3, but the BGR side had no end-to-end
+// coverage. These four tests mirror the RAWRGB suite so a future
+// refactor that splits the arms (e.g. swizzling first then averaging)
+// is caught at the test layer rather than as confusing camera output.
+
+#[test]
+fn rawbgr_into_luma_averages() {
+    // BGR (90, 60, 30) -> avg = 60. Same per-pixel mean as the
+    // symmetric RAWRGB test, just with B/R swapped at the source.
+    let data = vec![90, 60, 30, 90, 60, 30, 90, 60, 30, 90, 60, 30];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::RAWBGR);
+    let frame: Frame<RawBgr> = Frame::new(buf);
+    let img = frame.into_luma().materialize().unwrap();
+    assert_eq!(img.get_pixel(0, 0).0, [60]);
+    assert_eq!(img.get_pixel(1, 1).0, [60]);
+}
+
+#[test]
+fn rawbgr_into_luma_write_to_writes_correct_averages() {
+    // Per-pixel-distinct B/G/R values so the test fails loudly if the
+    // SIMD kernel were ever to swizzle channels — only the mean must
+    // match, but that mean must come from this exact triple.
+    // Pixel 0: BGR (10, 20, 30) -> avg = 20
+    // Pixel 1: BGR (40, 80, 120) -> avg = 80
+    let data = vec![10, 20, 30, 40, 80, 120];
+    let buf = Buffer::new(Resolution::new(2, 1), &data, FrameFormat::RAWBGR);
+    let frame: Frame<RawBgr> = Frame::new(buf);
+    let mut dest = vec![0u8; 2];
+    frame.into_luma().write_to(&mut dest).unwrap();
+    assert_eq!(dest, vec![20, 80]);
+}
+
+#[test]
+fn rawbgr_into_luma_rejects_non_multiple_of_3_data() {
+    // 4-byte input: not a multiple of 3, so the RAWRGB|RAWBGR arm's
+    // length guard (`data.len() % 3 != 0`) must reject it. fcc must be
+    // RAWBGR — not RAWRGB — because the error reports the actual buffer
+    // format, not a fallback.
+    let data = vec![1, 2, 3, 4];
+    let buf = Buffer::new(Resolution::new(1, 1), &data, FrameFormat::RAWBGR);
+    let frame: Frame<RawBgr> = Frame::new(buf);
+    let err = frame.into_luma().materialize().unwrap_err();
+    assert_process_frame_err(err, FrameFormat::RAWBGR, "Luma", "not a multiple of 3");
+}
+
+#[test]
+fn rawbgr_into_luma_write_to_rejects_mismatched_dest() {
+    // 4 pixels (12 bytes) -> 4 luma bytes expected; pass a 3-byte dest
+    // to hit the `dest.len() != pixel_count` guard at frame.rs:649.
+    let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::RAWBGR);
+    let frame: Frame<RawBgr> = Frame::new(buf);
+    let mut dest = vec![0u8; 3];
+    let err = frame.into_luma().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::RAWBGR, "Luma", "destination buffer size");
+}
+
 // ---------------------------------------------------------------------------
 // YUYV luma extraction (direct Y channel)
 // ---------------------------------------------------------------------------
