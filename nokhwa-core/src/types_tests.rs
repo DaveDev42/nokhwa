@@ -2330,3 +2330,73 @@ fn buf_bgr_to_rgb_rejects_odd_resolution_and_size_mismatches() {
         .expect_err("output must be w*h*3 bytes");
     assert_process_frame_error(err, FrameFormat::RAWBGR);
 }
+
+#[test]
+fn buf_yuyv_extract_luma_picks_y0_y1_not_chroma() {
+    // YUYV is packed `[Y0, U, Y1, V]` per 4-byte chunk; the luma
+    // plane must be the bytes at indices 0 and 2 of each chunk.
+    // A SIMD shuffle-mask regression that picks U/V instead of Y
+    // produces a silently-wrong grayscale image. Pin the byte
+    // selection with a known-value pattern where every Y is
+    // distinct from every U/V.
+    let data: Vec<u8> = vec![
+        10, 200, 11, 201, // pixels 0-1: Y=10,11 | U=200, V=201
+        12, 202, 13, 203, // pixels 2-3
+        14, 204, 15, 205, // pixels 4-5
+        16, 206, 17, 207, // pixels 6-7
+    ];
+    let mut dest = vec![0u8; 8];
+    buf_yuyv_extract_luma(&data, &mut dest).expect("extract must succeed");
+    assert_eq!(dest, vec![10, 11, 12, 13, 14, 15, 16, 17]);
+}
+
+#[test]
+fn buf_nv12_extract_luma_copies_y_plane_only() {
+    // NV12 is bi-planar: a full-resolution Y plane followed by
+    // a half-resolution interleaved UV plane. The extraction is
+    // a `copy_from_slice(&data[..w*h])`; an off-by-one in the
+    // y_size formula would silently include UV bytes. Use a
+    // pattern where Y bytes are 1..=16 and UV bytes are 100+ so
+    // any UV leak is unmistakable.
+    let res = Resolution::new(4, 4);
+    let mut data = Vec::with_capacity(24);
+    for y in 1..=16u8 {
+        data.push(y);
+    }
+    for uv in 100..108u8 {
+        data.push(uv);
+    }
+    let mut dest = vec![0u8; 16];
+    buf_nv12_extract_luma(res, &data, &mut dest).expect("extract must succeed");
+    assert_eq!(
+        dest,
+        (1..=16u8).collect::<Vec<_>>(),
+        "Y plane must be copied verbatim with no UV bleed"
+    );
+}
+
+#[test]
+fn buf_bgr_to_rgb_swaps_b_and_r_channels() {
+    // BGR-to-RGB swaps the B and R channels per pixel while
+    // leaving G unchanged. A SIMD shuffle-mask inversion would
+    // silently produce inverted hues with no error. Use a 4×2
+    // frame (8 pixels = 24 bytes) with each pixel's B/G/R
+    // distinct so any per-channel mistake is observable.
+    let res = Resolution::new(4, 2);
+    let mut data = Vec::with_capacity(24);
+    for i in 0..8u8 {
+        let base = i * 10;
+        data.push(base + 1); // B
+        data.push(base + 2); // G
+        data.push(base + 3); // R
+    }
+    let mut out = vec![0u8; 24];
+    buf_bgr_to_rgb(res, &data, &mut out).expect("convert must succeed");
+    for i in 0..8usize {
+        let off = i * 3;
+        let base = (i as u8) * 10;
+        assert_eq!(out[off], base + 3, "pixel {i} R channel");
+        assert_eq!(out[off + 1], base + 2, "pixel {i} G channel preserved");
+        assert_eq!(out[off + 2], base + 1, "pixel {i} B channel");
+    }
+}
