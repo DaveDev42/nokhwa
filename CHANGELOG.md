@@ -162,6 +162,18 @@
   marker, a pairwise-distinct check (no two markers map to the same
   `FrameFormat`), and a ZST-size check (markers stay zero-sized so
   `Frame<F>` doesn't accidentally grow).
+* **`wgpu::raw_texture_layout` 6-branch coverage.** The
+  `nokhwa-core::wgpu::raw_texture_layout` function maps a
+  `(FrameFormat, Resolution)` to `(TextureFormat, Extent3d, stride)`
+  for `frame_texture_raw()`. It had no test coverage — the YUYV
+  even-width guard, NV12 even-dimension guard, NV12's `height * 3 / 2`
+  packing, RAWRGB/RAWBGR's `width * 3` packing, and the MJPEG
+  rejection all shipped untested. Added 8 tests inline in `wgpu.rs`
+  (gated under `#[cfg(test)]`): one happy-path layout per format,
+  one rejection per validated guard, plus a `RAWBGR` ↔ `RAWRGB`
+  shape-equivalence assertion. Wired the `Core unit tests` CI job to
+  run `cargo test -p nokhwa-core --features wgpu-types` after the
+  default-feature pass so these tests actually execute on every PR.
 
 ### Documentation
 

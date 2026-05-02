@@ -124,3 +124,89 @@ pub fn raw_texture_layout(
         )),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn yuyv_layout_uses_rg8unorm_with_double_stride() {
+        let (fmt, ext, stride) =
+            raw_texture_layout(FrameFormat::YUYV, Resolution::new(640, 480)).unwrap();
+        assert_eq!(fmt, TextureFormat::Rg8Unorm);
+        assert_eq!(ext.width, 640);
+        assert_eq!(ext.height, 480);
+        assert_eq!(ext.depth_or_array_layers, 1);
+        assert_eq!(stride, 1280);
+    }
+
+    #[test]
+    fn yuyv_rejects_odd_width() {
+        let err = raw_texture_layout(FrameFormat::YUYV, Resolution::new(641, 480)).unwrap_err();
+        match err {
+            NokhwaError::ProcessFrameError {
+                src, destination, ..
+            } => {
+                assert_eq!(src, FrameFormat::YUYV);
+                assert_eq!(destination, "RawTextureData");
+            }
+            other => panic!("expected ProcessFrameError, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn nv12_layout_uses_r8unorm_with_3_2_height() {
+        let (fmt, ext, stride) =
+            raw_texture_layout(FrameFormat::NV12, Resolution::new(1920, 1080)).unwrap();
+        assert_eq!(fmt, TextureFormat::R8Unorm);
+        assert_eq!(ext.width, 1920);
+        assert_eq!(ext.height, 1620);
+        assert_eq!(stride, 1920);
+    }
+
+    #[test]
+    fn nv12_rejects_odd_dimensions() {
+        assert!(raw_texture_layout(FrameFormat::NV12, Resolution::new(641, 480)).is_err());
+        assert!(raw_texture_layout(FrameFormat::NV12, Resolution::new(640, 481)).is_err());
+        assert!(raw_texture_layout(FrameFormat::NV12, Resolution::new(641, 481)).is_err());
+    }
+
+    #[test]
+    fn gray_layout_is_r8unorm_one_byte_per_pixel() {
+        let (fmt, ext, stride) =
+            raw_texture_layout(FrameFormat::GRAY, Resolution::new(320, 240)).unwrap();
+        assert_eq!(fmt, TextureFormat::R8Unorm);
+        assert_eq!(ext.width, 320);
+        assert_eq!(ext.height, 240);
+        assert_eq!(stride, 320);
+    }
+
+    #[test]
+    fn raw_rgb_layout_is_r8unorm_with_3x_width() {
+        let (fmt, ext, stride) =
+            raw_texture_layout(FrameFormat::RAWRGB, Resolution::new(640, 480)).unwrap();
+        assert_eq!(fmt, TextureFormat::R8Unorm);
+        assert_eq!(ext.width, 1920);
+        assert_eq!(ext.height, 480);
+        assert_eq!(stride, 1920);
+    }
+
+    #[test]
+    fn raw_bgr_layout_matches_rawrgb_shape() {
+        let rgb = raw_texture_layout(FrameFormat::RAWRGB, Resolution::new(640, 480)).unwrap();
+        let bgr = raw_texture_layout(FrameFormat::RAWBGR, Resolution::new(640, 480)).unwrap();
+        assert_eq!(rgb, bgr);
+    }
+
+    #[test]
+    fn mjpeg_is_rejected_with_general_error() {
+        let err = raw_texture_layout(FrameFormat::MJPEG, Resolution::new(640, 480)).unwrap_err();
+        match err {
+            NokhwaError::GeneralError { message, .. } => {
+                assert!(message.contains("MJPEG"));
+                assert!(message.contains("frame_texture()"));
+            }
+            other => panic!("expected GeneralError, got {other:?}"),
+        }
+    }
+}
