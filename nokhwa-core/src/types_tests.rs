@@ -1364,3 +1364,48 @@ fn known_camera_control_other_to_platform_id_truncates() {
         0
     );
 }
+
+// `yuyv422_predicted_size` is a `pub` size predictor that callers
+// pre-allocating the destination buffer for `buf_yuyv422_to_rgb` rely
+// on. The arithmetic is `(input_size / 4) * (2 * 3)` for RGB and
+// `(input_size / 4) * (2 * 4)` for RGBA — every 4-byte YUYV chunk
+// produces 2 RGB or RGBA pixels. Pin the contract directly so a
+// regression in either constant or the integer-division shape is
+// caught.
+
+#[test]
+fn yuyv422_predicted_size_rgb_is_input_size_times_3_div_2() {
+    // 4 input bytes (one chunk) → 2 RGB pixels = 6 bytes.
+    assert_eq!(yuyv422_predicted_size(4, false), 6);
+    // 1920x1080 YUYV is 1920*1080*2 = 4_147_200 bytes; RGB output is
+    // 1920*1080*3 = 6_220_800 bytes. Confirm the formula scales.
+    assert_eq!(
+        yuyv422_predicted_size(1920 * 1080 * 2, false),
+        1920 * 1080 * 3
+    );
+}
+
+#[test]
+fn yuyv422_predicted_size_rgba_is_input_size_times_2() {
+    // 4 input bytes → 2 RGBA pixels = 8 bytes.
+    assert_eq!(yuyv422_predicted_size(4, true), 8);
+    // 1920x1080 YUYV → 1920*1080*4 RGBA bytes = exactly 2× input.
+    assert_eq!(
+        yuyv422_predicted_size(1920 * 1080 * 2, true),
+        1920 * 1080 * 4
+    );
+}
+
+#[test]
+fn yuyv422_predicted_size_rounds_partial_chunks_down() {
+    // Sub-chunk inputs round to zero rather than producing a partial
+    // pixel — the destination buffer must hold an integral number of
+    // RGB / RGBA pixels.
+    assert_eq!(yuyv422_predicted_size(0, false), 0);
+    assert_eq!(yuyv422_predicted_size(3, false), 0);
+    assert_eq!(yuyv422_predicted_size(0, true), 0);
+    assert_eq!(yuyv422_predicted_size(3, true), 0);
+    // 5 bytes → 1 complete chunk + 1 leftover → 1 chunk × 2 pixels.
+    assert_eq!(yuyv422_predicted_size(5, false), 6);
+    assert_eq!(yuyv422_predicted_size(5, true), 8);
+}
