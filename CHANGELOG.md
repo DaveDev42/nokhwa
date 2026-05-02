@@ -31,6 +31,18 @@
   in-range values (the previous (2,3,4) over (1,1,1) only passed
   thanks to the inverted predicate).
 
+### Refactoring
+
+* **MSMF `compatible_fourcc` uses `sort() + dedup()` like V4L /
+  AVFoundation.** Following the truncation fix, the inline
+  `!contains()` dedup loop was kept around for one PR. This commit
+  swaps it for the canonical `collect → sort → dedup` shape used by
+  the other two backends — O(n²) → O(n log n), and the returned list
+  is now in `FrameFormat` `Ord` order regardless of how the device
+  enumerated its `IMFAttributes` formats. No behaviour change beyond
+  ordering and the (negligible) speed-up on the 4-element list MSMF
+  emits today.
+
 ### Cleanup
 
 * **TODO/FIXME audit.** Removed two stale `// TODO: Update as this
