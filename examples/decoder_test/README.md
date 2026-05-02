@@ -6,7 +6,7 @@ Tests the `nokhwa-core` pixel-format decoder pipeline in isolation — no camera
 
 - Constructing a `Buffer` directly from raw bytes + resolution + `FrameFormat`.
 - Wrapping it into a `Frame<F>` with the format tag (`Nv12` here).
-- Decoding via `frame.into_rgb().materialize()` — the same conversion path used by `Camera<F>::frame_typed()`.
+- Decoding via `frame.into_rgb().materialize()` — the same conversion path used by `StreamCamera::frame()` → `Buffer::typed::<F>()`.
 
 This is the cleanest way to verify the SIMD/scalar decoders for any supported format without needing hardware.
 
