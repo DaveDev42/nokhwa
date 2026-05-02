@@ -116,6 +116,17 @@
 
 ### Testing
 
+* **Pin `CameraFormat::Display` and `CameraInfo::Display` exact
+  rendering with 2 unit tests in `nokhwa-core/src/types_tests.rs`.**
+  `CameraFormat::Display` (`"{resolution}@{fps}FPS, {format} Format"`)
+  was only weakly tested for non-emptiness; `CameraInfo::Display`
+  (`"Name: {n}, Description: {d}, Extra: {m}, Index: {i}"`) had no
+  test at all. Both rendering shapes land in user-visible error
+  messages, log lines, and dashboard greps; a regression that
+  re-orders the fields or renames the labels would silently break
+  downstream parsers. Two direct tests now lock the exact rendering
+  for each, including the `CameraIndex::String` payload form for
+  URL sources (`rtsp://example.com/cam`).
 * **Pin `OpenRequest` constructor + `Copy` contract with 4 unit
   tests in `src/session.rs::open_request_tests`.** `OpenRequest::any()`
   / `with_format()` / `format()` / `Default::default()` carried no
