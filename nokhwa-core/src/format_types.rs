@@ -80,3 +80,7 @@ pub struct RawBgr;
 impl CaptureFormat for RawBgr {
     const FRAME_FORMAT: FrameFormat = FrameFormat::RAWBGR;
 }
+
+#[cfg(test)]
+#[path = "format_types_tests.rs"]
+mod tests;
