@@ -2,12 +2,21 @@
 
 A command-line tool for testing nokhwa camera backends. It can list devices, inspect camera properties, capture single frames, and stream live video.
 
-## What it demonstrates (0.12.0 API)
+## What it demonstrates
 
-- `Camera::open::<Mjpeg>(index, RequestedFormatType::None)` opens a `Camera<Mjpeg>` for the `list-properties` subcommand (no format preference needed, just inspection).
-- The `single` subcommand uses `Camera<Mjpeg>::new(index, requested)` because `RequestedCliFormat::make_requested` already builds a `RequestedFormat`.
-- `camera.frame_typed()` yields a `Frame<Mjpeg>`, and `frame.into_rgb().materialize()` decodes to an `RgbImage`.
-- `CallbackCamera<Mjpeg>` drives the `stream` subcommand. With `--display`, the `ggez` draw loop pulls each forwarded `Buffer` out of an mpsc channel, wraps it into `Frame::<Mjpeg>::new(buffer)`, and calls `.into_rgba().materialize()` for the texture upload. Without `--display`, the callback only logs the buffer size.
+- `nokhwa::open(index, OpenRequest)` returns an `OpenedCamera`; the
+  example destructures the `Stream` variant for everything except
+  `list-devices` (which goes through `query()` directly).
+- `list-properties` calls `controls()` and `compatible_formats()` on the
+  `StreamCamera` returned by `open`.
+- `single` opens with the user's `--requested` format string, calls
+  `frame()` once, wraps the `Buffer` into `Frame<Mjpeg>`, and decodes
+  via `frame.into_rgb().materialize()` to an `RgbImage`.
+- `stream` hands the `OpenedCamera` to `CameraRunner::spawn` and pulls
+  `Buffer`s off the runner's bounded channel. With `--display`, the
+  `ggez` draw loop wraps each buffer into `Frame::<Mjpeg>::new` and
+  calls `.into_rgba().materialize()` for the texture upload. Without
+  `--display`, the loop just logs buffer arrival.
 
 ## Building
 

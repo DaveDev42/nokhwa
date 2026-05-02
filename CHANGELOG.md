@@ -50,6 +50,24 @@
   Linux gets these for free on every PR via the `v4l-loopback` job;
   Windows/macOS get them on the self-hosted runners and gated PRs.
 
+### Documentation
+
+* **Resync example READMEs and badges with the post-0.13 API.** Three
+  example READMEs (`examples/captesting`, `examples/capture`,
+  `examples/threaded-capture`) still claimed to demonstrate the
+  removed-in-0.13 typed-camera surface (`Camera::open::<Mjpeg>`,
+  `camera.frame_typed()`, `CallbackCamera<Mjpeg>`,
+  `threaded.poll_frame()`) even though the actual sources have used
+  `nokhwa::open` / `OpenedCamera` / `CameraRunner` for a long time.
+  Rewritten so the descriptions match the code that ships in those
+  examples. The root README's git-dep snippet now pins to a tag
+  (matching the `CLAUDE.md` guidance) instead of `branch = "main"`,
+  and the dead `docs.rs` / `crates.io` badges on the root,
+  `nokhwa-core`, and `nokhwa-tokio` READMEs have been removed — this
+  fork doesn't publish to crates.io. `MIGRATING-0.13.md`'s
+  forward-looking "async runner is on the 0.14.0 roadmap" line is
+  updated to point at the now-shipped `nokhwa-tokio` crate.
+
 ### Performance
 
 * **Event-driven V4L hotplug via `inotify`.** Replaces the 500 ms

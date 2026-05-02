@@ -1,6 +1,6 @@
 # nokhwa-tokio
 
-Tokio integration for [`nokhwa`](https://crates.io/crates/nokhwa).
+Tokio integration for [`nokhwa`](../README.md).
 
 Wraps the sync `CameraRunner` with `TokioCameraRunner`, which exposes
 `tokio::sync::mpsc::Receiver`s you can `.recv().await`. Drop is
