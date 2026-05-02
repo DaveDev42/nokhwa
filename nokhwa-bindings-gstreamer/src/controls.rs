@@ -86,7 +86,7 @@ pub(crate) fn list_controls(source: &Element) -> Vec<CameraControl> {
     let pspecs = source.list_properties();
     for pspec in pspecs {
         let name = pspec.name();
-        let Some(kcc) = known_from_property_name(&name) else {
+        let Some(kcc) = known_from_property_name(name) else {
             continue;
         };
         // Filter out read-only / write-only properties — we need both
@@ -95,7 +95,7 @@ pub(crate) fn list_controls(source: &Element) -> Vec<CameraControl> {
         if !flags.contains(ParamFlags::READABLE) || !flags.contains(ParamFlags::WRITABLE) {
             continue;
         }
-        let Some(control) = build_integer_control(source, &name, kcc, &pspec) else {
+        let Some(control) = build_integer_control(source, name, kcc, &pspec) else {
             continue;
         };
         out.push(control);

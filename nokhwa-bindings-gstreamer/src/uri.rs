@@ -86,10 +86,7 @@ impl UriPipelineHandle {
         // Soft caps — let whatever the decoder produces through after
         // videoconvert, filtered to formats we know how to expose.
         let caps = gstreamer::Caps::builder("video/x-raw")
-            .field(
-                "format",
-                &gstreamer::List::new([&"YUY2", &"NV12", &"GRAY8"]),
-            )
+            .field("format", gstreamer::List::new([&"YUY2", &"NV12", &"GRAY8"]))
             .build();
         let appsink = AppSink::builder()
             .caps(&caps)

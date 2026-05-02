@@ -120,6 +120,25 @@
   step as belt-and-suspenders; bump the cache version key from
   `kernel-` to `kernel4-` to bust the now-incomplete cached entry.
   Job-level `continue-on-error: true` preserved.
+* **`lint.yml`: clippy now covers `--workspace --all-targets` with
+  feature flags.** Previously each platform job ran a per-crate
+  `cargo clippy -p <crate>` matrix without `--all-targets` and
+  without feature flags, so two coverage gaps shipped silently:
+  (1) `#[cfg(test)]` modules were never linted (clippy without
+  `--all-targets` skips test code), and (2) feature-gated source
+  files in `nokhwa-bindings-gstreamer` (`controls.rs`, `uri.rs`, gated
+  on the `backend` feature pulled in by top-level `input-gstreamer`)
+  never got compiled by CI's clippy at all. Collapsed each platform
+  job to a single `cargo clippy --workspace --features <native> --all-targets -- -D warnings`
+  invocation. Surfaced and fixed: `needless_borrow` /
+  `needless_borrows_for_generic_args` in `controls.rs` + `uri.rs`,
+  `int_plus_one` in `examples/gstreamer_probe.rs`, `manual_abs_diff`
+  + a `doc_markdown` issue in `nokhwa-core/src/frame_tests.rs`. Test
+  fixtures in `nokhwa-core` legitimately need `cast_possible_truncation`
+  / `cast_sign_loss` / `cast_possible_wrap` / `approx_constant` (they
+  generate synthetic inputs like `(i % 256) as u8`), so a
+  `#![cfg_attr(test, allow(...))]` block was added at the crate root
+  rather than scattering per-function `#[allow(...)]`s.
 * **`clippy::pedantic` enforced across all workspace crates; matrix lint CI.**
   Added `#![deny(clippy::pedantic)]` / `#![warn(clippy::all)]` /
   `#![allow(clippy::module_name_repetitions)]` headers to

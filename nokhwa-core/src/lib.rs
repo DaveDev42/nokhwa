@@ -2,6 +2,18 @@
 #![warn(clippy::all)]
 #![cfg_attr(feature = "test-fail-warnings", deny(warnings))]
 #![cfg_attr(feature = "docs-features", feature(doc_cfg))]
+// Test fixtures generate small synthetic inputs (e.g. `(i % 256) as u8`
+// over `i: usize`) where truncation / sign-loss is the whole point. We
+// don't want to scatter `#[allow(...)]` over every SIMD test module.
+#![cfg_attr(
+    test,
+    allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_possible_wrap,
+        clippy::cast_sign_loss,
+        clippy::approx_constant,
+    )
+)]
 /*
  * Copyright 2022 l1npengtul <l1npengtul@protonmail.com> / The Nokhwa Contributors
  *

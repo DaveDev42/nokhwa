@@ -33,14 +33,14 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
-      - name: Clippy nokhwa-core
-        run: cargo clippy -p nokhwa-core -- -D warnings
-      - name: Clippy nokhwa-bindings-linux-v4l
-        run: cargo clippy -p nokhwa-bindings-linux-v4l -- -D warnings
-      - name: Clippy nokhwa-bindings-gstreamer
-        run: cargo clippy -p nokhwa-bindings-gstreamer -- -D warnings
-      - name: Clippy nokhwa (input-v4l)
-        run: cargo clippy --features input-v4l -- -D warnings
+      # `--all-targets` covers libs, tests, examples, and benches —
+      # without it, clippy never sees `#[cfg(test)]` modules. The
+      # `--features input-v4l,input-gstreamer` set forces the gstreamer
+      # bindings crate to compile its real backend (gated behind the
+      # bindings crate's `backend` feature, which the top-level
+      # `input-gstreamer` feature pulls in).
+      - name: Clippy --workspace --all-targets
+        run: cargo clippy --workspace --features input-v4l,input-gstreamer --all-targets -- -D warnings
 
   clippy-windows:
     name: Clippy (windows)
@@ -51,10 +51,8 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Clippy nokhwa-bindings-windows-msmf
-        run: cargo clippy -p nokhwa-bindings-windows-msmf -- -D warnings
-      - name: Clippy nokhwa (input-msmf)
-        run: cargo clippy --features input-msmf -- -D warnings
+      - name: Clippy --workspace --all-targets
+        run: cargo clippy --workspace --features input-msmf --all-targets -- -D warnings
 
   clippy-macos:
     name: Clippy (macos)
@@ -65,7 +63,5 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Clippy nokhwa-bindings-macos-avfoundation
-        run: cargo clippy -p nokhwa-bindings-macos-avfoundation -- -D warnings
-      - name: Clippy nokhwa (input-avfoundation)
-        run: cargo clippy --features input-avfoundation -- -D warnings
+      - name: Clippy --workspace --all-targets
+        run: cargo clippy --workspace --features input-avfoundation --all-targets -- -D warnings
