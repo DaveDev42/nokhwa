@@ -8,7 +8,8 @@
 #![cfg(feature = "device-test")]
 
 use nokhwa::utils::{
-    ApiBackend, CameraIndex, ControlValueDescription, ControlValueSetter, KnownCameraControlFlag,
+    ApiBackend, CameraFormat, CameraIndex, ControlValueDescription, ControlValueSetter,
+    FrameFormat, KnownCameraControlFlag, Resolution,
 };
 use nokhwa::{native_api_backend, open, query, OpenRequest, OpenedCamera};
 
@@ -230,6 +231,86 @@ fn control_set_get_round_trip() {
         OpenedCamera::Hybrid(mut cam) => round_trip!(&mut cam),
         OpenedCamera::Shutter(mut cam) => round_trip!(&mut cam),
     }
+}
+
+/// Opening a non-existent index must surface a `NokhwaError` rather
+/// than panicking or returning a bogus camera. Index 999 is well past
+/// any realistic device count.
+#[test]
+fn open_invalid_index_errors() {
+    let res = open(CameraIndex::Index(999), OpenRequest::any());
+    assert!(
+        res.is_err(),
+        "open(CameraIndex::Index(999)) unexpectedly succeeded"
+    );
+}
+
+/// `compatible_formats()` must enumerate at least one entry on a real
+/// device. An empty list would mean negotiation has nothing to work
+/// against.
+#[test]
+fn compatible_formats_nonempty() {
+    let OpenedCamera::Stream(mut cam) = open_first() else {
+        eprintln!("compatible_formats_nonempty: backend is not Stream-capable; skipping.");
+        return;
+    };
+    let formats = cam
+        .compatible_formats()
+        .expect("StreamCamera::compatible_formats");
+    assert!(!formats.is_empty(), "compatible_formats() returned empty");
+}
+
+/// Requesting a format the device cannot serve (1×1 @ 1 fps) must
+/// either error or fail to round-trip. Backends differ — V4L2 may
+/// silently snap to the nearest valid format, MSMF tends to error —
+/// so this test accepts either outcome and just rejects the
+/// "succeeded *and* round-tripped the bogus value" combination.
+#[test]
+fn set_format_invalid_does_not_round_trip() {
+    let OpenedCamera::Stream(mut cam) = open_first() else {
+        eprintln!(
+            "set_format_invalid_does_not_round_trip: backend is not Stream-capable; skipping."
+        );
+        return;
+    };
+    let bogus = CameraFormat::new(Resolution::new(1, 1), FrameFormat::MJPEG, 1);
+    match cam.set_format(bogus) {
+        Err(_) => {} // expected on most backends
+        Ok(()) => {
+            let got = cam.negotiated_format();
+            assert_ne!(
+                got, bogus,
+                "set_format accepted a 1x1@1 MJPEG format and round-tripped it; \
+                 driver should have either errored or snapped to a real format"
+            );
+        }
+    }
+}
+
+/// Multiple consecutive `frame()` calls must report a stable
+/// resolution and source format. A regression here would mean the
+/// stream is silently re-negotiating mid-stream, which would break
+/// downstream `Buffer::typed::<F>()` consumers.
+#[test]
+fn frame_metadata_is_stable() {
+    let OpenedCamera::Stream(mut cam) = open_first() else {
+        eprintln!("frame_metadata_is_stable: backend is not Stream-capable; skipping.");
+        return;
+    };
+    cam.open().expect("StreamCamera::open");
+    let first = cam.frame().expect("first frame");
+    let res = first.resolution();
+    let fmt = first.source_frame_format();
+    for i in 1..4 {
+        let buf = cam.frame().expect("frame()");
+        assert_eq!(buf.resolution(), res, "resolution drifted at frame {i}");
+        assert_eq!(
+            buf.source_frame_format(),
+            fmt,
+            "source format drifted at frame {i}"
+        );
+    }
+    cam.close().expect("StreamCamera::close");
 }
 
 // The file is already gated by `device-test` at the top, so this
