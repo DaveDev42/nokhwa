@@ -129,6 +129,20 @@
 
 ### Testing
 
+* **Pin V4L `FourCC` ↔ `FrameFormat` shim with 3 unit tests in
+  `nokhwa-bindings-linux-v4l/src/lib.rs`.** Every V4L2 ioctl boundary
+  (set_format, format enumeration, frame metadata) flows through
+  the `frameformat_to_fourcc` / `fourcc_to_frameformat` shim; until
+  now the round-trip and byte-equality with `nokhwa-core::types::FrameFormat::to_fourcc`
+  were not pinned at all. New tests cover: (1) every variant in
+  `frame_formats()` survives `frameformat_to_fourcc` →
+  `fourcc_to_frameformat`; (2) unknown tokens (`H264`, all-zero
+  bytes) return `None` so the swallow-as-`None` contract is
+  explicit; (3) the v4l shim's bytes match `FrameFormat::to_fourcc`'s
+  bytes exactly, so `v4l2-ctl --list-formats` and any logger that
+  prints `FourCC` bytes directly cannot diverge from the canonical
+  table in `nokhwa-core`. Catches a future tweak to either side
+  silently breaking the wire-level translation.
 * **Pin the cross-surface link between `negotiated_format()` and
   per-frame `Buffer` metadata in
   `tests/device_tests.rs::frame_metadata_matches_negotiated_format`.**

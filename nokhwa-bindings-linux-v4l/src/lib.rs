@@ -1039,8 +1039,9 @@ mod internal {
     #[cfg(test)]
     mod tests {
         use super::{
-            expand_stepwise_resolutions, id_to_known_camera_control, known_camera_control_to_id,
-            monotonic_to_wallclock, KnownCameraControl, Resolution, V4L2_CONTROL_IDS,
+            expand_stepwise_resolutions, fourcc_to_frameformat, frameformat_to_fourcc,
+            id_to_known_camera_control, known_camera_control_to_id, monotonic_to_wallclock,
+            FrameFormat, KnownCameraControl, Resolution, V4L2_CONTROL_IDS,
         };
         use v4l::v4l_sys::{
             V4L2_CID_BACKLIGHT_COMPENSATION, V4L2_CID_BRIGHTNESS, V4L2_CID_CONTRAST,
@@ -1049,6 +1050,7 @@ mod internal {
             V4L2_CID_SHARPNESS, V4L2_CID_TILT_RELATIVE, V4L2_CID_WHITE_BALANCE_TEMPERATURE,
             V4L2_CID_ZOOM_RELATIVE,
         };
+        use v4l::FourCC;
         use v4l::Timestamp;
 
         fn run(
@@ -1210,6 +1212,59 @@ mod internal {
             // capture moment — an honest "we don't know" beats a wallclock
             // pinned to the kernel's boot epoch.
             assert_eq!(monotonic_to_wallclock(Timestamp::new(0, 0)), None);
+        }
+
+        /// `frameformat_to_fourcc` and `fourcc_to_frameformat` are the
+        /// thin shims that bridge `v4l::FourCC` ↔ `FrameFormat` at every
+        /// V4L2 ioctl boundary (`set_format`, enumerate, frame metadata).
+        /// Pin the round-trip so a future tweak to `FrameFormat::to_fourcc`
+        /// or `from_fourcc` cannot silently break v4l's wire-level
+        /// translation.
+        #[test]
+        fn frameformat_fourcc_round_trips_for_every_variant() {
+            for &fmt in nokhwa_core::types::frame_formats() {
+                let fcc = frameformat_to_fourcc(fmt);
+                let back = fourcc_to_frameformat(fcc);
+                assert_eq!(
+                    back,
+                    Some(fmt),
+                    "{fmt:?} did not survive frameformat_to_fourcc → fourcc_to_frameformat"
+                );
+            }
+        }
+
+        /// `fourcc_to_frameformat` returns `None` for `FourCC` tokens that
+        /// `FrameFormat` does not recognise. Pin a representative unknown
+        /// (`H264`) so the swallow-as-`None` contract is explicit. The
+        /// production callers (`new_shared_device`'s format enumerator,
+        /// `compatible_formats`'s frame-format filter) rely on this — a
+        /// future "just guess the closest" tweak would silently surface
+        /// unsupported encodings to consumers.
+        #[test]
+        fn fourcc_to_frameformat_unknown_returns_none() {
+            assert_eq!(fourcc_to_frameformat(FourCC::new(b"H264")), None);
+            assert_eq!(fourcc_to_frameformat(FourCC::new(b"\0\0\0\0")), None);
+        }
+
+        /// The byte representation of `frameformat_to_fourcc` must equal
+        /// `FrameFormat::to_fourcc`'s string bytes. This is the
+        /// invariant that downstream tools (`v4l2-ctl --list-formats`,
+        /// log lines that print `FourCC` bytes directly) depend on. Pin
+        /// it so the v4l shim cannot silently diverge from the
+        /// canonical `FourCC` table in `nokhwa-core`.
+        #[test]
+        fn frameformat_to_fourcc_matches_core_to_fourcc_bytes() {
+            for &fmt in nokhwa_core::types::frame_formats() {
+                let v4l_bytes = frameformat_to_fourcc(fmt).repr;
+                let core_bytes = fmt.to_fourcc().as_bytes();
+                assert_eq!(
+                    &v4l_bytes[..],
+                    core_bytes,
+                    "v4l fourcc bytes for {fmt:?} diverge from FrameFormat::to_fourcc"
+                );
+            }
+            // Spot-check the FrameFormat import is what we expect.
+            let _ = FrameFormat::MJPEG;
         }
     }
 }
