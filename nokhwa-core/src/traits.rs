@@ -103,6 +103,18 @@ pub trait FrameSource: CameraDevice {
         (resolution.width() * resolution.height() * pxwidth) as usize
     }
 
+    /// Pull one frame, convert to RGBA, and upload it to a freshly-
+    /// allocated `wgpu::Texture` (`Rgba8UnormSrgb`). Convenience
+    /// wrapper over [`frame()`](Self::frame) +
+    /// [`convert_to_rgba`](crate::frame::convert_to_rgba) + a
+    /// `queue.write_texture` upload.
+    ///
+    /// # Errors
+    ///
+    /// Forwards any error from [`frame()`](Self::frame), surfaces a
+    /// [`NokhwaError::ProcessFrameError`] if the source pixel format
+    /// cannot be converted to RGBA or the converted bytes do not fit
+    /// the negotiated resolution.
     #[cfg(feature = "wgpu-types")]
     #[cfg_attr(feature = "docs-features", doc(cfg(feature = "wgpu-types")))]
     fn frame_texture(
@@ -158,6 +170,20 @@ pub trait FrameSource: CameraDevice {
         Ok(texture)
     }
 
+    /// Pull one frame in its native pixel format and upload it to a
+    /// freshly-allocated `wgpu::Texture`, skipping CPU-side
+    /// conversion. Texture format is chosen by
+    /// [`raw_texture_layout`] based on the negotiated source format
+    /// (e.g. `R8Unorm` for `GRAY`, `Rgba8UnormSrgb` for `RAWRGB`).
+    /// Cheaper than [`frame_texture`](Self::frame_texture) when the
+    /// downstream pipeline can sample the native layout directly.
+    ///
+    /// # Errors
+    ///
+    /// Forwards any error from [`frame_raw()`](Self::frame_raw),
+    /// returns a [`NokhwaError::ProcessFrameError`] if the source
+    /// format has no `wgpu` layout mapping or if the raw frame is
+    /// shorter than the texture's expected byte count.
     #[cfg(feature = "wgpu-types")]
     #[cfg_attr(feature = "docs-features", doc(cfg(feature = "wgpu-types")))]
     fn frame_texture_raw(
