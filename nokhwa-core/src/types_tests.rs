@@ -30,6 +30,16 @@ fn resolution_ordering() {
 }
 
 #[test]
+fn resolution_ordering_equal_width_falls_through_to_height() {
+    let portrait_short = Resolution::new(1920, 1080);
+    let portrait_tall = Resolution::new(1920, 2160);
+    assert!(portrait_short < portrait_tall);
+    assert!(portrait_tall > portrait_short);
+    let dup = Resolution::new(1920, 1080);
+    assert_eq!(portrait_short.cmp(&dup), std::cmp::Ordering::Equal);
+}
+
+#[test]
 fn resolution_equality() {
     let a = Resolution::new(640, 480);
     let b = Resolution::new(640, 480);
