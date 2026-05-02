@@ -895,3 +895,65 @@ mod open_request_tests {
         assert_eq!(req.format(), Some(fmt), "OpenRequest must still be Copy");
     }
 }
+
+/// Pin the ABI shape of the capability bits used by the
+/// `nokhwa_backend!` macro and the `OpenedCamera` dispatcher.
+///
+/// `CAP_FRAME` / `CAP_SHUTTER` / `CAP_EVENT` are `#[doc(hidden)] pub
+/// const u32`, but they are observable across crate boundaries — the
+/// macro expansion in any backend crate (including downstream
+/// consumers that implement custom backends) ORs these constants
+/// into a single `u32` capability mask, and `OpenedCamera::from_device`
+/// branches on `caps & CAP_* != 0`. Changing any of these values
+/// silently breaks the dispatch logic for already-compiled backend
+/// crates, so the unit tests pin: (1) every constant is non-zero;
+/// (2) every constant is a single-bit mask (power of two); (3) the
+/// three masks are pairwise distinct; and (4) the OR of all three
+/// fits in the low byte (room for ~5 more capability bits before the
+/// macro logic needs to widen to `u64`).
+#[cfg(test)]
+mod capability_bits_tests {
+    use super::{CAP_EVENT, CAP_FRAME, CAP_SHUTTER};
+
+    #[test]
+    fn all_caps_are_nonzero() {
+        assert_ne!(CAP_FRAME, 0);
+        assert_ne!(CAP_SHUTTER, 0);
+        assert_ne!(CAP_EVENT, 0);
+    }
+
+    #[test]
+    fn each_cap_is_single_bit() {
+        for (name, bit) in [
+            ("CAP_FRAME", CAP_FRAME),
+            ("CAP_SHUTTER", CAP_SHUTTER),
+            ("CAP_EVENT", CAP_EVENT),
+        ] {
+            assert_eq!(
+                bit.count_ones(),
+                1,
+                "{name} must be a single-bit mask, got 0b{bit:b}"
+            );
+        }
+    }
+
+    #[test]
+    fn caps_are_pairwise_distinct() {
+        assert_ne!(CAP_FRAME, CAP_SHUTTER);
+        assert_ne!(CAP_FRAME, CAP_EVENT);
+        assert_ne!(CAP_SHUTTER, CAP_EVENT);
+    }
+
+    #[test]
+    fn cap_union_fits_in_low_byte() {
+        // Headroom check: today the OR of all three caps occupies
+        // 3 bits in the low byte. If a future capability addition
+        // pushes past 8 bits, the macro logic must widen to u64
+        // (or some other shape) and this test forces the discussion.
+        let union = CAP_FRAME | CAP_SHUTTER | CAP_EVENT;
+        assert!(
+            union <= 0xFF,
+            "capability mask union 0b{union:b} no longer fits in the low byte"
+        );
+    }
+}
