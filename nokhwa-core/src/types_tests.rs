@@ -2033,3 +2033,141 @@ fn camera_control_display_renders_canonical_log_line() {
         "Control: Brightness, Name: Brightness, Value: (Current: 50, Default: 50, Step: 1, Range: (0, 100)), Flag: [Manual], Active: true"
     );
 }
+
+// `buf_*` conversion functions all live behind input-validation guards
+// that protect SIMD kernels from out-of-bounds writes. The happy paths
+// are exercised by `frame.rs` integration tests, but the guards
+// themselves are reachable only when a caller passes a wrong-sized
+// slice or odd resolution. Pin every guard so a future "let's relax
+// this assertion" tweak surfaces here instead of in a SIMD UB report.
+
+fn assert_process_frame_error(err: NokhwaError, expected_src: FrameFormat) {
+    match err {
+        NokhwaError::ProcessFrameError { src, .. } => assert_eq!(src, expected_src),
+        other => panic!("expected ProcessFrameError, got {other:?}"),
+    }
+}
+
+#[test]
+fn buf_yuyv422_to_rgb_rejects_non_multiple_of_4_input() {
+    // YUYV is 4:2:2 — every 2 pixels share a U/V pair packed as
+    // [Y0 U Y1 V]. An input length not divisible by 4 cannot
+    // describe a complete chunk; the guard rejects it before SIMD
+    // walks off the end of the slice.
+    let mut dest = vec![0u8; 6];
+    let err = buf_yuyv422_to_rgb(&[0u8; 5], &mut dest, false)
+        .expect_err("non-multiple-of-4 input must be rejected");
+    assert_process_frame_error(err, FrameFormat::YUYV);
+}
+
+#[test]
+fn buf_yuyv422_to_rgb_rejects_dest_size_mismatch_for_rgb_and_rgba() {
+    // 4 input bytes → 2 RGB pixels (6 bytes) or 2 RGBA pixels
+    // (8 bytes). A dest sized for the wrong pixel-stride is a
+    // common bug when callers swap `rgba` flags without resizing
+    // their output buffer.
+    let data = [0u8; 4];
+    let mut wrong_rgb = vec![0u8; 8];
+    let err =
+        buf_yuyv422_to_rgb(&data, &mut wrong_rgb, false).expect_err("RGB dest must be 6 bytes");
+    assert_process_frame_error(err, FrameFormat::YUYV);
+
+    let mut wrong_rgba = vec![0u8; 6];
+    let err =
+        buf_yuyv422_to_rgb(&data, &mut wrong_rgba, true).expect_err("RGBA dest must be 8 bytes");
+    assert_process_frame_error(err, FrameFormat::YUYV);
+}
+
+#[test]
+fn buf_nv12_to_rgb_rejects_odd_resolution() {
+    // NV12's chroma plane is half-resolution in both dimensions;
+    // odd width or height makes the UV plane size non-integral
+    // and is rejected up-front.
+    let res_odd_w = Resolution::new(3, 2);
+    let mut out = vec![0u8; 3 * 3 * 2];
+    let err = buf_nv12_to_rgb(res_odd_w, &[0u8; 9], &mut out, false)
+        .expect_err("odd width must be rejected");
+    assert_process_frame_error(err, FrameFormat::NV12);
+
+    let res_odd_h = Resolution::new(2, 3);
+    let err = buf_nv12_to_rgb(res_odd_h, &[0u8; 9], &mut out, false)
+        .expect_err("odd height must be rejected");
+    assert_process_frame_error(err, FrameFormat::NV12);
+}
+
+#[test]
+fn buf_nv12_to_rgb_rejects_input_and_output_size_mismatches() {
+    // A 4×4 NV12 frame is 4*4 + 4*4/2 = 24 bytes. Pin both the
+    // input-size guard (catches truncated USB transfers) and the
+    // rgba-dependent output-size guard (catches a caller that
+    // sized for RGB but flipped the `rgba` flag to `true`).
+    let res = Resolution::new(4, 4);
+    let mut out = vec![0u8; 4 * 4 * 3];
+    let err = buf_nv12_to_rgb(res, &[0u8; 23], &mut out, false)
+        .expect_err("short input must be rejected");
+    assert_process_frame_error(err, FrameFormat::NV12);
+
+    // rgba=true requires 4 bytes/pixel, but `out` is sized for 3.
+    let err = buf_nv12_to_rgb(res, &[0u8; 24], &mut out, true)
+        .expect_err("RGBA output must be 4 bytes/pixel");
+    assert_process_frame_error(err, FrameFormat::NV12);
+}
+
+#[test]
+fn buf_yuyv_extract_luma_rejects_non_multiple_of_4_and_dest_mismatch() {
+    // Y-plane extraction must produce one luma byte per pixel
+    // (input_len / 2). Both guards (input chunking + dest size)
+    // protect the SIMD shuffle from running off the end of the
+    // destination slice.
+    let mut dest = vec![0u8; 2];
+    let err = buf_yuyv_extract_luma(&[0u8; 5], &mut dest)
+        .expect_err("non-multiple-of-4 input must be rejected");
+    assert_process_frame_error(err, FrameFormat::YUYV);
+
+    let mut wrong_dest = vec![0u8; 3];
+    let err =
+        buf_yuyv_extract_luma(&[0u8; 4], &mut wrong_dest).expect_err("dest must be input_len / 2");
+    assert_process_frame_error(err, FrameFormat::YUYV);
+}
+
+#[test]
+fn buf_nv12_extract_luma_rejects_input_and_dest_size_mismatches() {
+    // NV12 luma extraction is a `copy_from_slice` of the first
+    // `w*h` bytes; both guards must fire before the slice index
+    // panics. Pin both the input (`w*h*3/2`) and dest (`w*h`)
+    // contracts.
+    let res = Resolution::new(4, 4);
+    let mut dest = vec![0u8; 16];
+    let err = buf_nv12_extract_luma(res, &[0u8; 23], &mut dest)
+        .expect_err("short NV12 input must be rejected");
+    assert_process_frame_error(err, FrameFormat::NV12);
+
+    let mut wrong_dest = vec![0u8; 15];
+    let err = buf_nv12_extract_luma(res, &[0u8; 24], &mut wrong_dest)
+        .expect_err("dest must be w*h bytes");
+    assert_process_frame_error(err, FrameFormat::NV12);
+}
+
+#[test]
+fn buf_bgr_to_rgb_rejects_odd_resolution_and_size_mismatches() {
+    // BGR-to-RGB is a byte-shuffle, but the guard still requires
+    // even dimensions (matches the NV12 contract for downstream
+    // consistency) and exact-size input + output. Pin every
+    // branch so a SIMD shuffle never indexes past the buffer.
+    let mut out = vec![0u8; 6 * 4 * 3];
+    let res_odd = Resolution::new(5, 4);
+    let err =
+        buf_bgr_to_rgb(res_odd, &[0u8; 60], &mut out).expect_err("odd width must be rejected");
+    assert_process_frame_error(err, FrameFormat::RAWBGR);
+
+    let res = Resolution::new(4, 4);
+    let mut out_ok = vec![0u8; 4 * 4 * 3];
+    let err =
+        buf_bgr_to_rgb(res, &[0u8; 47], &mut out_ok).expect_err("short input must be rejected");
+    assert_process_frame_error(err, FrameFormat::RAWBGR);
+
+    let mut wrong_out = vec![0u8; 4 * 4 * 4];
+    let err = buf_bgr_to_rgb(res, &[0u8; 4 * 4 * 3], &mut wrong_out)
+        .expect_err("output must be w*h*3 bytes");
+    assert_process_frame_error(err, FrameFormat::RAWBGR);
+}
