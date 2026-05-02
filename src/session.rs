@@ -760,3 +760,57 @@ macro_rules! __nokhwa_take_events_pick {
 // need **both** `nokhwa` and `nokhwa-core` as dependencies. The hidden items
 // are `#[doc(hidden)] pub` so the expansion can see them; do not rely on them
 // directly in application code.
+
+#[cfg(all(test, feature = "input-gstreamer"))]
+mod uri_scheme_tests {
+    use super::looks_like_uri_scheme;
+
+    #[test]
+    fn detects_all_known_schemes() {
+        for s in [
+            "rtsp://example.com/stream",
+            "rtsps://example.com/stream",
+            "rtmp://example.com/live",
+            "rtmps://example.com/live",
+            "http://example.com/video.mp4",
+            "https://example.com/video.mp4",
+            "file:///tmp/video.mp4",
+            "srt://example.com:8080",
+            "udp://239.0.0.1:5004",
+            "tcp://example.com:1234",
+        ] {
+            assert!(looks_like_uri_scheme(s), "expected URL: {s}");
+        }
+    }
+
+    #[test]
+    fn rejects_non_uri_inputs() {
+        for s in [
+            "",
+            "/dev/video0",
+            "video0",
+            "Logitech BRIO",
+            "C:\\Users\\dave\\video.mp4",
+            "ftp://example.com/file", // intentionally not in the list
+            "ws://example.com",
+            "data:text/plain,hello",
+            ":colon-prefixed",
+            "rtsp",      // missing `://`
+            "http:/foo", // single slash
+        ] {
+            assert!(!looks_like_uri_scheme(s), "expected non-URL: {s}");
+        }
+    }
+
+    #[test]
+    fn detection_is_case_insensitive() {
+        for s in [
+            "RTSP://example.com",
+            "Http://example.com",
+            "FILE:///tmp/x",
+            "RtMpS://example.com",
+        ] {
+            assert!(looks_like_uri_scheme(s), "expected URL (mixed case): {s}");
+        }
+    }
+}

@@ -82,6 +82,21 @@
 
 ### Testing
 
+* **Cover URI-scheme detection on both sides of the dual
+  implementation.** `nokhwa::session::looks_like_uri_scheme` and
+  `nokhwa-bindings-gstreamer::uri::looks_like_uri` are two
+  independent copies of the exact same scheme list (the doc comment
+  on the former literally says "Kept in sync with..."). Neither had a
+  single test; a regression in either copy or a divergence between
+  them would have shipped silently. Added 8 tests total: 3 in
+  `nokhwa::session::uri_scheme_tests` and 5 in
+  `nokhwa-bindings-gstreamer::uri::tests`, covering every documented
+  scheme, common non-URI inputs, case-insensitivity, and a
+  `scheme_list_shape_is_stable` test that pins which prefixes are
+  intentionally NOT recognised (`ftp://`, `ws://`, etc.) so anyone
+  adding a scheme has to update both implementations and the test.
+  Also covers `compatible_fourcc_from_negotiated` (singleton return
+  for each `FrameFormat`) which was previously untested.
 * **Cover `frame::convert_to_{rgb,rgba,luma}_buffer` size-mismatch
   guards.** The four dispatchers behind `RgbConversion::write_to` /
   `RgbaConversion::write_to` / `LumaConversion::write_to` reject
