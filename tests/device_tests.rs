@@ -598,6 +598,75 @@ fn compatible_formats_have_nonzero_resolutions() {
     }
 }
 
+/// `compatible_fourcc()` must return entries in `FrameFormat::Ord`
+/// order with no duplicates. This is the cross-backend invariant
+/// established by #194 / #195 / #196 / #197 / #198: V4L /
+/// AVFoundation / MSMF / GStreamer all produce the same `collect →
+/// sort → dedup` shape so callers see a stable list regardless of
+/// platform. A regression — backend-specific ordering or duplicate
+/// entries — would break UI code that branches on the first / last
+/// reported `FrameFormat`.
+#[test]
+fn compatible_fourcc_is_sorted_and_deduped() {
+    let OpenedCamera::Stream(mut cam) = open_first() else {
+        eprintln!(
+            "compatible_fourcc_is_sorted_and_deduped: backend is not Stream-capable; skipping."
+        );
+        return;
+    };
+    let fourccs = cam
+        .compatible_fourcc()
+        .expect("StreamCamera::compatible_fourcc");
+
+    let mut sorted = fourccs.clone();
+    sorted.sort();
+    assert_eq!(
+        fourccs, sorted,
+        "compatible_fourcc() returned entries out of FrameFormat::Ord order: {fourccs:?}"
+    );
+
+    let mut deduped = fourccs.clone();
+    deduped.dedup();
+    assert_eq!(
+        fourccs, deduped,
+        "compatible_fourcc() returned duplicate entries: {fourccs:?}"
+    );
+}
+
+/// `StreamCamera::open()` after a prior `close()` must succeed and
+/// resume frame delivery. Catches a regression where a backend leaves
+/// state behind on `close()` (e.g. an undropped session handle, a
+/// stuck `is_open` flag, or a stale frame channel) that prevents the
+/// next `open()` from re-establishing the stream. The lifecycle test
+/// only goes open → close once; this pins the reusable-across-cycles
+/// contract that long-running consumers (a UI that pauses + resumes
+/// the camera) depend on.
+#[test]
+fn stream_camera_reopen_after_close() {
+    let OpenedCamera::Stream(mut cam) = open_first() else {
+        eprintln!("stream_camera_reopen_after_close: backend is not Stream-capable; skipping.");
+        return;
+    };
+    cam.open().expect("first StreamCamera::open");
+    let _ = cam.frame().expect("first frame after first open");
+    cam.close().expect("first StreamCamera::close");
+    assert!(
+        !cam.is_open(),
+        "is_open() must be false after close(); reopen test cannot proceed"
+    );
+    cam.open().expect("second StreamCamera::open after close");
+    assert!(
+        cam.is_open(),
+        "is_open() must be true after the second open()"
+    );
+    let buf = cam.frame().expect("frame() after reopen");
+    assert!(
+        !buf.buffer().is_empty(),
+        "frame() returned empty payload after reopen — backend lost state across close+open"
+    );
+    cam.close().expect("second StreamCamera::close");
+}
+
 // The file is already gated by `device-test` at the top, so this
 // submodule's effective gate is `device-test AND runner` — i.e. it
 // compiles only when both features are enabled.

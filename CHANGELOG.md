@@ -116,6 +116,20 @@
 
 ### Testing
 
+* **`tests/device_tests.rs`: add `compatible_fourcc_is_sorted_and_deduped`
+  + `stream_camera_reopen_after_close`.** The first pins the
+  cross-backend `FrameFormat::Ord`-sorted, deduplicated invariant
+  established by #194 / #195 / #196 / #197 / #198 — V4L /
+  AVFoundation / MSMF / GStreamer all share the canonical `collect →
+  sort → dedup` shape, and a regression that exposes raw enumeration
+  order from the underlying API would break consumers branching on
+  the first / last entry. The second pins the open → close → open
+  re-entry contract that long-running consumers (a UI that pauses +
+  resumes the camera) depend on; the existing
+  `stream_camera_is_open_lifecycle` only walks one cycle, so a
+  backend that leaks state on `close()` (stuck `is_open` flag, an
+  undropped session handle, a stale frame channel) would slip past
+  it.
 * **Pin `yuyv444_to_rgb` / `yuyv444_to_rgba` BT.601 contract with 5
   unit tests in `nokhwa-core/src/types_tests.rs`.**
   `yuyv444_to_rgb` is the per-pixel kernel for YCbCr-4:4:4 → RGB888
