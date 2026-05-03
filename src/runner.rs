@@ -804,4 +804,73 @@ mod tests {
     fn overflow_default_is_drop_newest() {
         assert_eq!(Overflow::default(), Overflow::DropNewest);
     }
+
+    /// `make_channel` `DropOldest` relay's producer-disconnect flush
+    /// loop (`src/runner.rs:215-220`) drains the in-memory `VecDeque`
+    /// into the user channel after the producer disconnects. The
+    /// existing `drop_oldest_relay_exits_when_rx_dropped` covers the
+    /// rx-drop arm, but exercises only the *empty-buf* path — `rx` is
+    /// dropped before any item is sent, so the relay either observes
+    /// `Disconnected` on `user_tx.try_send` (line 187) or never enters
+    /// the flush loop at all.
+    ///
+    /// This test covers the *non-empty-buf* path: items are delivered
+    /// into the relay's buffer, the producer is then dropped (so the
+    /// relay observes `RecvTimeoutError::Disconnected` on lines
+    /// 206-221), and the flush loop drains the buffered items into
+    /// `user_tx` via blocking `send`. Then the user drains everything
+    /// from `user_rx` and the relay handle must join cleanly. A
+    /// regression that turned the flush loop's blocking `send` into a
+    /// `try_send` retry-spin (or dropped the loop entirely) would
+    /// surface here as either dropped items or a stuck relay.
+    #[test]
+    fn drop_oldest_relay_flushes_non_empty_buffer_on_producer_disconnect() {
+        use std::time::Instant;
+
+        let (tx, rx, relay) = make_channel::<u32>(2, Overflow::DropOldest);
+        let relay = relay.unwrap();
+
+        // Push 2 items so the relay buffers them. We don't drain
+        // concurrently — the relay's inner loop will move them into
+        // `user_tx` (capacity 2) on its next iteration. After this,
+        // `prod_tx`, the relay's `buf`, and `user_tx` together hold
+        // exactly 2 items somewhere along the chain.
+        tx.send(10).unwrap();
+        tx.send(20).unwrap();
+
+        // Drop the producer side. The relay's `relay_rx.recv_timeout`
+        // (or the next `recv` if `buf` is empty) returns
+        // `Disconnected`, which sends it into the flush loop.
+        drop(tx);
+
+        // Drain. Both items must arrive in FIFO order — the flush
+        // loop preserves order via `pop_front` + `send`.
+        let mut received = Vec::new();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while received.len() < 2 && Instant::now() < deadline {
+            if let Ok(v) = rx.recv_timeout(Duration::from_millis(50)) {
+                received.push(v);
+            }
+        }
+        assert_eq!(
+            received,
+            vec![10, 20],
+            "producer-disconnect flush must preserve FIFO order"
+        );
+
+        // Once the buffer is fully flushed, the relay's flush loop
+        // exits (`return` after the while). The handle must join
+        // promptly — a stuck relay would block the test forever.
+        let join_deadline = Instant::now() + Duration::from_secs(1);
+        while !relay.is_finished() {
+            assert!(
+                Instant::now() < join_deadline,
+                "DropOldest relay did not exit after producer \
+                 disconnect + buffer drain; flush loop at \
+                 src/runner.rs:215-220 likely regressed"
+            );
+            std::thread::yield_now();
+        }
+        relay.join().unwrap();
+    }
 }

@@ -232,6 +232,23 @@
 
 ### Testing
 
+* **Pin `make_channel` `DropOldest` relay producer-disconnect flush
+  loop with a non-empty buffer.** `src/runner.rs:215-220` is the
+  flush loop that drains the relay's in-memory `VecDeque` into
+  `user_tx` (via blocking `send`) after the producer disconnects. The
+  existing `drop_oldest_relay_exits_when_rx_dropped` covers the
+  rx-drop arm but exercises only the *empty-buf* path: rx is dropped
+  before any item is sent, so the relay either observes
+  `Disconnected` on `try_send` (line 187) or never enters the flush
+  loop at all. Nothing pinned the path where items are buffered, the
+  producer disconnects, and the flush loop drains them in FIFO
+  order. A regression that swapped the blocking `send` for a
+  `try_send` retry-spin (or dropped the loop entirely) would surface
+  as either dropped items at shutdown or a stuck relay. New
+  `drop_oldest_relay_flushes_non_empty_buffer_on_producer_disconnect`
+  sends two items into a `capacity=2` relay, drops the producer, then
+  drains both via `rx` and asserts FIFO order plus a 1-second
+  bounded relay-handle exit.
 * **Pin `CameraRunner::shutdown` ordering invariant for the
   `Overflow::Block` worker.** Symmetric companion to the `DropOldest`
   pin. `src/runner.rs:534-540` explicitly documents that for
