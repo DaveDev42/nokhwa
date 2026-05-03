@@ -232,6 +232,22 @@
 
 ### Testing
 
+* **Remove 19 redundant `contains(...)` Display tests from
+  `error_tests.rs`.** Every `NokhwaError` Display variant already has
+  a verbatim `*_display_exact_format` pin (lines 130-336 of
+  `nokhwa-core/src/error_tests.rs` after the cleanup), so the older
+  keyword tests at the top of the file (`*_display_without_backend`,
+  `*_display_with_backend`, `timeout_error_display_includes_duration`,
+  `process_frame_error_display_includes_src_and_destination`,
+  `uninitialized_error_display_mentions_init`, etc.) and the middle
+  block (`*_display_includes_*` for `InitializeError`,
+  `ShutdownError`, `StructureError`, `OpenDeviceError`,
+  `GetPropertyError`, `SetPropertyError`, `NotImplementedError`)
+  were strictly weaker — a refactor that reworded the Display string
+  while preserving the keywords would have passed the contains
+  checks while regressing user-visible output. Removed the redundant
+  tests; the exact-format pins are sufficient. Test count drops from
+  414 to 395.
 * **Tighten `assert_process_frame_err` from `contains(needle)` to
   exact-string equality across all 34 callers.** The shared helper
   in `nokhwa-core/src/frame_tests.rs:1363` was matching the `error`
