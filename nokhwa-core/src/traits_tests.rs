@@ -19,11 +19,11 @@
 use crate::buffer::Buffer;
 use crate::error::NokhwaError;
 use crate::traits::{
-    CameraDevice, CameraEvent, EventPoll, EventSource, FrameSource, ShutterCapture,
+    CameraDevice, CameraEvent, EventPoll, EventSource, FrameSource, HotplugEvent, ShutterCapture,
 };
 use crate::types::{
-    ApiBackend, CameraControl, CameraFormat, CameraInfo, ControlValueSetter, FrameFormat,
-    KnownCameraControl, Resolution,
+    ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo, ControlValueSetter,
+    FrameFormat, KnownCameraControl, Resolution,
 };
 use std::borrow::Cow;
 use std::time::Duration;
@@ -532,4 +532,114 @@ fn frame_timeout_default_forwards_to_frame() {
     assert_eq!(c.frame_calls, 1);
     let _ = c.frame_timeout(Duration::from_millis(50));
     assert_eq!(c.frame_calls, 2);
+}
+
+// ─────────────── HotplugEvent + CameraEvent derive contracts ──────────
+//
+// `HotplugEvent` derives `Clone, PartialEq, Eq, Hash, Debug`. The trait
+// docs explicitly direct callers to dedup events via `HashSet` / hashmap
+// keys and to match Connected / Disconnected pairs by
+// `CameraInfo::index()`. A regression that drops or weakens any of those
+// derives would silently break that contract for every downstream
+// hotplug consumer. `CameraEvent` derives `Clone, Debug` only (no Eq —
+// `CaptureError { code, message }` carries a `String`); pin those.
+
+fn make_info(idx: u32, name: &str) -> CameraInfo {
+    CameraInfo::new(name, "desc", "misc", CameraIndex::Index(idx))
+}
+
+#[test]
+fn hotplug_event_partial_eq_compares_full_camera_info() {
+    let a = HotplugEvent::Connected(make_info(0, "Cam"));
+    let b = HotplugEvent::Connected(make_info(0, "Cam"));
+    let c = HotplugEvent::Connected(make_info(0, "OtherName"));
+    assert_eq!(a, b);
+    assert_ne!(a, c);
+}
+
+#[test]
+fn hotplug_event_connected_and_disconnected_with_same_info_are_distinct() {
+    let info = make_info(0, "Cam");
+    let connected = HotplugEvent::Connected(info.clone());
+    let disconnected = HotplugEvent::Disconnected(info);
+    assert_ne!(connected, disconnected);
+}
+
+#[test]
+fn hotplug_event_clone_round_trip_preserves_info() {
+    let info = make_info(7, "Cam");
+    let ev = HotplugEvent::Disconnected(info);
+    let cloned = ev.clone();
+    assert_eq!(ev, cloned);
+    if let HotplugEvent::Disconnected(c) = cloned {
+        assert_eq!(c.index(), &CameraIndex::Index(7));
+        assert_eq!(c.human_name(), "Cam");
+    } else {
+        panic!("clone changed variant");
+    }
+}
+
+#[test]
+fn hotplug_event_dedups_in_hashset() {
+    use std::collections::HashSet;
+    let mut set = HashSet::new();
+    set.insert(HotplugEvent::Connected(make_info(0, "Cam")));
+    set.insert(HotplugEvent::Connected(make_info(0, "Cam")));
+    set.insert(HotplugEvent::Disconnected(make_info(0, "Cam")));
+    assert_eq!(set.len(), 2);
+}
+
+#[test]
+fn hotplug_event_index_matches_across_connect_disconnect_with_drift() {
+    // Documented contract: "best-effort" name/desc/misc may drift between
+    // Connected and Disconnected; consumers should match on `index()`.
+    let connected = HotplugEvent::Connected(make_info(3, "Cam Original"));
+    let disconnected = HotplugEvent::Disconnected(make_info(3, "Cam Drifted"));
+    let connected_idx = match &connected {
+        HotplugEvent::Connected(i) | HotplugEvent::Disconnected(i) => i.index().clone(),
+    };
+    let disconnected_idx = match &disconnected {
+        HotplugEvent::Connected(i) | HotplugEvent::Disconnected(i) => i.index().clone(),
+    };
+    assert_eq!(connected_idx, disconnected_idx);
+    // Structural equality must still differ because name drifted.
+    assert_ne!(connected, disconnected);
+}
+
+#[test]
+fn hotplug_event_debug_includes_variant_and_camera_info() {
+    let s = format!("{:?}", HotplugEvent::Connected(make_info(0, "Cam")));
+    assert!(s.contains("Connected"), "got: {s}");
+    assert!(s.contains("Cam"), "got: {s}");
+}
+
+#[test]
+fn camera_event_clone_preserves_capture_error_fields() {
+    let ev = CameraEvent::CaptureError {
+        code: -42,
+        message: "boom".to_string(),
+    };
+    let cloned = ev.clone();
+    if let CameraEvent::CaptureError { code, message } = cloned {
+        assert_eq!(code, -42);
+        assert_eq!(message, "boom");
+    } else {
+        panic!("clone changed variant");
+    }
+}
+
+#[test]
+fn camera_event_debug_includes_variant_name() {
+    assert!(format!("{:?}", CameraEvent::Disconnected).contains("Disconnected"));
+    assert!(format!("{:?}", CameraEvent::WillShutDown).contains("WillShutDown"));
+    let s = format!(
+        "{:?}",
+        CameraEvent::CaptureError {
+            code: 1,
+            message: "x".to_string()
+        }
+    );
+    assert!(s.contains("CaptureError"), "got: {s}");
+    assert!(s.contains('1'), "got: {s}");
+    assert!(s.contains('x'), "got: {s}");
 }
