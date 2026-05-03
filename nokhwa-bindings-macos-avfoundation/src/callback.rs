@@ -50,6 +50,43 @@ fn mach_absolute_time_nanos() -> u64 {
 // are not flagged as items_after_statements inside the LazyLock closure.
 // The functions are still only referenced inside the closure.
 
+/// Convert a `CMSampleBuffer` presentation timestamp into an absolute
+/// wallclock instant.
+///
+/// `pts.value / pts.timescale` is the buffer's presentation time in
+/// `CLOCK_MACH` (the same clock as `mach_absolute_time`). We compute
+/// the buffer's *age* relative to `mono_now_nanos` and subtract that
+/// from `wall_now`'s `UNIX_EPOCH` offset to recover when the sensor
+/// captured it.
+///
+/// Returns `None` for any of the documented degenerate cases: an
+/// uninitialised `CMTime` (`timescale == 0`), a system clock that
+/// is before the unix epoch (`duration_since` fails), or an `age`
+/// large enough that subtracting it from `wall_now` underflows.
+///
+/// `pts.value` is `i64` and is treated as non-negative — Apple
+/// documents `presentationTimeStamp` as monotonic and non-negative
+/// during an active capture session, so we use `saturating_sub` on
+/// `mono_now_nanos - pts_nanos` to clamp future-PTS clock skew to a
+/// zero-age (instead-of-panic) result.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn pts_to_wallclock(
+    pts: crate::ffi::CMTime,
+    mono_now_nanos: u64,
+    wall_now: std::time::SystemTime,
+) -> Option<Duration> {
+    if pts.timescale <= 0 {
+        return None;
+    }
+    let pts_nanos = (pts.value as u128).saturating_mul(1_000_000_000) / (pts.timescale as u128);
+    let mono_now = u128::from(mono_now_nanos);
+    let age = Duration::from_nanos(mono_now.saturating_sub(pts_nanos) as u64);
+    wall_now
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|wall_dur| wall_dur.checked_sub(age))
+}
+
 // TODO: Migrate to DeclaredClass + Ivar API when get_ivar/get_mut_ivar are removed in a future objc2 release
 #[allow(deprecated)]
 extern "C" fn my_callback_get_arcmutptr(this: *mut AnyObject, _: Sel) -> *const c_void {
@@ -118,23 +155,11 @@ extern "C" fn capture_out_callback(
     // Compute sensor capture timestamp from CMSampleBuffer presentation time
     let capture_ts = {
         let pts = unsafe { CMSampleBufferGetPresentationTimeStamp(didOutputSampleBuffer) };
-        if pts.timescale > 0 {
-            // pts.value is i64 (non-negative during active capture); cast to u128 is safe.
-            // pts.timescale is i32 (always > 0 here); cast to u128 is safe.
-            let pts_nanos =
-                (pts.value as u128).saturating_mul(1_000_000_000) / (pts.timescale as u128);
-            let mono_now_nanos = u128::from(mach_absolute_time_nanos());
-            let wall_now = std::time::SystemTime::now();
-
-            // saturating_sub result ≤ mono_now_nanos ≤ u64::MAX (mach_absolute_time fits u64).
-            let age = Duration::from_nanos(mono_now_nanos.saturating_sub(pts_nanos) as u64);
-            wall_now
-                .duration_since(std::time::UNIX_EPOCH)
-                .ok()
-                .and_then(|wall_dur| wall_dur.checked_sub(age))
-        } else {
-            None
-        }
+        pts_to_wallclock(
+            pts,
+            mach_absolute_time_nanos(),
+            std::time::SystemTime::now(),
+        )
     };
 
     let bufferlck_cv: *const c_void = unsafe { objc2::msg_send![this, bufferPtr] };
@@ -291,5 +316,92 @@ impl Drop for AVCaptureVideoCallback {
                 dispatch_release(DispatchQueue(self.queue.0));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::pts_to_wallclock;
+    use crate::ffi::CMTime;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    fn cmtime(value: i64, timescale: i32) -> CMTime {
+        CMTime {
+            value,
+            timescale,
+            flags: 0,
+            epoch: 0,
+        }
+    }
+
+    /// `timescale == 0` is the documented "uninitialised CMTime"
+    /// sentinel and must short-circuit to `None` before the
+    /// division — the previous inline code did this too, but with
+    /// a `>` rather than `<=` check, so let's pin both forms.
+    #[test]
+    fn pts_to_wallclock_zero_timescale_returns_none() {
+        let pts = cmtime(1_000_000_000, 0);
+        let wall = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        assert_eq!(pts_to_wallclock(pts, 5_000_000_000, wall), None);
+    }
+
+    /// Negative timescale is an invalid Apple value (Apple
+    /// documents `timescale > 0` for valid presentation times); we
+    /// reject it the same as zero.
+    #[test]
+    fn pts_to_wallclock_negative_timescale_returns_none() {
+        let pts = cmtime(1_000_000_000, -1);
+        let wall = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        assert_eq!(pts_to_wallclock(pts, 5_000_000_000, wall), None);
+    }
+
+    /// Happy path: a 1-second-old PTS (mono_now - pts_nanos = 1s)
+    /// pins back to wall_now - 1s.
+    #[test]
+    fn pts_to_wallclock_1s_old_pts_subtracts_1s_from_wall_now() {
+        // pts_nanos = 4_000_000_000 / 1 = 4 s expressed as nanos
+        let pts = cmtime(4_000_000_000, 1_000_000_000);
+        let mono_now_nanos: u64 = 5_000_000_000; // 5 s on the mach clock
+        let wall = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        let observed = pts_to_wallclock(pts, mono_now_nanos, wall)
+            .expect("happy-path conversion must succeed");
+        let expected = Duration::from_secs(1_700_000_000 - 1);
+        assert_eq!(observed, expected);
+    }
+
+    /// Future PTS (pts_nanos > mono_now_nanos) — clock skew or a
+    /// buggy emulator. The `saturating_sub` clamps the age to 0 so
+    /// the returned wallclock equals `wall_now`'s offset; pin that
+    /// the function returns `Some(_)` rather than panicking.
+    #[test]
+    fn pts_to_wallclock_future_pts_clamps_age_to_zero() {
+        let pts = cmtime(10_000_000_000, 1_000_000_000); // 10 s
+        let mono_now_nanos: u64 = 5_000_000_000; // 5 s — pts is in the future
+        let wall = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        let observed =
+            pts_to_wallclock(pts, mono_now_nanos, wall).expect("future-pts must clamp, not panic");
+        assert_eq!(observed, Duration::from_secs(1_700_000_000));
+    }
+
+    /// `wall_now` before `UNIX_EPOCH` (impossible on real hosts but
+    /// possible in a synthetic mock) → `duration_since` returns
+    /// `Err` → helper returns `None` rather than wrapping.
+    #[test]
+    fn pts_to_wallclock_wall_before_unix_epoch_returns_none() {
+        let pts = cmtime(1_000_000_000, 1_000_000_000);
+        let wall = UNIX_EPOCH - Duration::from_secs(1);
+        assert_eq!(pts_to_wallclock(pts, 5_000_000_000, wall), None);
+    }
+
+    /// `age > wall_now` (e.g. mocked wall_now of 1 ns post-epoch
+    /// with a 5-second-old buffer) → `checked_sub` returns `None`
+    /// instead of underflowing.
+    #[test]
+    fn pts_to_wallclock_age_exceeds_wall_now_returns_none() {
+        // pts_nanos = 0 (timescale=1, value=0), mono_now=5s, age=5s
+        let pts = cmtime(0, 1);
+        let mono_now_nanos: u64 = 5_000_000_000;
+        let wall = UNIX_EPOCH + Duration::from_nanos(1);
+        assert_eq!(pts_to_wallclock(pts, mono_now_nanos, wall), None);
     }
 }

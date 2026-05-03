@@ -377,6 +377,23 @@
 
 ### Testing
 
+* **Pin AVFoundation `pts_to_wallclock` PTS→wallclock conversion in
+  `nokhwa-bindings-macos-avfoundation/src/callback.rs`.** The
+  capture-callback's `CMSampleBuffer` presentation-time → wallclock
+  conversion was inlined inside `capture_out_callback`, so the
+  `timescale ≤ 0` guard, future-PTS clamp (via `saturating_sub`),
+  pre-`UNIX_EPOCH` system clock guard, and `wall_now < age`
+  underflow guard could not be unit-tested without driving a real
+  `AVCaptureSession`. Extracted a pure
+  `pts_to_wallclock(pts, mono_now_nanos, wall_now) -> Option<Duration>`
+  helper and pinned all six branches: zero timescale, negative
+  timescale, 1-second-old PTS subtracts 1s from wall_now, future
+  PTS clamps age to zero, wall_now before unix epoch returns None,
+  and age-exceeds-wall_now returns None. The capture callback now
+  reads the two clocks once at the call site and delegates the
+  arithmetic to the helper. Tests execute on the
+  `AVFoundation unit tests (macOS)` CI job which is now wired up
+  for apple-gated test execution.
 * **Pin MSMF frame-rate `UINT64` fraction parsing in
   `nokhwa-bindings-windows-msmf/src/lib.rs`.** `parse_native_media_types`
   decodes `MF_MT_FRAME_RATE` / `_RANGE_MIN` / `_RANGE_MAX` attributes
