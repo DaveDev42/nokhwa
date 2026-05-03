@@ -97,6 +97,32 @@ fn frame_format_display_roundtrip() {
     }
 }
 
+// `frame_format_display_roundtrip` is *symmetry-only*: it parses the
+// Display output back via `FromStr` and checks round-trip equality, so
+// it would pass even if every variant accidentally emitted the same
+// string (as long as `FromStr` matched the same mapping) or two
+// variants swapped their Display strings (as long as `FromStr`
+// swapped to match). Only `RAWBGR` has a standalone exact pin
+// (`frame_format_rawbgr_display_parse`); `CameraFormat::Display`
+// indirectly pins `MJPEG` + `YUYV` via the embedded `"{format} Format"`
+// rendering — but `GRAY`, `RAWRGB`, and `NV12` are not exact-pinned
+// anywhere. The Display strings appear in `NokhwaError::ProcessFrameError`
+// (`"... process frame {src} to {destination} ..."`), `ReadFrameError`
+// (`"... (format {f}) ..."`), and `CameraFormat::Display`, all of which
+// are user-visible. A refactor that renamed `RAWRGB` to `"RGB"` or
+// `"RAW_RGB"` would survive the roundtrip but break the embedded
+// renderings. Pin every variant verbatim. Guards
+// `nokhwa-core/src/types.rs:394-416`.
+#[test]
+fn frame_format_display_exact_strings() {
+    assert_eq!(FrameFormat::MJPEG.to_string(), "MJPEG");
+    assert_eq!(FrameFormat::YUYV.to_string(), "YUYV");
+    assert_eq!(FrameFormat::GRAY.to_string(), "GRAY");
+    assert_eq!(FrameFormat::RAWRGB.to_string(), "RAWRGB");
+    assert_eq!(FrameFormat::RAWBGR.to_string(), "RAWBGR");
+    assert_eq!(FrameFormat::NV12.to_string(), "NV12");
+}
+
 #[test]
 fn frame_formats_non_empty() {
     assert!(!frame_formats().is_empty());
