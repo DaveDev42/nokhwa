@@ -232,6 +232,33 @@
 
 ### Testing
 
+* **Pin `MockFrameSource::frame_raw`, `compatible_formats`, and
+  `MockEventfulFrameSource::take_events` second-call backend
+  payload directly.** Three narrow-contract gaps in
+  `nokhwa-core/src/testing.rs::tests`:
+  (1) `MockFrameSource::frame_raw` (`testing.rs:148`) was only
+  exercised through the `MockEventfulFrameSource` passthrough; a
+  regression that swapped the `frame()` and `frame_raw()` bodies
+  (returning a `Cow::Owned` of zero bytes, or stripping the
+  payload) would still pass the eventful wrapper test. Pinned the
+  base directly: success returns owned bytes equal to the pushed
+  buffer, empty queue returns `TimeoutError(Duration::ZERO)`
+  exactly.
+  (2) `MockFrameSource::compatible_formats` and
+  `compatible_fourcc` (`testing.rs:127`) intentionally echo a
+  singleton vec of the currently-negotiated format — what makes
+  the mock useful for "only thing on offer" negotiation tests. A
+  regression that returned `vec![]` or a wider list would
+  fundamentally change the mock's semantics. Pinned the base
+  contract directly (default → after `set_format`).
+  (3) `eventful_source_hands_out_poll_once` ignored the
+  `ApiBackend` payload of `UnsupportedOperationError` via
+  `matches!(_, Err(UnsupportedOperationError(_)))`. A regression
+  that hard-coded a different backend (`OpenCv`, `Auto`,
+  `Custom("...")`) would mislead error consumers about which
+  backend refused the second take. Added
+  `eventful_source_second_take_events_carries_browser_backend`
+  pinning the variant + the exact `ApiBackend::Browser` payload.
 * **Tighten `raw_texture_layout` error-path pins.** Three narrow-
   contract gaps in `nokhwa-core/src/wgpu.rs::tests`:
   (1) `yuyv_rejects_odd_width` destructured `..` and discarded the

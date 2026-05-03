@@ -753,4 +753,87 @@ mod tests {
         assert_eq!(&*raw, &expected[..]);
         assert!(matches!(src.frame_raw(), Err(NokhwaError::TimeoutError(_))));
     }
+
+    // The base `MockFrameSource::frame_raw` (`testing.rs:148-153`) is
+    // exercised indirectly through `MockEventfulFrameSource`'s
+    // passthrough, but not directly. A regression that, say, swapped
+    // the `frame()` and `frame_raw()` bodies (returning a `Buffer`
+    // wrapper inside a `Cow::Owned` of zero bytes, or stripping the
+    // payload bytes) would still pass the eventful wrapper test
+    // because that test relies on the same code path. Pin the base
+    // contract directly: success returns owned bytes equal to the
+    // pushed buffer, empty queue returns
+    // `TimeoutError(Duration::ZERO)` exactly like `frame()`.
+    #[test]
+    fn mock_frame_source_frame_raw_returns_pushed_bytes_and_zero_timeout_on_empty() {
+        let mut src = MockFrameSource::new(0);
+        let pushed = mock_frame(2, 3, FrameFormat::RAWRGB);
+        let expected = pushed.buffer().to_vec();
+        src.push_frame(pushed);
+        let raw = src.frame_raw().unwrap();
+        assert_eq!(&*raw, &expected[..]);
+        // Subsequent call on a now-empty queue must return
+        // `TimeoutError(Duration::ZERO)` (line 151) — pin the exact
+        // duration so a regression that surfaced a different sentinel
+        // (`Duration::MAX`, an env-var override, etc.) would fail.
+        match src.frame_raw() {
+            Err(NokhwaError::TimeoutError(d)) => assert_eq!(d, Duration::ZERO),
+            other => panic!("expected TimeoutError(0), got {other:?}"),
+        }
+    }
+
+    // `MockFrameSource::compatible_formats` and `compatible_fourcc`
+    // (`testing.rs:127-132`) intentionally echo back a single-element
+    // vector containing only the currently-negotiated format. This
+    // is what makes the mock useful for exercising format-negotiation
+    // logic that picks "the only thing on offer". A regression that
+    // returned `vec![]` (no options) or a wider list (every
+    // `FrameFormat` variant) would fundamentally change the mock's
+    // semantics. The eventful wrapper test already pins this through
+    // the passthrough, but the base mock is its own user-facing
+    // surface — pin it directly so a divergence between base and
+    // wrapper would show up here.
+    #[test]
+    fn mock_frame_source_compatible_formats_echo_singleton() {
+        let mut src = MockFrameSource::new(0);
+        // Default format is 640x480 YUYV @ 30 (line 65).
+        let default_fmt = src.negotiated_format();
+        assert_eq!(src.compatible_formats().unwrap(), vec![default_fmt]);
+        assert_eq!(src.compatible_fourcc().unwrap(), vec![FrameFormat::YUYV]);
+
+        // After `set_format`, the singleton must echo the new format.
+        let new_fmt = CameraFormat::new(Resolution::new(1920, 1080), FrameFormat::MJPEG, 60);
+        src.set_format(new_fmt).unwrap();
+        assert_eq!(src.compatible_formats().unwrap(), vec![new_fmt]);
+        assert_eq!(src.compatible_fourcc().unwrap(), vec![FrameFormat::MJPEG]);
+    }
+
+    // `MockEventfulFrameSource::take_events` returns
+    // `UnsupportedOperationError(ApiBackend::Browser)` on the
+    // second call (`testing.rs:386-390`). The existing
+    // `eventful_source_hands_out_poll_once` test uses
+    // `matches!(_, Err(UnsupportedOperationError(_)))` and discards
+    // the backend payload — a regression that hard-coded a different
+    // backend (`ApiBackend::OpenCv`, `ApiBackend::Auto`,
+    // `ApiBackend::Custom("...")`) would mislead error consumers
+    // about which backend refused the second take and slip past the
+    // existing assertion. Pin the exact backend variant.
+    #[test]
+    fn eventful_source_second_take_events_carries_browser_backend() {
+        let (_tx, rx) = channel();
+        let poll: Box<dyn EventPoll + Send> = Box::new(MpscEventPoll::new(rx));
+        let mut src = MockEventfulFrameSource::new(0, poll);
+        src.take_events().unwrap();
+        // `Result<Box<dyn EventPoll + Send>, NokhwaError>` doesn't
+        // implement `Debug` (the trait object's vtable is opaque), so
+        // use `Result::err()` to discard the unreachable `Ok` arm and
+        // then assert the variant + payload directly.
+        let err = src.take_events().err().expect("second take must fail");
+        match err {
+            NokhwaError::UnsupportedOperationError(b) => {
+                assert_eq!(b, ApiBackend::Browser);
+            }
+            other => panic!("expected UnsupportedOperationError(Browser), got {other:?}"),
+        }
+    }
 }
