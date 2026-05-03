@@ -232,6 +232,21 @@
 
 ### Testing
 
+* **Pin YUYV `into_luma().write_to()` size-guard rejections.**
+  `buf_yuyv_extract_luma` (`nokhwa-core/src/types.rs:1848-1872`) has
+  two pre-conditions before its SIMD copy: input length divisible
+  by 4 (1849-1853) and `dest.len() == data.len() / 2`
+  (1858-1867). NV12's symmetric guards are pinned by
+  `nv12_into_luma_write_to_rejects_wrong_input_size` and
+  `nv12_into_luma_write_to_rejects_mismatched_dest`; YUYV had only
+  the happy-path `yuyv_luma_write_to`. A regression that dropped
+  either guard would surface as either a `crate::simd` out-of-bounds
+  panic or silent truncation / garbage in the dest buffer — neither
+  produces a clean `ProcessFrameError`. New
+  `yuyv_into_luma_write_to_rejects_wrong_input_size` (6-byte input)
+  and `yuyv_into_luma_write_to_rejects_mismatched_dest` (3-byte dest
+  for a 2x2 frame) mirror the NV12 pattern via
+  `assert_process_frame_err`.
 * **Pin `Frame::try_new` `ProcessFrameError` shape on format
   mismatch.** `nokhwa-core/src/frame.rs:76-92` returns
   `NokhwaError::ProcessFrameError { src, destination, error }` with
