@@ -30,6 +30,20 @@ jobs:
       # tests covering `mock_frame` / `mock_info` ship untested
       # without this third invocation.
       - run: cargo test -p nokhwa-core --features testing
+      # The root `nokhwa` crate's headless unit + integration tests
+      # (`src/init.rs`, `src/query.rs`, `src/runner.rs`,
+      # `tests/session.rs`, `tests/format_tests.rs`, `tests/runner.rs`)
+      # only run when `cargo test -p nokhwa` is invoked — they have no
+      # other entry point in the matrix. The root crate has a
+      # `compile_error!` requiring at least one `input-*` feature, so
+      # we pick `input-v4l` (the canonical Linux backend) plus
+      # `runner` to compile-in the runner integration tests in
+      # `tests/runner.rs`. None of these tests touch real hardware —
+      # `tests/device_tests.rs` is gated on `device-test` and stays
+      # disabled here. Without this step, ~65 tests covering
+      # capability dispatch, runner channel policy, and format
+      # round-trips ship to `main` untested.
+      - run: cargo test -p nokhwa --lib --tests --features input-v4l,runner
 
   # Verifies output feature deps resolve correctly.
   # input-v4l satisfies the compile_error! guard that requires an input backend.
