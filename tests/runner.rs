@@ -2030,3 +2030,94 @@ fn runner_spawn_shutter_worker_exits_on_dropped_pictures_receiver() {
          still routes to a live worker after 3s)"
     );
 }
+
+// ────────── shutdown ordering: relay must not deadlock on close ──────
+//
+// `src/runner.rs:206-220` documents an explicit ordering invariant of
+// the `DropOldest` relay loop:
+//
+//     // The blocking `user_tx.send` here is safe only because
+//     // `CameraRunner::shutdown` drops the user-facing `Receiver`
+//     // *before* joining the relay — so if no one is draining,
+//     // `send` fails with `SendError` and we exit. Future refactors
+//     // of `shutdown` must preserve that ordering or this loop can
+//     // deadlock.
+//
+// The current `shutdown()` (`src/runner.rs:532-558`):
+//   1. send `Command::Die` to worker
+//   2. drop user-facing receivers (frames / pictures / events)
+//   3. join the worker handle
+//   4. join each relay handle
+//
+// A regression that swapped (2) and (4) — joining relays before
+// dropping the receivers — would let the relay's `user_tx.send(front)`
+// in the producer-disconnected drain loop block forever waiting for a
+// reader that no longer exists, and `relay.join()` would never return.
+// `runner.stop()` (or `Drop`) would hang.
+//
+// Test: build a `DropOldest` runner with `frames_capacity = 1` driven
+// by `EndlessFrameSource` so the worker continually pushes through the
+// relay. Don't drain anything — the user-side channel and the relay's
+// VecDeque both fill. Then call `runner.stop()` on a side thread with
+// a 3-second deadline. With the correct ordering, the relay's drain
+// loop's `user_tx.send` returns `SendError` immediately and the join
+// completes; with reversed ordering the join hangs. Mirrors the
+// stop-with-deadline pattern used by
+// `runner_event_worker_exits_when_events_receiver_dropped`.
+
+#[test]
+fn runner_shutdown_drops_receivers_before_joining_drop_oldest_relay() {
+    use nokhwa_core::types::CameraIndex;
+    use std::time::Instant;
+
+    let src = EndlessFrameSource {
+        info: CameraInfo::new(
+            "endless-relay",
+            "endless-relay",
+            "endless-relay",
+            CameraIndex::Index(0),
+        ),
+        format: CameraFormat::new(
+            nokhwa_core::types::Resolution::new(4, 4),
+            FrameFormat::YUYV,
+            30,
+        ),
+    };
+    let opened = OpenedCamera::from_device(Box::new(src));
+    let cfg = RunnerConfig {
+        // Capacity 1 + DropOldest forces the relay to be the bottleneck:
+        // worker keeps pushing, the relay's VecDeque/user_tx pair fills,
+        // and the producer-disconnect drain loop is the path that has
+        // to exit cleanly. Larger capacities still pass but exercise
+        // the contract less aggressively.
+        frames_capacity: 1,
+        overflow: Overflow::DropOldest,
+        ..RunnerConfig::default()
+    };
+    let runner = CameraRunner::spawn(opened, cfg).unwrap();
+
+    // Let the worker run long enough to fill the relay's VecDeque +
+    // user_tx (capacity 1 each, plus prod_tx capacity 1 = 3 in-flight).
+    // 100 ms at 10 ms `poll_interval` is ~10 iterations of the worker
+    // loop — well past saturation.
+    std::thread::sleep(Duration::from_millis(100));
+
+    // Drop without ever calling `frames()` / `take_frames()` to drain.
+    // If `shutdown()` reverses the documented ordering, the relay's
+    // `user_tx.send(front)` in the producer-disconnect drain loop
+    // blocks forever and `relay.join()` never returns.
+    let stopper = std::thread::spawn(move || runner.stop());
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !stopper.is_finished() {
+        if Instant::now() >= deadline {
+            panic!(
+                "runner.stop() hung; DropOldest relay likely deadlocked \
+                 in user_tx.send because shutdown() joined the relay \
+                 before dropping the user-facing receiver \
+                 (src/runner.rs:206-220 ordering invariant regressed)"
+            );
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    stopper.join().unwrap().unwrap();
+}
