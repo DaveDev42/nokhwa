@@ -529,6 +529,37 @@ fn fulfill_empty_format_list() {
 }
 
 #[test]
+fn fulfill_absolute_highest_framerate_returns_none_for_empty_format_list() {
+    // `AbsoluteHighestFrameRate` filters by decoder set then runs
+    // `max_by_key(|f| f.frame_rate())?`. On `&[]` the iterator is
+    // empty and `?` short-circuits to `None`. Symmetric with
+    // `fulfill_empty_format_list` (which only covers
+    // `AbsoluteHighestResolution`); pinning this arm independently
+    // catches a regression that adds a fallback to one variant
+    // without the other.
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::AbsoluteHighestFrameRate,
+        &[FrameFormat::MJPEG],
+    );
+    assert!(req.fulfill(&[]).is_none());
+}
+
+#[test]
+fn fulfill_highest_framerate_returns_none_for_empty_format_list() {
+    // `HighestFrameRate(fps)` filters by decoder set + frame_rate ==
+    // fps then runs `max_by_key(|f| f.resolution())?`. Empty input
+    // → empty filter → `?` short-circuits to `None`. Distinct from
+    // `fulfill_highest_framerate_returns_none_when_no_candidate_at_fps`
+    // (non-empty input but no match) because the filter chain is
+    // skipped entirely with `&[]`.
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::HighestFrameRate(30),
+        &[FrameFormat::MJPEG],
+    );
+    assert!(req.fulfill(&[]).is_none());
+}
+
+#[test]
 fn fulfill_closest_picks_nearest_framerate() {
     let available = vec![
         CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 15),
