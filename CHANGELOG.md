@@ -232,6 +232,33 @@
 
 ### Testing
 
+* **Pin `CameraRunner::set_control` E2E forwarding + hybrid
+  pictures-drop policy.** Two more silently-degradable `CameraRunner`
+  paths covered:
+  - `runner_set_control_forwards_to_{stream,shutter,hybrid}_worker` —
+    the path `runner.set_control(id, value)` → `Command::SetControl`
+    → worker match arm → `cam.set_control(id, value)` had no E2E test
+    on any of the three worker variants. A regression that re-ordered
+    the match arms (routing `SetControl` into the `Trigger` /
+    `Empty` no-op arms) or dropped the worker arm for one variant
+    would silently turn `runner.set_control(...)` into a no-op. Each
+    test installs a `ControlProbe{Stream,Shutter,Hybrid}` whose
+    `set_control` impl appends to a shared `Arc<Mutex<Vec<(id,
+    value)>>>` log, calls `runner.set_control(...)` 1–2 times, polls
+    the log for the expected sequence, and asserts the recorded calls
+    match exactly (id and value, in order).
+  - `runner_hybrid_dropped_pictures_receiver_keeps_frame_stream_alive`
+    — pins the documented asymmetry at `src/runner.rs:432-437`: a
+    dropped *frames* receiver exits the hybrid worker (line 449-451),
+    but a dropped *pictures* receiver is silently swallowed
+    (`let _ = pic_tx.send(pic)`), keeping the frame stream alive.
+    Test takes the pictures receiver, drops it, calls `trigger()`
+    (forcing a `pic_tx.send` against a closed channel), and asserts
+    that 3 subsequent `frames()` recvs succeed. A regression that
+    mirrored the frames path here (`if pic_tx.send(...).is_err() {
+    break }`) would silently kill the frame stream whenever a caller
+    triggers a shot without holding the pictures receiver — the most
+    natural "one-shot photo while streaming" use case.
 * **Pin `CameraRunner` unbounded capacity + stream worker error
   resilience.** Two `CameraRunner` paths shipped without E2E coverage:
   - `runner_unbounded_capacity_delivers_every_frame_in_order` —
