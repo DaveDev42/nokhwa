@@ -305,10 +305,15 @@ fn sample_format(sample: &gstreamer::Sample) -> Result<CameraFormat, NokhwaError
     ))
 }
 
-/// Placate `list_controls` on URL-mode sources: `uridecodebin` has
-/// none of the v4l2src properties, so the live-control list is empty.
-/// We return an empty `Vec<FrameFormat>` for `compatible_fourcc()`
-/// because URL streams deliver only one format.
+/// `compatible_fourcc()` for URL-mode sources. `uridecodebin`
+/// negotiates exactly one format on the appsink pad — the network
+/// peer / file picks the encoding, we don't get to enumerate
+/// alternatives — so the compatible-fourcc list is the singleton
+/// `[fmt.format()]` (the format we already have). Returning an empty
+/// list here would silently break callers that compare it against
+/// `compatible_formats()` for the cross-backend invariant
+/// (`compatible_fourcc ⊇ compatible_formats.iter().map(|f| f.format())`)
+/// pinned in `tests/device_tests.rs`.
 #[must_use]
 pub(crate) fn compatible_fourcc_from_negotiated(fmt: CameraFormat) -> Vec<FrameFormat> {
     vec![fmt.format()]

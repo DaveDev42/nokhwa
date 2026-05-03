@@ -233,6 +233,17 @@
 
 ### Documentation
 
+* **Fix wrong-from-day-one doc comment on
+  `compatible_fourcc_from_negotiated` in
+  `nokhwa-bindings-gstreamer/src/uri.rs`.** The comment claimed
+  "Placate `list_controls` … We return an empty `Vec<FrameFormat>`",
+  but the function returns formats (not controls) and produces a
+  singleton `vec![fmt.format()]` (not empty). The test name
+  `compatible_fourcc_from_negotiated_returns_singleton` already
+  matched the actual behavior. Rewrote the comment to accurately
+  describe the singleton return and cite the cross-backend
+  `compatible_fourcc ⊇ compatible_formats` invariant that the
+  empty-list mistake would have broken.
 * **Fix all stale `-p nokhwactl` invocations in
   `examples/capture/README.md`.** The example opts out of the root
   Cargo workspace (it has its own top-level `[workspace]` block), so
