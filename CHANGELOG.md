@@ -289,6 +289,20 @@
 
 ### Testing
 
+* **Pin `OpenedCamera::info()` matches `query()` for the same
+  index in `tests/device_tests.rs`.** New
+  `open_info_matches_query_for_same_index` asserts both `index()`
+  and `human_name()` agree between the entry `query()` returned at
+  position 0 and what `open(Index(0))` reports via `info()`. The
+  existing `query_results_are_openable` only confirms the open
+  succeeds and routes to the right backend; it would not catch a
+  regression where `query()` reports device A's name at position 0
+  but `open(Index(0))` actually opens device B (and `info()` reports
+  B's name) — exactly the kind of silent off-by-one behind "I
+  selected my Logitech but my Brio came up" reports. V4L2's
+  `/dev/videoN` enumeration sorting and MSMF's
+  `MFEnumDeviceSources` positional order are both fragile under
+  refactors that touch one path without the other.
 * **Pin `controls()` returns no duplicate `KnownCameraControl`
   IDs in `tests/device_tests.rs`.** New `controls_have_unique_known_ids`
   guards against two backend-specific failure modes that today's
