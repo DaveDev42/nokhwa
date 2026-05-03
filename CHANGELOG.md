@@ -187,6 +187,23 @@
 
 ### Testing
 
+* **Cover `MockHybrid` dual-capability dispatch in
+  `nokhwa-core/src/testing.rs`.** `MockHybrid` is a public testing
+  helper (`pub` under the `testing` feature) that wraps a
+  `MockFrameSource` + `MockShutter` to satisfy both `FrameSource` +
+  `ShutterCapture` simultaneously. It is the backbone of
+  `tests/runner.rs`'s hybrid-runner suite and any downstream
+  consumer testing two-capability dispatch. Its trait impls are
+  thin delegations, but a regression that wires a method to the
+  wrong inner mock — e.g. `frame()` accidentally calling
+  `shutter.take_picture` — would silently break every dependent
+  test. Five new tests pin: `frame()` returns frames in FIFO order
+  from the frame queue (not the shutter pool); `take_picture()`
+  after `trigger()` returns from the picture pool independently of
+  the queued frames; `take_picture()` without `trigger()` times out;
+  `is_open()` / `open()` / `close()` route to the frame source; and
+  `info()` / `backend()` / `controls()` route to the frame source
+  for metadata.
 * **Pin `Frame<Mjpeg>::into_rgb()/into_rgba().write_to(...)`
   destination-buffer guards in
   `nokhwa-core/src/frame_tests.rs`.** Both methods delegate
