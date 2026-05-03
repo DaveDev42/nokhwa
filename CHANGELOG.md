@@ -144,6 +144,19 @@
 
 ### Cleanup
 
+* **Drop dead `image = "0.23.14"` deps from `examples/setting` and
+  `examples/threaded-capture`.** Both `Cargo.toml` files declared a
+  direct `image = "0.23.14"` dependency that no source file in either
+  example actually imported (`grep -rn 'image::\|use image'` was empty
+  for `examples/setting/`, and `examples/threaded-capture/`'s only
+  `image::` reference was inside a README sentence describing the
+  `frame.into_rgba().materialize()` return type — which is satisfied
+  by `nokhwa-core`'s own `image = "0.25"` dep, transitively). The
+  result was that each example's `cargo build` pulled in **both**
+  `image v0.23.14` and `image v0.25.10`, doubling that dep's compile
+  cost for no gain. Verified before / after with `cargo tree | grep
+  'image v0'`: was two versions, is now one. Standalone-workspace
+  `cargo check` still passes for both examples.
 * **Drop dead `#[allow(clippy::struct_field_names)]` from
   `Buffer`** in `nokhwa-core/src/buffer.rs`. The suppression was
   attached to `pub struct Buffer { ... source_frame_format: ... }`
