@@ -417,6 +417,44 @@ fn compatible_fourcc_is_subset_of_compatible_formats() {
     }
 }
 
+/// Reverse direction of the subset test above: every fourcc that
+/// appears in `compatible_formats()` must also appear in
+/// `compatible_fourcc()`. Together with `…_is_subset_of_compatible_formats`
+/// this pins set-equality, which is the actual user-facing contract:
+/// callers who only need to know which fourccs the device supports
+/// (e.g. picker UIs that don't yet care about resolutions / frame
+/// rates) can call the cheaper `compatible_fourcc()` and trust it
+/// covers exactly the same set of fourccs the slower
+/// `compatible_formats()` would surface. V4L2 derives one from the
+/// other so the equality holds structurally there, but MSMF and AVF
+/// enumerate them independently — a regression where one path
+/// reports an extra format the other doesn't would silently break
+/// any caller that picks one for performance reasons.
+#[test]
+fn compatible_fourcc_is_superset_of_compatible_formats() {
+    let OpenedCamera::Stream(mut cam) = open_first() else {
+        eprintln!(
+            "compatible_fourcc_is_superset_of_compatible_formats: backend is not Stream-capable; skipping."
+        );
+        return;
+    };
+    let fourccs = cam
+        .compatible_fourcc()
+        .expect("StreamCamera::compatible_fourcc");
+    let fourccs_set: std::collections::HashSet<FrameFormat> = fourccs.iter().copied().collect();
+
+    let formats = cam
+        .compatible_formats()
+        .expect("StreamCamera::compatible_formats");
+    for fmt in &formats {
+        let ff = fmt.format();
+        assert!(
+            fourccs_set.contains(&ff),
+            "compatible_formats() exposed {ff:?} (from {fmt:?}) which is missing from compatible_fourcc() = {fourccs:?}"
+        );
+    }
+}
+
 /// Round-trip an arbitrary entry from `compatible_formats()` through
 /// `set_format()` and confirm `negotiated_format()` reports the same
 /// values. Catches drift between `compatible_formats` (what the

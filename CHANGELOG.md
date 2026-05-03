@@ -289,6 +289,19 @@
 
 ### Testing
 
+* **Pin `compatible_fourcc` ⊇ `compatible_formats.format()` (reverse
+  subset) in `tests/device_tests.rs`.** The existing
+  `compatible_fourcc_is_subset_of_compatible_formats` test pinned one
+  direction; the new `compatible_fourcc_is_superset_of_compatible_formats`
+  pins the reverse. Together they pin set-equality, which is the
+  actual user-facing contract: callers who only need fourcc support
+  (picker UIs, filter dropdowns) can call the cheaper
+  `compatible_fourcc()` and trust it covers exactly the same set as
+  `compatible_formats()`. V4L2 derives one from the other so equality
+  is structural there, but MSMF and AVF enumerate them independently
+  — a regression where `compatible_formats()` exposes a fourcc
+  `compatible_fourcc()` doesn't would silently break any caller that
+  picks one for performance reasons.
 * **Pin double-`close()` idempotency contract in
   `tests/device_tests.rs`.** New
   `stream_camera_double_close_is_idempotent` verifies the contract
