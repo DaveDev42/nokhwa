@@ -643,15 +643,35 @@ mod stub_tests {
     }
 
     /// Verifies the stub path compiles and returns a `NotImplementedError`
-    /// without panicking.
+    /// carrying the canonical actionable payload that tells the user
+    /// which feature flag to flip. Previously this only checked
+    /// `Display::contains("GStreamer")`, which would still pass if a
+    /// future refactor dropped the `enable feature input-gstreamer`
+    /// hint or rephrased "not compiled in" → "disabled" — both real
+    /// regressions for users who hit the stub by accident on
+    /// non-Linux builds. Pin both the variant payload and the full
+    /// `Display` form via the canonical wrapper string.
     #[test]
     fn stub_query_errors_cleanly() {
         let err = query().expect_err("stub query() must error");
         assert_not_implemented(&err);
-        let msg = format!("{err}");
-        assert!(
-            msg.contains("GStreamer"),
-            "unexpected stub error text: {msg}"
+        let payload = match &err {
+            NokhwaError::NotImplementedError(p) => p.clone(),
+            other => panic!("expected NotImplementedError, got {other:?}"),
+        };
+        assert_eq!(
+            payload,
+            "GStreamer backend not compiled in (enable feature `input-gstreamer` on the `nokhwa` \
+             crate)"
+        );
+        // `NokhwaError`'s `Display` wraps the payload as
+        // "This operation is not implemented yet: {payload}". Pin the
+        // wrapper too so a future refactor that re-routes through a
+        // different variant constructor (and silently drops the
+        // wrapper prefix) is caught.
+        assert_eq!(
+            format!("{err}"),
+            format!("This operation is not implemented yet: {payload}"),
         );
     }
 

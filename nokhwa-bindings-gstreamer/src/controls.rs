@@ -466,8 +466,17 @@ mod tests {
         // The Windows / macOS sentinel — must surface `GStreamer` so
         // the user knows which backend lacks the support, not just
         // "unsupported".
+        //
+        // The previous version of this test checked
+        // `msg.contains("GStreamer")`, but `NokhwaError`'s
+        // `#[error("This operation is not supported by backend {0}.")]`
+        // attribute is a documented contract: log scrapers, downstream
+        // tests, and user-facing diagnostics all key off the exact
+        // wording. A drift like dropping the trailing period or
+        // changing "by backend" → "for backend" would slip past
+        // `contains("GStreamer")` while breaking that contract. Pin
+        // the Display form verbatim alongside the variant.
         let err = unsupported();
-        let msg = format!("{err}");
         assert!(
             matches!(
                 err,
@@ -475,6 +484,9 @@ mod tests {
             ),
             "wrong variant: {err:?}"
         );
-        assert!(msg.contains("GStreamer"), "Display lost backend: {msg}");
+        assert_eq!(
+            format!("{err}"),
+            "This operation is not supported by backend GStreamer."
+        );
     }
 }

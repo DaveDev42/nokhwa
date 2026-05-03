@@ -289,6 +289,25 @@
 
 ### Testing
 
+* **Pin `Display` strings on two `nokhwa-bindings-gstreamer` stub /
+  unsupported tests.** `stub_query_errors_cleanly`
+  (`nokhwa-bindings-gstreamer/src/lib.rs:648`) and
+  `unsupported_returns_unsupported_operation_error`
+  (`nokhwa-bindings-gstreamer/src/controls.rs:464`) both relied on
+  `Display::contains("GStreamer")`, which is wide enough to silently
+  pass through real regressions. The stub-`query()` test now pins
+  the inner `NotImplementedError` payload to the canonical
+  ``"GStreamer backend not compiled in (enable feature
+  `input-gstreamer` on the `nokhwa` crate)"`` string **and** the full
+  Display wrapper (`"This operation is not implemented yet: {payload}"`)
+  — so a refactor that drops the actionable feature-flag hint or
+  re-routes through a different variant constructor (silently dropping
+  the wrapper prefix) is now caught. The unsupported-helper test now
+  asserts the full Display form
+  (`"This operation is not supported by backend GStreamer."`)
+  verbatim alongside the existing `matches!` variant check, so a drift
+  like dropping the trailing period or rewording "by backend" → "for
+  backend" no longer slips through.
 * **Pin error strings on `resolve_format` reject tests in
   `nokhwa-bindings-gstreamer/src/pipeline.rs`.** Two sibling tests
   (`resolve_format_empty_candidates_errors_with_open_device:381`,
