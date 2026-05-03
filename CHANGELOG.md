@@ -301,6 +301,19 @@
 
 ### Testing
 
+* **Pin `negotiated_format()` and `controls()` are stable across
+  consecutive reads in `tests/device_tests.rs`.** Two new tests:
+  `negotiated_format_read_is_stable` and `controls_read_is_stable`.
+  Both methods are pure reads — calling them twice in a row with no
+  mutating call (`set_format` / `set_control`) in between must return
+  identical values. All three native backends today implement
+  `negotiated_format()` as a struct-field read (V4L `self.camera_format`,
+  AVF `self.format`, MSMF `self.inner.format()`); `controls()` is a
+  per-call probe. The pins guard against future refactors that
+  introduce per-call recomputation with a TTL cache that drifts, or
+  flaky control probes that aren't actually idempotent. Downstream
+  UI pickers and the runner's `controls_snapshot` rely on the
+  read-idempotence assumption.
 * **Pin every `query()` result has a non-empty `human_name()` in
   `tests/device_tests.rs`.** New `query_results_have_non_empty_human_names`
   walks the entire enumeration result and asserts `human_name()` is

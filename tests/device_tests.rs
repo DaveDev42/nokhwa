@@ -1019,6 +1019,56 @@ fn frame_metadata_matches_negotiated_format() {
     cam.close().expect("StreamCamera::close");
 }
 
+/// `negotiated_format()` is a pure read — calling it twice in a row
+/// (with no `set_format` in between) must return identical values.
+/// All three native backends today implement it as a struct-field
+/// read (`self.camera_format` on V4L, `self.format` on AVF,
+/// `self.inner.format()` on MSMF), so this is trivially true. The
+/// pin guards against a future refactor that introduces per-call
+/// recomputation (e.g. re-querying the device with a TTL cache that
+/// drifts between calls, or interior mutability that's not actually
+/// idempotent). A regression would surface as a downstream consumer
+/// that polls `negotiated_format()` to drive UI state seeing flicker
+/// even though no `set_format` ever fired.
+#[test]
+fn negotiated_format_read_is_stable() {
+    let OpenedCamera::Stream(cam) = open_first() else {
+        eprintln!("negotiated_format_read_is_stable: backend is not Stream-capable; skipping.");
+        return;
+    };
+    let first = cam.negotiated_format();
+    let second = cam.negotiated_format();
+    assert_eq!(
+        first, second,
+        "negotiated_format() returned {first} then {second} on consecutive reads with no set_format in between"
+    );
+}
+
+/// `controls()` is a pure read — calling it twice in a row (with no
+/// `set_control` in between) must return identical lists. Each
+/// backend implements it differently: V4L2 walks driver-reported CIDs
+/// and translates each to a `KnownCameraControl`, MSMF iterates
+/// `all_known_camera_controls()` and probes each via
+/// `IAMVideoProcAmp` / `IAMCameraControl`, AVFoundation fans out per
+/// hardware feature flag. A regression where any of those probes
+/// became flaky (e.g. timing-dependent because of an internal cache
+/// invalidation) would surface here as a non-idempotent read.
+/// Downstream pickers and the runner's `controls_snapshot` rely on
+/// the assumption that two reads with no mutation in between agree.
+#[test]
+fn controls_read_is_stable() {
+    let OpenedCamera::Stream(cam) = open_first() else {
+        eprintln!("controls_read_is_stable: backend is not Stream-capable; skipping.");
+        return;
+    };
+    let first = cam.controls().expect("first controls()");
+    let second = cam.controls().expect("second controls()");
+    assert_eq!(
+        first, second,
+        "controls() returned different lists on consecutive reads with no set_control in between: first={first:?} second={second:?}"
+    );
+}
+
 // The file is already gated by `device-test` at the top, so this
 // submodule's effective gate is `device-test AND runner` — i.e. it
 // compiles only when both features are enabled.
