@@ -232,6 +232,25 @@
 
 ### Testing
 
+* **Pin `NokhwaError` Display exact-format strings for backend / format
+  parenthetical variants.** `GeneralError`, `OpenStreamError`,
+  `StreamShutdownError`, and `ReadFrameError` all share an inline
+  format helper that emits `" (backend {b})"` / `" (format {f})"`
+  when the optional field is `Some(_)`. The pre-existing tests at
+  `nokhwa-core/src/error_tests.rs:14-90` only assert via
+  `s.contains("backend")` / `s.contains("Video4Linux")` etc., so a
+  refactor that flipped the parenthetical to `[backend X]`, dropped
+  the leading space, dropped the word "backend", or capitalised the
+  prefix `Error` differently would still satisfy every existing
+  check while breaking downstream log scrapers that key on the exact
+  token. Added five new tests
+  (`*_display_{with,without}_*_exact_format`) that pin every full
+  Display string verbatim — `"Error (backend Video4Linux): oops"`,
+  `"Error: oops"`, `"Could not open device stream (backend
+  MediaFoundation): denied"`, `"Could not capture frame (format
+  MJPEG): eof"`, `"Could not stop stream (backend AVFoundation):
+  busy"`. Guards `nokhwa-core/src/error.rs:31`, `:48`, `:53`,
+  `:64`.
 * **Pin `Overflow` `Debug` variant names.** `Overflow` derives
   `Debug`, so its `Debug` output (`"DropNewest"`, `"DropOldest"`,
   `"Block"`) ends up in panic messages, `dbg!()` traces, and any

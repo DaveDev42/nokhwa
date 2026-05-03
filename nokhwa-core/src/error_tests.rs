@@ -118,6 +118,68 @@ fn uninitialized_error_display_mentions_init() {
     assert!(s.contains("init()"));
 }
 
+// The four error variants below all share the same parenthetical
+// formatting pattern: `Error<TAIL>: <msg>` where `<TAIL>` is either
+// `" (backend {b})"`, `" (format {f})"`, or empty when the optional
+// field is `None`. The pre-existing tests above use `contains(...)`
+// checks that pass even after a refactor — e.g. flipping
+// `(backend Video4Linux)` to `[backend Video4Linux]`, dropping the
+// space between `backend` and the value, or replacing the prefix
+// `Error` with `error`. Downstream log scrapers and integration
+// tests key on the exact form, so pin each variant's full Display
+// output verbatim. Guards `nokhwa-core/src/error.rs:31`, `:48`,
+// `:53`, and `:64`.
+#[test]
+fn general_error_display_with_backend_exact_format() {
+    let e = NokhwaError::GeneralError {
+        message: "oops".into(),
+        backend: Some(ApiBackend::Video4Linux),
+    };
+    assert_eq!(format!("{e}"), "Error (backend Video4Linux): oops");
+}
+
+#[test]
+fn general_error_display_without_backend_exact_format() {
+    let e = NokhwaError::general("oops");
+    assert_eq!(format!("{e}"), "Error: oops");
+}
+
+#[test]
+fn open_stream_error_display_with_backend_exact_format() {
+    let e = NokhwaError::OpenStreamError {
+        message: "denied".into(),
+        backend: Some(ApiBackend::MediaFoundation),
+    };
+    assert_eq!(
+        format!("{e}"),
+        "Could not open device stream (backend MediaFoundation): denied"
+    );
+}
+
+#[test]
+fn read_frame_error_display_with_format_exact_format() {
+    let e = NokhwaError::ReadFrameError {
+        message: "eof".into(),
+        format: Some(FrameFormat::MJPEG),
+    };
+    assert_eq!(
+        format!("{e}"),
+        "Could not capture frame (format MJPEG): eof"
+    );
+}
+
+#[test]
+fn stream_shutdown_error_display_with_backend_exact_format() {
+    let e = NokhwaError::StreamShutdownError {
+        message: "busy".into(),
+        backend: Some(ApiBackend::AVFoundation),
+    };
+    assert_eq!(
+        format!("{e}"),
+        "Could not stop stream (backend AVFoundation): busy"
+    );
+}
+
 #[test]
 fn initialize_error_display_includes_backend_and_error() {
     let e = NokhwaError::InitializeError {
