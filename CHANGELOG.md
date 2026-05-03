@@ -1382,6 +1382,29 @@
   arms can't silently change buffer-size requirements that callers
   rely on for pre-allocation.
 
+### Infrastructure
+
+* **Run the root `nokhwa` crate's headless tests in CI.**
+  `Test Core & Features → Core unit tests` only invoked
+  `cargo test -p nokhwa-core` (three times across feature combos);
+  no step ever ran `cargo test -p nokhwa`, so the root crate's
+  unit tests in `src/init.rs` / `src/query.rs` / `src/runner.rs`
+  and the integration suites `tests/session.rs`,
+  `tests/format_tests.rs`, and `tests/runner.rs` shipped to
+  `main` exercised only locally. The root crate has a
+  `compile_error!` requiring at least one `input-*` feature, so
+  the new step picks `input-v4l,runner` (the canonical Linux
+  pair) — `input-v4l` satisfies the guard, `runner` compiles in
+  the runner integration tests. None of these tests touch real
+  hardware (`tests/device_tests.rs` is gated on `device-test`
+  and stays disabled). 65 previously-uncovered tests now run on
+  every PR: 28 lib tests covering channel policies + capability
+  dispatch, 7 in `format_tests.rs`, 17 in `tests/runner.rs`, and
+  13 in `tests/session.rs`, all on `ubuntu-latest`. The job
+  inherits `Swatinem/rust-cache@v2` already configured for the
+  surrounding `cargo test -p nokhwa-core` invocations, so the
+  marginal cost is just the test-binary link.
+
 ### Documentation
 
 * **`nokhwa-bindings-windows-msmf::MediaFoundationCaptureDevice`
