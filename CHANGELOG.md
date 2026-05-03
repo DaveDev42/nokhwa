@@ -190,6 +190,20 @@
 
 ### Documentation
 
+* **Fix stale `RunnerConfig` note in `MIGRATING-0.13.md`.** The "0.13.0
+  trimmed `RunnerConfig`" section ended with "bounded channels +
+  overflow policy are planned for 0.14", which has been historically
+  inaccurate ever since 0.14.0 actually shipped them. A reader landing
+  on the 0.12 → 0.13 guide for an existing migration is left thinking
+  the four `*_capacity` fields and the `Overflow` enum still don't
+  exist on current `RunnerConfig`, when in fact the 0.14 release
+  re-introduced them with `frames_capacity = 4`,
+  `pictures_capacity = 8`, `events_capacity = 32`, and
+  `Overflow::DropNewest` defaults. Reworded the paragraph to
+  explicitly note the 0.13.0-only removal and added a callout
+  cross-linking `MIGRATING-0.14.md#bounded-runner-channels` for the
+  current shape, plus a hint that capacity = `0` opts back into 0.13
+  unbounded semantics. No code change.
 * **Fix two pre-existing rustdoc warnings.** `cargo +nightly doc
   --no-deps --features docs-only,docs-nolink,docs-features`
   emitted (1) `unresolved link to tokio::task::spawn_blocking` in
