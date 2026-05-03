@@ -28,9 +28,15 @@ features = ["input-msmf"]          # Windows
 
 ## Quick Start
 
-> **Upgrading from 0.12?** See [`MIGRATING-0.13.md`](./MIGRATING-0.13.md).
+> **Upgrading?** See
+> [`MIGRATING-0.14.md`](./MIGRATING-0.14.md) for `CameraSession` →
+> `open()` (0.13 → 0.14),
+> [`MIGRATING-0.13.md`](./MIGRATING-0.13.md) for the capability-trait
+> split (0.12 → 0.13), or
+> [`MIGRATION-0.12.md`](./MIGRATION-0.12.md) for the typed-frame
+> rework (0.11 → 0.12).
 
-Nokhwa 0.13 splits camera capabilities into four traits (`CameraDevice`,
+Nokhwa splits camera capabilities into four traits (`CameraDevice`,
 `FrameSource`, `ShutterCapture`, `EventSource`) and dispatches opened devices
 through an `OpenedCamera` enum so webcams, DSLRs, and hybrid cameras share one
 API surface.
