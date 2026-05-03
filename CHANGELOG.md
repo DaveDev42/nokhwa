@@ -173,6 +173,22 @@
 
 ### Documentation
 
+* **README: replace "Nokhwa 0.13 splits…" present-tense
+  reference and link all three migration guides.** The Quick
+  Start section opened with `Nokhwa 0.13 splits camera
+  capabilities…`, which read as if 0.13 were the current
+  version even though README's Cargo snippet pins
+  `tag = "v0.14.5"`. Dropped the version qualifier so the
+  capability-trait split stands as the present-tense API
+  contract. The `> Upgrading from 0.12?` callout pointed at
+  `MIGRATING-0.13.md` only, leaving 0.13 → 0.14 callers
+  (whose `CameraSession::new(...)` calls don't compile against
+  any current release) without a discoverable upgrade path
+  even though `MIGRATING-0.14.md` exists in the repo.
+  Replaced with a three-row callout linking
+  `MIGRATING-0.14.md` (0.13 → 0.14), `MIGRATING-0.13.md`
+  (0.12 → 0.13), and `MIGRATION-0.12.md` (0.11 → 0.12).
+
 * **Fix misleading `Resolution` `Ord` docstring.** The doc-comment
   on `Resolution` claimed "the `Ord` implementation of this struct
   is flipped from highest to lowest", but the actual `cmp` impl is
