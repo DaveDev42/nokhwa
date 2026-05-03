@@ -232,6 +232,22 @@
 
 ### Testing
 
+* **Pin `CameraRunner::spawn_hybrid` swallowing of `take_events()`
+  errors.** `src/runner.rs:368-378` discriminates three cases when
+  building the events channel: `Some(Ok(poll))` spins up the event
+  worker, `Some(Err(e))` logs and falls through to no-events,
+  `None` skips the channel entirely. The middle arm fires whenever a
+  hybrid backend advertises `EventSource` capability but runtime
+  acquisition fails (e.g. inotify fd creation, MSMF
+  `RegisterDeviceNotificationW` window setup). A regression that
+  propagated the error out of `spawn_hybrid` would turn a transient
+  OS-resource failure into "the entire camera runner refuses to spawn"
+  — frames + pictures would never start. New
+  `runner_spawn_hybrid_swallows_take_events_error` installs a
+  `HybridEventErr` whose `take_events()` always returns `Err`, asserts
+  `CameraRunner::spawn` returns `Ok`, that `events()` /
+  `take_events()` are both `None`, and that frames still flow through
+  the worker.
 * **Pin `HybridCamera::take_events` idempotency on the no-event
   branch.** `src/session.rs:548-551` short-circuits to `None` when
   `self.event_source` is `false`, before touching `self.events`.
