@@ -102,6 +102,28 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p nokhwa-bindings-linux-v4l
 
+  # Runs `nokhwa-bindings-macos-avfoundation` unit tests on non-Apple
+  # hosts so the off-Apple `stub` module — gated on `#[cfg(not(any(
+  # target_os = "macos", target_os = "ios")))]` — actually executes its
+  # 9 contract tests. The macOS device-test runner is where the real
+  # AVFoundation path is active, so it doesn't exercise the stub.
+  # Without this matrix the AVFoundation stub ships untested on Linux
+  # and Windows, mirroring the V4L / MSMF stub coverage already wired
+  # up here. No device required (pure error-shape + `should_panic`
+  # assertions).
+  test-avfoundation-non-apple:
+    name: AVFoundation stub unit tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p nokhwa-bindings-macos-avfoundation
+
   # Runs `nokhwa-bindings-windows-msmf` unit tests on a Windows host so
   # the 9 GUID/parser tests gated on `#[cfg(all(windows, not(feature =
   # "docs-only")))]` actually execute. The Linux step in `test-core`

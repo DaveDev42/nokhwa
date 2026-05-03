@@ -4,6 +4,23 @@
 
 ### Bug Fixes
 
+* **`cargo check --features docs-only,docs-nolink` and `cargo doc
+  --features docs-only,docs-nolink,docs-features` failed off macOS /
+  iOS.** Every export in `nokhwa-bindings-macos-avfoundation` was
+  gated on `#[cfg(any(target_os = "macos", target_os = "ios"))]`, so
+  `pub use AVFoundationCaptureDevice` resolved to nothing on Linux /
+  Windows hosts and the workspace's `src/backends/capture/mod.rs`
+  failed to compile with `E0432: unresolved import`. The CLAUDE.md-
+  documented cross-platform check / docs-build commands had been
+  silently broken. Added a non-Apple `mod stub` mirroring the V4L /
+  MSMF compile-shim pattern: `not_on_this_platform()` returns
+  `NotImplementedError("AVFoundation only on macOS / iOS")`, fallible
+  `CameraDevice` / `FrameSource` methods return that error,
+  `is_open() == false`, `backend() == ApiBackend::AVFoundation`, and
+  `info()` / `negotiated_format()` collapse to a `#[cold]`
+  `unreachable!()` (cannot be reached because `new()` always errors
+  off Apple, so no value of the stub type can be produced via the
+  public constructor path). The real Apple-only path is unchanged.
 * **`ShutterCapture::capture()` could leak the UI lock when
   `trigger` failed.** The default `capture()` was documented as
   "`unlock_ui` always attempted (errors discarded if the inner
@@ -203,6 +220,22 @@
 
 ### Testing
 
+* **Pin the off-Apple AVFoundation stub contract.** Mirror PR for the
+  AVFoundation binding crate. The new non-Apple compile-shim impls of
+  `CameraDevice` / `FrameSource` for `AVFoundationCaptureDevice` (in
+  `nokhwa-bindings-macos-avfoundation/src/lib.rs::stub`) ship with
+  full test coverage from day one rather than retrofitted later, so
+  no future refactor can regress the contract under the radar. Added
+  a `#[cfg(test)] mod tests` inside the `stub` module with 9 unit
+  tests pinning each branch: `new()` errors, `camera_control()`
+  errors, `is_open() == false`, `backend() == ApiBackend::AVFoundation`,
+  every fallible `CameraDevice` / `FrameSource` method returns
+  `NotImplementedError`, and `info()` / `negotiated_format()` panic
+  via `stub_unreachable()` (locked in with `#[should_panic(expected =
+  "AVFoundation stub: only available on macOS / iOS")]`). Compiles
+  only off Apple; exercised in the new `Test Core & Features →
+  AVFoundation stub unit tests` matrix on `windows-latest` and
+  `ubuntu-latest`.
 * **Pin the GStreamer backend-less stub contract.**
   `nokhwa-bindings-gstreamer` ships a `stub` module that's active
   when the `backend` feature is off (the path consumers hit when
@@ -1503,6 +1536,14 @@
 
 ### Infrastructure
 
+* **Run `nokhwa-bindings-macos-avfoundation` stub tests on non-Apple
+  hosts.** New `Test Core & Features → AVFoundation stub unit tests`
+  matrix job on `windows-latest` + `ubuntu-latest` running `cargo
+  test -p nokhwa-bindings-macos-avfoundation`. The stub only exists
+  off macOS / iOS, so the macOS device-test runner can't exercise it
+  — without this job the new contract tests would never run in CI.
+  Mirrors the `test-v4l-non-linux` and `test-msmf-windows` matrix
+  pattern.
 * **Run `nokhwa-bindings-gstreamer` stub-mode tests in CI.**
   `Test Core & Features → check-gstreamer` already runs the
   crate's tests with `--features backend` (the real
