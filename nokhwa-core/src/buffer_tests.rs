@@ -212,4 +212,91 @@ fn buffer_from_vec_equivalent_to_new() {
         buf_zero.source_frame_format()
     );
     assert_eq!(buf_copy.capture_timestamp(), buf_zero.capture_timestamp());
+    // Pin the derived structural `PartialEq` directly: the two
+    // constructors must produce buffers that compare equal as a
+    // whole, not just field-by-field. A future hand-written
+    // `impl PartialEq for Buffer` that, say, ignored
+    // `capture_timestamp` (rationale: "two buffers with the same
+    // data are 'the same'") would still pass the field-by-field
+    // checks above (both timestamps are `None` in this test) but
+    // would diverge from the field-by-field contract on a
+    // timestamped buffer — break the test by forcing the whole
+    // struct comparison.
+    assert_eq!(buf_copy, buf_zero);
+}
+
+// `Buffer` derives `PartialEq` (`nokhwa-core/src/buffer.rs:48`),
+// which is structural over all four fields (resolution, data,
+// source_frame_format, capture_timestamp). No test currently
+// exercises the timestamp's contribution to equality: two buffers
+// with identical data + format + resolution but different
+// timestamps must be `!=`. A regression introducing a hand-written
+// `impl PartialEq` that dropped the timestamp from the comparison
+// (a tempting "two buffers carrying the same pixels are equal"
+// rule) would silently make timestamped frames look like
+// duplicates, breaking any deduplication or frame-cache logic that
+// relies on timestamp-distinct buffers comparing unequal.
+#[test]
+fn buffer_partial_eq_distinguishes_capture_timestamp() {
+    let res = Resolution::new(2, 2);
+    let data = vec![0u8; 12];
+    let ts_a = std::time::Duration::from_millis(100);
+    let ts_b = std::time::Duration::from_millis(200);
+
+    let buf_no_ts = Buffer::new(res, &data, FrameFormat::RAWRGB);
+    let buf_ts_a = Buffer::with_timestamp(
+        res,
+        &data,
+        FrameFormat::RAWRGB,
+        Some((ts_a, TimestampKind::Capture)),
+    );
+    let buf_ts_b = Buffer::with_timestamp(
+        res,
+        &data,
+        FrameFormat::RAWRGB,
+        Some((ts_b, TimestampKind::Capture)),
+    );
+    let buf_ts_a_dup = Buffer::with_timestamp(
+        res,
+        &data,
+        FrameFormat::RAWRGB,
+        Some((ts_a, TimestampKind::Capture)),
+    );
+
+    // Different timestamps → unequal.
+    assert_ne!(buf_ts_a, buf_ts_b);
+    // None vs Some(_) → unequal.
+    assert_ne!(buf_no_ts, buf_ts_a);
+    // Same timestamp + same kind → equal.
+    assert_eq!(buf_ts_a, buf_ts_a_dup);
+}
+
+// Companion to the above: the `TimestampKind` is also part of the
+// derived `PartialEq` (it's tupled with `Duration` in
+// `capture_timestamp: Option<(Duration, TimestampKind)>`). Two
+// buffers with the same `Duration` but different `TimestampKind`
+// values must compare unequal. A regression that flattened the
+// tuple to drop the kind discriminator would silently treat a
+// `Capture` timestamp and a `Presentation` timestamp at the same
+// monotonic value as equivalent, despite their different clock
+// semantics.
+#[test]
+fn buffer_partial_eq_distinguishes_timestamp_kind() {
+    let res = Resolution::new(2, 2);
+    let data = vec![0u8; 12];
+    let ts = std::time::Duration::from_millis(100);
+
+    let buf_capture = Buffer::with_timestamp(
+        res,
+        &data,
+        FrameFormat::RAWRGB,
+        Some((ts, TimestampKind::Capture)),
+    );
+    let buf_presentation = Buffer::with_timestamp(
+        res,
+        &data,
+        FrameFormat::RAWRGB,
+        Some((ts, TimestampKind::Presentation)),
+    );
+    assert_ne!(buf_capture, buf_presentation);
 }
