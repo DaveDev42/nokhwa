@@ -232,6 +232,28 @@
 
 ### Testing
 
+* **Pin `RequestedFormatType::HighestFrameRate(_)` exact-format and
+  `ControlValueDescription::Enum` Display edge cases.** The existing
+  `requested_format_type_display_matches_debug_all_remaining_variants`
+  was symmetry-only for `HighestFrameRate(_)`
+  (`to_string() == format!("{:?}")`), so a regression that replaced
+  the `{self:?}` delegation in
+  `nokhwa-core/src/types.rs:38-42` with a hand-written renderer
+  emitting e.g. `"HighestFps(60)"` would change both sides in lockstep
+  and stay green. Added an exact-string pin for `HighestFrameRate(30)`
+  and `HighestFrameRate(0)` (bare integer payloads, stable enough to
+  pin without coupling to unrelated field renames). Separately,
+  `control_value_description_display_enum` only exercised single-digit
+  values, leaving the `Vec<i64>::fmt::Debug` spacing contract under
+  `{possible:?}` (`nokhwa-core/src/types.rs:1253-1257`) untested for
+  empty lists and multi-digit elements. A regression that swapped
+  `{possible:?}` for a hand-rolled `iter().map(...).join(", ")`
+  formatter would drop the outer `[]` brackets and stay green for
+  most existing `SetPropertyError` log lines. Added
+  `control_value_description_display_enum_empty_possible_list`
+  asserting `"Current: 0, Possible Values: [], Default: 0"` and
+  `control_value_description_display_enum_multi_digit_values`
+  asserting `"Current: 10, Possible Values: [10, 20], Default: 10"`.
 * **Pin exact `Display` strings for the `None`-context arms of
   `OpenStreamError`, `ReadFrameError`, and `StreamShutdownError`.**
   The `Some(_)` arms of these three optional-context error variants

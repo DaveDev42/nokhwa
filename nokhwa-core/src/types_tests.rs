@@ -2412,6 +2412,25 @@ fn requested_format_type_display_matches_debug_all_remaining_variants() {
     assert_eq!(closest.to_string(), format!("{closest:?}"));
 }
 
+// `requested_format_type_display_matches_debug_all_remaining_variants`
+// is symmetry-only for `HighestFrameRate(_)` — it asserts
+// `to_string() == format!("{:?}")`, which would stay green if the
+// `{self:?}` delegation in the `Display` impl was replaced with a
+// hand-written renderer that emitted e.g. `"HighestFps(60)"` (both
+// sides would change in lockstep and the equality holds). The
+// `AbsoluteHighestFrameRate` arm already has an exact-string pin
+// alongside its symmetry check; mirror that for the payload-bearing
+// `HighestFrameRate(u32)` variant, since the bare integer payload
+// (no embedded `Debug` of a complex struct) is stable enough to pin
+// exactly without coupling the test to unrelated field renames.
+#[test]
+fn requested_format_type_display_highest_frame_rate_exact_format() {
+    let highest_fps = RequestedFormatType::HighestFrameRate(30);
+    assert_eq!(highest_fps.to_string(), "HighestFrameRate(30)");
+    let highest_fps_zero = RequestedFormatType::HighestFrameRate(0);
+    assert_eq!(highest_fps_zero.to_string(), "HighestFrameRate(0)");
+}
+
 #[test]
 fn requested_format_display_matches_debug() {
     let req = RequestedFormat::with_formats(
@@ -2578,6 +2597,42 @@ fn control_value_description_display_enum() {
     assert_eq!(
         desc.to_string(),
         "Current: 1, Possible Values: [0, 1, 2], Default: 0"
+    );
+}
+
+// `control_value_description_display_enum` exercises only single-digit
+// values, so a regression that swapped `{possible:?}` for a hand-rolled
+// `possible.iter().map(...).join(", ")` (dropping the outer `[]`
+// brackets) would silently break the rendering, but only on lists with
+// elements where Debug spacing actually matters. Pin two extra cases:
+// (1) an empty `possible` list — confirms the bracket-only form `[]`,
+// not `()` or empty-string; (2) two-digit values — confirms the
+// `Vec<i64>` Debug spacing contract `[10, 20]` (comma-space separator).
+// Together they guard `nokhwa-core/src/types.rs:1253-1257`'s reliance
+// on `Vec<i64>::fmt::Debug` for the `Possible Values` field.
+#[test]
+fn control_value_description_display_enum_empty_possible_list() {
+    let desc = ControlValueDescription::Enum {
+        value: 0,
+        possible: vec![],
+        default: 0,
+    };
+    assert_eq!(
+        desc.to_string(),
+        "Current: 0, Possible Values: [], Default: 0"
+    );
+}
+
+#[test]
+fn control_value_description_display_enum_multi_digit_values() {
+    let desc = ControlValueDescription::Enum {
+        value: 10,
+        possible: vec![10, 20],
+        default: 10,
+    };
+    assert_eq!(
+        desc.to_string(),
+        "Current: 10, Possible Values: [10, 20], Default: 10"
     );
 }
 
