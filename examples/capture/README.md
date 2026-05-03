@@ -22,9 +22,13 @@ A command-line tool for testing nokhwa camera backends. It can list devices, ins
 
 The example depends on `nokhwa` with `input-native` and `runner` features, plus `ggez` for the live display window.
 
+The example opts out of the root Cargo workspace, so use
+`--manifest-path` to build it (the package name `nokhwactl` is not
+visible to the root workspace's `-p` resolver):
+
 ```bash
 # From the repository root:
-cargo build -p nokhwactl
+cargo build --manifest-path examples/capture/Cargo.toml
 ```
 
 If you only need a specific backend, edit `examples/capture/Cargo.toml` and replace `input-native` with the backend you want (e.g. `input-avfoundation`, `input-v4l`, `input-msmf`).
@@ -34,30 +38,30 @@ If you only need a specific backend, edit `examples/capture/Cargo.toml` and repl
 ### List available cameras
 
 ```bash
-cargo run -p nokhwactl -- list-devices
+cargo run --manifest-path examples/capture/Cargo.toml -- list-devices
 ```
 
 ### Inspect camera properties
 
 ```bash
 # Show all controls and compatible formats for camera 0
-cargo run -p nokhwactl -- list-properties --device 0 --kind all
+cargo run --manifest-path examples/capture/Cargo.toml -- list-properties --device 0 --kind all
 
 # Controls only
-cargo run -p nokhwactl -- list-properties --device 0 --kind controls
+cargo run --manifest-path examples/capture/Cargo.toml -- list-properties --device 0 --kind controls
 
 # Compatible formats only
-cargo run -p nokhwactl -- list-properties --device 0 --kind compatible-formats
+cargo run --manifest-path examples/capture/Cargo.toml -- list-properties --device 0 --kind compatible-formats
 ```
 
 ### Capture a single frame
 
 ```bash
 # Capture one frame from camera 0 and save it as a PNG
-cargo run -p nokhwactl -- single --device 0 --save capture.png
+cargo run --manifest-path examples/capture/Cargo.toml -- single --device 0 --save capture.png
 
 # Capture with a specific format request
-cargo run -p nokhwactl -- single --device 0 --save capture.png \
+cargo run --manifest-path examples/capture/Cargo.toml -- single --device 0 --save capture.png \
     --requested "Exact:1920,1080,30,MJPEG"
 ```
 
@@ -65,10 +69,10 @@ cargo run -p nokhwactl -- single --device 0 --save capture.png \
 
 ```bash
 # Stream from camera 0 in a window
-cargo run -p nokhwactl -- stream --device 0 --display
+cargo run --manifest-path examples/capture/Cargo.toml -- stream --device 0 --display
 
 # Stream without display (logs frame sizes to stdout)
-cargo run -p nokhwactl -- stream --device 0
+cargo run --manifest-path examples/capture/Cargo.toml -- stream --device 0
 ```
 
 ### Format request strings

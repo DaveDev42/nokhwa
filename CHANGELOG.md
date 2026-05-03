@@ -233,6 +233,18 @@
 
 ### Documentation
 
+* **Fix all stale `-p nokhwactl` invocations in
+  `examples/capture/README.md`.** The example opts out of the root
+  Cargo workspace (it has its own top-level `[workspace]` block), so
+  the package name `nokhwactl` is not visible to the root workspace's
+  `-p` resolver. Every `cargo build -p nokhwactl` /
+  `cargo run -p nokhwactl --` command in the README failed with
+  `package ID specification \`nokhwactl\` did not match any
+  packages`. Replaced all 9 invocations with `--manifest-path
+  examples/capture/Cargo.toml` and added a one-line explanatory note
+  in the Building section. Verified
+  `cargo build --manifest-path examples/capture/Cargo.toml` works
+  clean from the repo root.
 * **Fix stale `RunnerConfig` note in `MIGRATING-0.13.md`.** The "0.13.0
   trimmed `RunnerConfig`" section ended with "bounded channels +
   overflow policy are planned for 0.14", which has been historically
