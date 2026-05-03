@@ -203,6 +203,29 @@
 
 ### Testing
 
+* **Pin the GStreamer backend-less stub contract.**
+  `nokhwa-bindings-gstreamer` ships a `stub` module that's active
+  when the `backend` feature is off (the path consumers hit when
+  `input-gstreamer` is not enabled). Only one stub test existed
+  (`stub_query_errors_cleanly`); the entire `GStreamerCaptureDevice`
+  trait surface — and a behavioral quirk that distinguishes this
+  stub from V4L / MSMF — was untested:
+  - `query()` and `GStreamerCaptureDevice::new` return
+    `NotImplementedError("backend not compiled in")`.
+  - Every `CameraDevice` / `FrameSource` fallible method returns
+    `UnsupportedOperationError(ApiBackend::GStreamer)` (different
+    error variant than V4L / MSMF stubs because this stub *is*
+    wired into the dispatcher for backend-less builds).
+  - `negotiated_format()` returns `CameraFormat::default()` rather
+    than panicking via `unreachable!()` (the V4L / MSMF stubs
+    panic) — this is intentional because callers in
+    `src/session.rs` invoke it on stub paths.
+  - `info()` panics with `unreachable!("GStreamer stub:
+    GStreamerCaptureDevice::new always fails")`, pinned with
+    `#[should_panic(expected = ...)]`.
+  Added 7 new tests in the existing `stub_tests` module covering
+  these branches plus `is_open() == false` and `backend() ==
+  ApiBackend::GStreamer`. Total stub-mode tests: 8 (1 + 7).
 * **Pin the off-Linux V4L stub contract.** Mirror PR for the V4L
   binding crate. The non-Linux compile-shim impls of `CameraDevice`
   / `FrameSource` for `V4LCaptureDevice` (in
@@ -1480,6 +1503,16 @@
 
 ### Infrastructure
 
+* **Run `nokhwa-bindings-gstreamer` stub-mode tests in CI.**
+  `Test Core & Features → check-gstreamer` already runs the
+  crate's tests with `--features backend` (the real
+  `gstreamer-rs` path), but the backend-less `stub` module —
+  active when downstream consumers don't enable `input-gstreamer`
+  — stayed unexecuted in CI. Added a `cargo test -p
+  nokhwa-bindings-gstreamer` step (no features) to the `Core
+  unit tests` job. No system GStreamer install required (the
+  whole point of the stub) so it can run on the same vanilla
+  `ubuntu-latest` runner that hosts the other unit-test steps.
 * **Run `nokhwa-tokio` unit tests in CI.** The crate ships ~12
   tests covering the `std::sync::mpsc → tokio::mpsc` forwarder
   bridge (ordering, closure semantics, owned-non-`Copy` payloads,

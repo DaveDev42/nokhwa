@@ -606,18 +606,142 @@ pub use internal::*;
 
 #[cfg(all(test, not(feature = "backend")))]
 mod stub_tests {
-    use super::internal::query;
+    use super::internal::{query, GStreamerCaptureDevice};
+    use nokhwa_core::error::NokhwaError;
+    use nokhwa_core::format_types::Mjpeg;
+    use nokhwa_core::traits::{CameraDevice, FrameSource};
+    use nokhwa_core::types::{
+        ApiBackend, CameraFormat, CameraIndex, ControlValueSetter, FrameFormat, KnownCameraControl,
+        RequestedFormat, RequestedFormatType, Resolution,
+    };
+
+    // The GStreamer stub uses a *different* error shape from the V4L /
+    // MSMF stubs: `query()` and `GStreamerCaptureDevice::new` return
+    // `NotImplementedError` ("backend not compiled in"), but the trait-
+    // method paths return `UnsupportedOperationError(ApiBackend::
+    // GStreamer)` because the dispatcher in `src/backends/capture/mod.rs`
+    // wires this stub in even on backend-less builds (unlike V4L / MSMF
+    // which are cfg-gated out). Pin both error shapes so a future
+    // refactor that "unifies" them silently breaks the dispatcher's
+    // expectations.
+
+    fn assert_not_implemented(err: &NokhwaError) {
+        assert!(
+            matches!(err, NokhwaError::NotImplementedError(_)),
+            "expected NotImplementedError, got {err:?}",
+        );
+    }
+
+    fn assert_unsupported_for_gstreamer(err: &NokhwaError) {
+        assert!(
+            matches!(
+                err,
+                NokhwaError::UnsupportedOperationError(ApiBackend::GStreamer)
+            ),
+            "expected UnsupportedOperationError(GStreamer), got {err:?}",
+        );
+    }
 
     /// Verifies the stub path compiles and returns a `NotImplementedError`
     /// without panicking.
     #[test]
     fn stub_query_errors_cleanly() {
         let err = query().expect_err("stub query() must error");
+        assert_not_implemented(&err);
         let msg = format!("{err}");
         assert!(
             msg.contains("GStreamer"),
             "unexpected stub error text: {msg}"
         );
+    }
+
+    #[test]
+    fn stub_new_errors_with_not_implemented() {
+        // `GStreamerCaptureDevice` does not implement `Debug`.
+        match GStreamerCaptureDevice::new(
+            &CameraIndex::Index(0),
+            RequestedFormat::new::<Mjpeg>(RequestedFormatType::AbsoluteHighestFrameRate),
+        ) {
+            Err(err) => assert_not_implemented(&err),
+            Ok(_) => panic!("stub `new` must always error without backend feature"),
+        }
+    }
+
+    #[test]
+    fn stub_backend_reports_gstreamer() {
+        let dev = GStreamerCaptureDevice;
+        assert_eq!(dev.backend(), ApiBackend::GStreamer);
+    }
+
+    #[test]
+    fn stub_camera_device_methods_return_unsupported() {
+        let mut dev = GStreamerCaptureDevice;
+        assert_unsupported_for_gstreamer(&dev.controls().expect_err("stub controls() must error"));
+        assert_unsupported_for_gstreamer(
+            &dev.set_control(
+                KnownCameraControl::Brightness,
+                ControlValueSetter::Integer(0),
+            )
+            .expect_err("stub set_control() must error"),
+        );
+    }
+
+    #[test]
+    fn stub_frame_source_methods_return_unsupported() {
+        let mut dev = GStreamerCaptureDevice;
+        assert_unsupported_for_gstreamer(
+            &dev.set_format(CameraFormat::new(
+                Resolution::new(640, 480),
+                FrameFormat::MJPEG,
+                30,
+            ))
+            .expect_err("stub set_format() must error"),
+        );
+        assert_unsupported_for_gstreamer(
+            &dev.compatible_formats()
+                .expect_err("stub compatible_formats() must error"),
+        );
+        assert_unsupported_for_gstreamer(
+            &dev.compatible_fourcc()
+                .expect_err("stub compatible_fourcc() must error"),
+        );
+        assert_unsupported_for_gstreamer(&dev.open().expect_err("stub open() must error"));
+        assert_unsupported_for_gstreamer(&dev.frame().expect_err("stub frame() must error"));
+        assert_unsupported_for_gstreamer(
+            &dev.frame_raw().expect_err("stub frame_raw() must error"),
+        );
+        assert_unsupported_for_gstreamer(&dev.close().expect_err("stub close() must error"));
+    }
+
+    #[test]
+    fn stub_is_open_reports_false() {
+        let dev = GStreamerCaptureDevice;
+        assert!(!dev.is_open());
+    }
+
+    /// Unlike V4L / MSMF stubs (which `unreachable!()` on
+    /// `negotiated_format`), the GStreamer stub returns
+    /// `CameraFormat::default()` — pin that explicitly because some
+    /// callers in `src/session.rs` invoke `negotiated_format()` even on
+    /// stub paths.
+    #[test]
+    fn stub_negotiated_format_returns_default_not_panic() {
+        let dev = GStreamerCaptureDevice;
+        assert_eq!(dev.negotiated_format(), CameraFormat::default());
+    }
+
+    /// `info()` is the one method that still panics on this stub (see
+    /// `unreachable!("GStreamer stub: GStreamerCaptureDevice::new always
+    /// fails")`). It's only reachable if a caller fabricates a
+    /// `GStreamerCaptureDevice` directly bypassing `new` — pin that
+    /// path so a future refactor doesn't silently switch it to a
+    /// default `CameraInfo` (which would be a worse failure mode:
+    /// callers would treat a stub device as a real camera).
+    #[test]
+    #[should_panic(expected = "GStreamer stub: GStreamerCaptureDevice::new always fails")]
+    fn stub_info_panics() {
+        let dev = GStreamerCaptureDevice;
+        let _info = dev.info();
     }
 }
 

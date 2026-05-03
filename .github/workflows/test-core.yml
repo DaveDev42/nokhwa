@@ -66,6 +66,20 @@ jobs:
       # the tests touch real hardware (they exercise channel plumbing
       # against `std::sync::mpsc` and the `testing` mock backends).
       - run: cargo test -p nokhwa-tokio
+      # `nokhwa-bindings-gstreamer` ships a backend-less `stub` module
+      # (the path that's active when `input-gstreamer` is OFF on the
+      # `nokhwa` crate). Its `query()` + `GStreamerCaptureDevice` trait
+      # surface uses a different error shape from the V4L / MSMF stubs:
+      # `query()` / `new()` return `NotImplementedError` while every
+      # trait method returns `UnsupportedOperationError(GStreamer)`,
+      # because the dispatcher in `src/backends/capture/mod.rs` keeps
+      # this stub wired in even on backend-less builds. The Linux
+      # `check-gstreamer` job runs the crate's tests with `--features
+      # backend`, so the stub path stayed unexecuted in CI. This step
+      # runs the crate's tests *without* `--features backend`, exercising
+      # the 8 stub-contract tests on a vanilla Linux host (no system
+      # GStreamer install needed — that's the whole point of the stub).
+      - run: cargo test -p nokhwa-bindings-gstreamer
 
   # Runs `nokhwa-bindings-linux-v4l` unit tests on non-Linux hosts so the
   # off-Linux `internal` stub module — gated on `#[cfg(not(target_os =
