@@ -232,6 +232,18 @@
 
 ### Testing
 
+* **Pin `runner_spawn_{stream,hybrid}_propagates_open_error` Display
+  strings exactly.** `tests/runner.rs:1532` and `:1614` exercised the
+  `cam.open()?` propagation in `CameraRunner::spawn_stream` /
+  `spawn_hybrid` (`src/runner.rs:288`, `:366`) but only verified the
+  surfaced error via `msg.contains("simulated ... failure")`. A
+  regression that wrapped the inner `NokhwaError::open_stream(...)`
+  in a different variant (e.g. `GeneralError`, `OpenDeviceError`),
+  or stripped the `"Could not open device stream: "` prefix from the
+  `OpenStreamError` Display impl (`nokhwa-core/src/error.rs:48`),
+  would still satisfy the substring check while breaking every
+  downstream log scraper. Pin both call paths to the verbatim
+  `"Could not open device stream: simulated [hybrid] open() failure"`.
 * **Tighten 2 remaining `contains(...)` Display pins to exact-string
   equality.** `tests/format_tests.rs:50` (`Resolution::Display`,
   `nokhwa-core/src/types.rs:571-575`) → `"1920x1080"`; a wording or

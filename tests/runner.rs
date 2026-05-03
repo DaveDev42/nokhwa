@@ -1532,10 +1532,17 @@ fn runner_spawn_stream_propagates_open_error() {
     let err = result.expect_err(
         "spawn_stream must propagate open() error rather than return Ok with a stuck worker",
     );
-    let msg = format!("{err}");
-    assert!(
-        msg.contains("simulated open() failure"),
-        "expected open() error to surface unchanged; got: {msg}"
+    // Pin the full Display string. `cam.open()?` (`src/runner.rs:288`)
+    // surfaces the inner `NokhwaError::open_stream(...)` verbatim, so
+    // a regression that wraps the error in a different variant
+    // (e.g. `GeneralError`, `OpenDeviceError`) — or strips the
+    // `"Could not open device stream: "` prefix from the
+    // `OpenStreamError` Display impl (`nokhwa-core/src/error.rs:48`)
+    // — would still satisfy a `contains("simulated open() failure")`
+    // check while breaking every downstream log scraper.
+    assert_eq!(
+        format!("{err}"),
+        "Could not open device stream: simulated open() failure"
     );
 }
 
@@ -1614,10 +1621,14 @@ fn runner_spawn_hybrid_propagates_open_error() {
     let err = result.expect_err(
         "spawn_hybrid must propagate open() error rather than return Ok with a stuck worker",
     );
-    let msg = format!("{err}");
-    assert!(
-        msg.contains("simulated hybrid open() failure"),
-        "expected open() error to surface unchanged; got: {msg}"
+    // Mirror the stream-spawn pin above: `spawn_hybrid` (`src/runner.rs:366`)
+    // also calls `cam.open()?` and surfaces the inner
+    // `NokhwaError::open_stream(...)` verbatim. Pin the full Display string
+    // for the hybrid path so a regression that wraps / rewords the error
+    // surfaces here and not in user-facing logs.
+    assert_eq!(
+        format!("{err}"),
+        "Could not open device stream: simulated hybrid open() failure"
     );
 }
 
