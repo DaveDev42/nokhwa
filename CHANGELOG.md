@@ -232,6 +232,30 @@
 
 ### Testing
 
+* **Pin `CameraRunner` unbounded capacity + stream worker error
+  resilience.** Two `CameraRunner` paths shipped without E2E coverage:
+  - `runner_unbounded_capacity_delivers_every_frame_in_order` —
+    `frames_capacity = 0` selects the unbounded
+    `std::sync::mpsc::channel` path inside `make_channel`, restoring
+    0.13-era no-drop behavior regardless of `Overflow` policy. A
+    regression that mis-routed 0 to `sync_channel(0)` (rendezvous)
+    would deadlock the worker on the first send; one that mis-routed
+    to `sync_channel(1)` plus `DropNewest` would silently lose frames
+    under burst. Test pushes 32 sequenced frames, sleeps 1s for the
+    worker to drain, and verifies every frame arrives in order with
+    `Overflow::Block` deliberately set (to ensure the unbounded path
+    doesn't accidentally consult policy).
+  - `runner_stream_worker_survives_transient_frame_errors` — pins
+    `src/runner.rs:309-311` (sleep+retry on `frame()` error). A
+    regression that turned that branch into `break` or `panic!`
+    would silently kill the worker after the first transient hiccup
+    (V4L2 EAGAIN, MSMF sample-not-ready) with no consumer-visible
+    recovery. Test uses `SharedQueueFrameSource` (an
+    `Arc<Mutex<VecDeque<Buffer>>>`-backed source the test thread can
+    refill), drains 3 initial frames, sleeps 300ms (≥30 worker poll
+    cycles, all hitting the empty-queue error path), pushes 3 fresh
+    frames, and asserts they arrive — proving the worker survived the
+    error stretch and is still pumping.
 * **Pin `CameraRunner` end-to-end `Overflow` policy wiring.**
   `make_channel(capacity, policy)` is unit-tested directly in
   `src/runner.rs`, but the full path from `CameraRunner::spawn(opened,

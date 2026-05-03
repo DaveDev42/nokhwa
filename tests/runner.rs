@@ -598,3 +598,209 @@ fn runner_overflow_drop_oldest_preserves_order_and_keeps_latest_frame() {
         "DropOldest must keep the most recent frame at the tail; got {received:?}"
     );
 }
+
+/// `frames_capacity = 0` end-to-end: setting the capacity to 0 in
+/// [`RunnerConfig`] must select the unbounded `std::sync::mpsc::channel`
+/// path inside `make_channel`, restoring the 0.13-era no-drop behavior
+/// regardless of the [`Overflow`] policy. A regression that mis-routes
+/// 0 to a `sync_channel(0)` (rendezvous) would deadlock the worker on
+/// the first send; one that mis-routes it to `sync_channel(1)` plus
+/// `DropNewest` would silently lose frames under burst.
+///
+/// We push 32 sequenced frames, sleep long enough for the worker to
+/// drain the source, then collect everything — every frame must arrive
+/// in order with no drops.
+#[test]
+fn runner_unbounded_capacity_delivers_every_frame_in_order() {
+    let opened = OpenedCamera::from_device(Box::new(make_sequenced_frame_source(32)));
+    let cfg = RunnerConfig {
+        frames_capacity: 0,
+        // Policy must be irrelevant when capacity is 0; pick a non-default
+        // to ensure the unbounded path doesn't accidentally consult it.
+        overflow: Overflow::Block,
+        ..RunnerConfig::default()
+    };
+    let runner = CameraRunner::spawn(opened, cfg).unwrap();
+
+    // 32 frames × ~10ms poll_interval = ~320ms; 1s is comfortable.
+    std::thread::sleep(Duration::from_millis(1000));
+
+    let rx = runner.frames().expect("stream runner has frames channel");
+    let mut received = Vec::new();
+    while let Ok(buf) = rx.recv_timeout(Duration::from_millis(200)) {
+        received.push(buf.buffer()[0]);
+    }
+
+    let expected: Vec<u8> = (0..32).collect();
+    assert_eq!(
+        received, expected,
+        "frames_capacity=0 must deliver every frame in order without drops; got {received:?}"
+    );
+}
+
+// ───────────── stream worker survives transient frame() errors ────────
+//
+// `src/runner.rs:309-311` puts the worker thread into a sleep+retry
+// loop whenever the underlying `FrameSource::frame()` returns an
+// error, on the assumption that errors are transient (V4L2 EAGAIN,
+// MSMF sample-not-ready, etc.). If a regression turned that into a
+// `break` or `panic!`, the worker would silently die after the first
+// transient hiccup and the consumer would never see a recovery, with
+// no test catching it.
+//
+// This test pins resilience via a shared frame queue: produce N frames,
+// drain them (queue empties → frame() errors), sleep long enough for
+// the worker to walk the error path many times, then push fresh frames
+// and verify they arrive.
+
+/// `FrameSource` whose queue is held in an `Arc<Mutex<VecDeque<Buffer>>>`
+/// so the test thread can push frames after the worker has started
+/// erroring on an empty queue.
+struct SharedQueueFrameSource {
+    info: CameraInfo,
+    format: CameraFormat,
+    queue: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<Buffer>>>,
+}
+
+impl CameraDevice for SharedQueueFrameSource {
+    fn backend(&self) -> ApiBackend {
+        ApiBackend::Browser
+    }
+    fn info(&self) -> &CameraInfo {
+        &self.info
+    }
+    fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        Ok(vec![])
+    }
+    fn set_control(
+        &mut self,
+        _id: KnownCameraControl,
+        _v: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+}
+
+impl FrameSource for SharedQueueFrameSource {
+    fn negotiated_format(&self) -> CameraFormat {
+        self.format
+    }
+    fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
+        self.format = f;
+        Ok(())
+    }
+    fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+        Ok(vec![self.format])
+    }
+    fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
+        Ok(vec![self.format.format()])
+    }
+    fn open(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+    fn is_open(&self) -> bool {
+        true
+    }
+    fn frame(&mut self) -> Result<Buffer, NokhwaError> {
+        self.queue
+            .lock()
+            .unwrap()
+            .pop_front()
+            .ok_or(NokhwaError::TimeoutError(Duration::ZERO))
+    }
+    fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
+        match self.queue.lock().unwrap().pop_front() {
+            Some(buf) => Ok(Cow::Owned(buf.buffer().to_vec())),
+            None => Err(NokhwaError::TimeoutError(Duration::ZERO)),
+        }
+    }
+    fn close(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+}
+
+nokhwa_backend!(SharedQueueFrameSource: FrameSource);
+
+#[test]
+fn runner_stream_worker_survives_transient_frame_errors() {
+    use std::collections::VecDeque;
+    use std::sync::{Arc, Mutex};
+
+    let queue = Arc::new(Mutex::new(VecDeque::<Buffer>::new()));
+
+    // Seed with 3 sequence-tagged frames, numbered 0..3.
+    {
+        let mut q = queue.lock().unwrap();
+        for n in 0..3u8 {
+            let mut buf = mock_frame(4, 4, FrameFormat::GRAY).buffer().to_vec();
+            buf[0] = n;
+            q.push_back(Buffer::from_vec(
+                nokhwa_core::types::Resolution::new(4, 4),
+                buf,
+                FrameFormat::GRAY,
+            ));
+        }
+    }
+
+    let src = SharedQueueFrameSource {
+        info: CameraInfo::new(
+            "shared",
+            "shared",
+            "shared",
+            nokhwa_core::types::CameraIndex::Index(0),
+        ),
+        format: CameraFormat::new(
+            nokhwa_core::types::Resolution::new(4, 4),
+            FrameFormat::GRAY,
+            30,
+        ),
+        queue: Arc::clone(&queue),
+    };
+
+    let opened = OpenedCamera::from_device(Box::new(src));
+    let runner = CameraRunner::spawn(opened, RunnerConfig::default()).unwrap();
+    let rx = runner.frames().expect("stream runner has frames channel");
+
+    // Drain the initial 3 frames.
+    let mut received = Vec::new();
+    for _ in 0..3 {
+        let buf = rx
+            .recv_timeout(Duration::from_millis(500))
+            .expect("initial frame timed out");
+        received.push(buf.buffer()[0]);
+    }
+    assert_eq!(received, vec![0, 1, 2]);
+
+    // Source is now empty. The worker keeps polling, hitting the
+    // sleep+retry path on each empty-queue frame() error. Sleep long
+    // enough to ensure the worker has cycled through that path many
+    // times (10ms poll_interval × 30 = 300ms minimum).
+    std::thread::sleep(Duration::from_millis(300));
+
+    // Push fresh frames; if the worker died, these never arrive.
+    {
+        let mut q = queue.lock().unwrap();
+        for n in 100u8..103 {
+            let mut buf = mock_frame(4, 4, FrameFormat::GRAY).buffer().to_vec();
+            buf[0] = n;
+            q.push_back(Buffer::from_vec(
+                nokhwa_core::types::Resolution::new(4, 4),
+                buf,
+                FrameFormat::GRAY,
+            ));
+        }
+    }
+
+    let mut after = Vec::new();
+    for _ in 0..3 {
+        let buf = rx
+            .recv_timeout(Duration::from_millis(1000))
+            .expect("worker died after transient frame() error");
+        after.push(buf.buffer()[0]);
+    }
+    assert_eq!(
+        after,
+        vec![100, 101, 102],
+        "worker must continue delivering after a stretch of frame() errors; got {after:?}"
+    );
+}
