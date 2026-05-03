@@ -232,6 +232,21 @@
 
 ### Testing
 
+* **Pin `KnownCameraControl::Display` for all 16 variants.** The
+  pre-existing `known_camera_control_display_renders_variant_name`
+  pinned only 5 of 16 variants exactly (`Brightness`, `WhiteBalance`,
+  `BacklightComp`, `Focus`, `Other(42)`) — the 11 remaining named
+  variants (`Contrast`, `Hue`, `Saturation`, `Sharpness`, `Gamma`,
+  `Gain`, `Pan`, `Tilt`, `Zoom`, `Exposure`, `Iris`) were exercised
+  only by `known_camera_control_all_variants_display_non_empty`,
+  which asserts `!is_empty()` rather than the rendering itself. The
+  Display string surfaces in `CameraControl::Display`'s
+  `"Control: {}, ..."` slot and `NokhwaError::SetPropertyError`'s
+  `{property}` slot, so a refactor that replaced the `{:?}`
+  delegation with a hand-written `Display` that renamed even one
+  variant (e.g. `WhiteBalance` → `WhiteBalanceTemp`) would silently
+  change the user-visible error message. Extended the test to assert
+  every variant verbatim. Guards `nokhwa-core/src/types.rs:948-952`.
 * **Tighten `CameraIndex::Display` to an exact-format pin for both
   variants.** The pre-existing `camera_index_display` only asserted
   `s.contains('5')` for `Index(5)` and never exercised the `String`
