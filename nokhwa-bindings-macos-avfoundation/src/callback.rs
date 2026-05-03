@@ -323,7 +323,7 @@ impl Drop for AVCaptureVideoCallback {
 mod tests {
     use super::pts_to_wallclock;
     use crate::ffi::CMTime;
-    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    use std::time::{Duration, UNIX_EPOCH};
 
     fn cmtime(value: i64, timescale: i32) -> CMTime {
         CMTime {
@@ -334,7 +334,7 @@ mod tests {
         }
     }
 
-    /// `timescale == 0` is the documented "uninitialised CMTime"
+    /// `timescale == 0` is the documented "uninitialised `CMTime`"
     /// sentinel and must short-circuit to `None` before the
     /// division — the previous inline code did this too, but with
     /// a `>` rather than `<=` check, so let's pin both forms.
@@ -355,8 +355,8 @@ mod tests {
         assert_eq!(pts_to_wallclock(pts, 5_000_000_000, wall), None);
     }
 
-    /// Happy path: a 1-second-old PTS (mono_now - pts_nanos = 1s)
-    /// pins back to wall_now - 1s.
+    /// Happy path: a 1-second-old PTS (`mono_now` - `pts_nanos` = 1s)
+    /// pins back to `wall_now` - 1s.
     #[test]
     fn pts_to_wallclock_1s_old_pts_subtracts_1s_from_wall_now() {
         // pts_nanos = 4_000_000_000 / 1 = 4 s expressed as nanos
@@ -369,7 +369,7 @@ mod tests {
         assert_eq!(observed, expected);
     }
 
-    /// Future PTS (pts_nanos > mono_now_nanos) — clock skew or a
+    /// Future PTS (`pts_nanos` > `mono_now_nanos`) — clock skew or a
     /// buggy emulator. The `saturating_sub` clamps the age to 0 so
     /// the returned wallclock equals `wall_now`'s offset; pin that
     /// the function returns `Some(_)` rather than panicking.
@@ -393,7 +393,7 @@ mod tests {
         assert_eq!(pts_to_wallclock(pts, 5_000_000_000, wall), None);
     }
 
-    /// `age > wall_now` (e.g. mocked wall_now of 1 ns post-epoch
+    /// `age > wall_now` (e.g. mocked `wall_now` of 1 ns post-epoch
     /// with a 5-second-old buffer) → `checked_sub` returns `None`
     /// instead of underflowing.
     #[test]
