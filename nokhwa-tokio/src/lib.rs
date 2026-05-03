@@ -296,4 +296,79 @@ mod tests {
             "async receiver must observe closure when sync producer disconnects"
         );
     }
+
+    /// `spawn_forwarder` is called once per channel inside
+    /// `TokioCameraRunner::spawn` — frames, pictures, and events each
+    /// get an independent forwarder appended to a shared `Vec`. Pin
+    /// that the helper *appends* (does not replace) and that each
+    /// forwarder routes to its own receiver so streams stay isolated.
+    #[tokio::test(flavor = "current_thread")]
+    async fn forwarder_appends_independent_handles_for_each_call() {
+        let (a_tx, a_rx) = std::sync::mpsc::channel::<u32>();
+        let (b_tx, b_rx) = std::sync::mpsc::channel::<u32>();
+        let mut forwarders: Vec<JoinHandle<()>> = Vec::new();
+        let mut async_a = spawn_forwarder(a_rx, &mut forwarders);
+        let mut async_b = spawn_forwarder(b_rx, &mut forwarders);
+        assert_eq!(
+            forwarders.len(),
+            2,
+            "each spawn_forwarder call must push exactly one JoinHandle"
+        );
+
+        a_tx.send(1).expect("a_tx.send");
+        b_tx.send(99).expect("b_tx.send");
+        drop(a_tx);
+        drop(b_tx);
+
+        let mut got_a = Vec::new();
+        while let Some(v) = async_a.recv().await {
+            got_a.push(v);
+        }
+        let mut got_b = Vec::new();
+        while let Some(v) = async_b.recv().await {
+            got_b.push(v);
+        }
+        assert_eq!(got_a, vec![1], "stream A leaked items from stream B");
+        assert_eq!(got_b, vec![99], "stream B leaked items from stream A");
+    }
+
+    /// Empty-then-disconnect: a forwarder spun up for a channel that
+    /// never produces anything must still surface closure to the
+    /// async side. Distinct from the producer-drops test because no
+    /// item ever traverses the bridge — guards against a regression
+    /// where the forwarder waits for at least one successful send
+    /// before honouring closure.
+    #[tokio::test(flavor = "current_thread")]
+    async fn forwarder_surfaces_closure_with_no_items_sent() {
+        let (sync_tx, sync_rx) = std::sync::mpsc::channel::<u32>();
+        let mut forwarders: Vec<JoinHandle<()>> = Vec::new();
+        let mut async_rx = spawn_forwarder(sync_rx, &mut forwarders);
+        drop(sync_tx);
+        assert!(
+            async_rx.recv().await.is_none(),
+            "empty channel must still close the async side"
+        );
+    }
+
+    /// The forwarder bridges any `Send + 'static` payload; pin that the
+    /// generic parameter actually carries non-`Copy` owned data
+    /// end-to-end without losing values. A future refactor that
+    /// accidentally narrows the bound (e.g. to `Copy`) would break
+    /// the `Buffer` channel — this test fails fast on that mistake.
+    #[tokio::test(flavor = "current_thread")]
+    async fn forwarder_carries_owned_non_copy_payloads() {
+        let (sync_tx, sync_rx) = std::sync::mpsc::channel::<String>();
+        let mut forwarders: Vec<JoinHandle<()>> = Vec::new();
+        let mut async_rx = spawn_forwarder(sync_rx, &mut forwarders);
+
+        sync_tx.send("hello".to_string()).expect("sync_tx.send");
+        sync_tx.send("world".to_string()).expect("sync_tx.send");
+        drop(sync_tx);
+
+        let mut received = Vec::new();
+        while let Some(v) = async_rx.recv().await {
+            received.push(v);
+        }
+        assert_eq!(received, vec!["hello".to_string(), "world".to_string()]);
+    }
 }
