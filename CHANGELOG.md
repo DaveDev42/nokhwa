@@ -289,6 +289,22 @@
 
 ### Testing
 
+* **Pin error strings on `resolve_format` reject tests in
+  `nokhwa-bindings-gstreamer/src/pipeline.rs`.** Two sibling tests
+  (`resolve_format_empty_candidates_errors_with_open_device:381`,
+  `resolve_format_no_matching_format_errors:392`) already pinned the
+  `OpenDeviceError` variant + `device == "GStreamer device"` but used
+  `error.contains(...)` for the message itself. The empty-candidates
+  case now asserts full equality with `"no compatible formats"`. The
+  no-match case now reconstructs the documented format string —
+  `format!("no format in the device's caps satisfied the request:
+  {{candidates:?}}")` — and asserts equality, which simultaneously
+  pins the canonical phrase **and** that the candidate list is
+  rendered as the `Debug` form (the contract `resolve_format` actually
+  promises). The previous `contains("MJPEG")` would have trivially
+  held even after a regression that replaced `{candidates:?}` with a
+  summary like `"{} candidates", n` — losing the user-facing diagnostic
+  while still satisfying the substring assertion.
 * **Pin `SetPropertyError` variant + value/error fields on
   `v4l2_cid_value_rejects_unsupported_setters`.** The test at
   `nokhwa-bindings-gstreamer/src/controls.rs:410` only checked
