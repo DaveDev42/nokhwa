@@ -237,6 +237,42 @@ fn hybrid_camera_exposes_both_surfaces() {
     let _ = cam.capture(Duration::from_millis(100)).unwrap();
 }
 
+/// Companion pin to `stream_camera_open_frame_close_cycle` for
+/// `HybridCamera`. `src/session.rs:504-520` has three pass-through
+/// methods — `open()`, `is_open()`, `close()` — that delegate to
+/// `FrameSource` on the boxed inner. The stream-camera test pins the
+/// full open → is_open(true) → close → is_open(false) cycle, but no
+/// existing hybrid test asserts `is_open()` state transitions, and
+/// none calls `close()` on a hybrid at all.
+///
+/// A regression that hardcoded `HybridCamera::is_open()` to return
+/// `true` (or that dropped the `close()` delegation in favour of
+/// always-`Ok(())`) would let callers think the camera is in the
+/// wrong lifecycle state — invisible until something downstream
+/// noticed the camera was still streaming after a `close()`.
+/// `hybrid_camera_exposes_both_surfaces` only checks `open()` is
+/// `Ok` and that `frame()` / `capture()` return values; it never
+/// observes `is_open()` or `close()`.
+#[test]
+fn hybrid_camera_open_is_open_close_cycle() {
+    let mut cam = HybridCamera::from_device(Box::new(make_hybrid()));
+    assert!(
+        !cam.is_open(),
+        "fresh HybridCamera must report not-open before open()"
+    );
+    assert!(cam.open().is_ok());
+    assert!(
+        cam.is_open(),
+        "HybridCamera::is_open() must reflect post-open backend state"
+    );
+    let _ = cam.frame().unwrap();
+    assert!(cam.close().is_ok());
+    assert!(
+        !cam.is_open(),
+        "HybridCamera::is_open() must reflect post-close backend state"
+    );
+}
+
 #[test]
 fn hybrid_camera_without_events_returns_none() {
     let mut cam = HybridCamera::from_device(Box::new(make_hybrid()));
