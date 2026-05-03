@@ -45,7 +45,6 @@ pub enum TimestampKind {
 /// Contains information of Resolution, the buffer's [`FrameFormat`], and the buffer.
 ///
 /// Note that decoding on the main thread **will** decrease your performance and lead to dropped frames.
-#[allow(clippy::struct_field_names)]
 #[derive(Clone, Debug, Hash, PartialOrd, PartialEq, Eq)]
 pub struct Buffer {
     resolution: Resolution,

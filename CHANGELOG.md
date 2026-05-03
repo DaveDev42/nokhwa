@@ -127,6 +127,19 @@
 
 ### Cleanup
 
+* **Drop dead `#[allow(clippy::struct_field_names)]` from
+  `Buffer`** in `nokhwa-core/src/buffer.rs`. The suppression was
+  attached to `pub struct Buffer { ... source_frame_format: ... }`
+  but no current clippy version actually fires
+  `struct_field_names` against that struct (verified by removing
+  the attribute and running
+  `cargo clippy -p nokhwa-core --all-targets --features
+  serialize,wgpu-types,mjpeg,bench` — clean). Dead `#[allow]` lines
+  silently mask future regressions: if the lint were ever
+  legitimately triggered by an unrelated change to the struct, the
+  blanket attribute would hide it. Removed the attribute; if the
+  lint ever genuinely fires, it can be re-added with a comment
+  pinning what it's for.
 * **Remove `new_with` deprecated-since-0.10.0 builder across V4L /
   MSMF / AVFoundation bindings.** Each binding crate carried a
   `pub fn new_with(index, width, height, fps, fourcc) -> Result<Self>`
