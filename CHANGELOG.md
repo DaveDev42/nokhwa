@@ -232,6 +232,23 @@
 
 ### Testing
 
+* **Pin YUYV `into_rgb()` / `into_rgba()` `write_to()` size-guard
+  rejections.** `buf_yuyv422_to_rgb`
+  (`nokhwa-core/src/types.rs:1712-1740`) guards both the input
+  divisibility (`data.len() % 4 == 0`) and the dest buffer size
+  (`dest.len() == (data.len() / 4) * 2 * pixel_size`) before
+  dispatching into `crate::simd::yuyv_to_{rgb,rgba}_simd`. The happy
+  paths were pinned via
+  `yuyv_into_rgb_write_to_neutral_chroma_produces_gray` and
+  `yuyv_into_rgba_write_to_appends_opaque_alpha`; the rejection paths
+  were unpinned for both variants. A regression that dropped either
+  guard (e.g. a refactor that consolidated YUYV + NV12 into a shared
+  helper and lost the `dest.len()` check on the YUYV branch) would
+  surface as a SIMD out-of-bounds panic or silent truncation rather
+  than a clean `ProcessFrameError`. Four new tests
+  (`yuyv_into_rgb_write_to_rejects_{wrong_input_size,mismatched_dest}`
+  and the RGBA mirror) cover both guards on both variants via
+  `assert_process_frame_err`.
 * **Pin YUYV `into_luma().write_to()` size-guard rejections.**
   `buf_yuyv_extract_luma` (`nokhwa-core/src/types.rs:1848-1872`) has
   two pre-conditions before its SIMD copy: input length divisible
