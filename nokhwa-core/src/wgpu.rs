@@ -244,11 +244,20 @@ mod tests {
         // at `wgpu.rs:121`.
         let err = raw_texture_layout(FrameFormat::MJPEG, Resolution::new(640, 480)).unwrap_err();
         match err {
-            NokhwaError::GeneralError { message, .. } => {
+            NokhwaError::GeneralError { message, backend } => {
                 assert_eq!(
                     message,
                     "frame_texture_raw() cannot be used with MJPEG sources; \
                      use frame_texture() instead"
+                );
+                // The branch at `wgpu.rs:121` calls `NokhwaError::general(...)`
+                // which always sets `backend: None`. Pin so a future refactor
+                // that re-routes through a backend-tagged constructor (e.g.
+                // `NokhwaError::GeneralError { backend: Some(...), .. }`)
+                // changes the public-API shape and is caught.
+                assert!(
+                    backend.is_none(),
+                    "expected no backend tag, got {backend:?}"
                 );
             }
             other => panic!("expected GeneralError, got {other:?}"),
