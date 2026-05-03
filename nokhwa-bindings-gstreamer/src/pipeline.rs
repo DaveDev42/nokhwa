@@ -507,4 +507,130 @@ mod tests {
         let chosen = resolve_format(&candidates, &req).unwrap();
         assert_eq!(chosen.format(), FrameFormat::MJPEG);
     }
+
+    /// `element_err` (pipeline.rs:224) wraps a "what failed: why"
+    /// description into `OpenStreamError` with the GStreamer backend
+    /// tag set. Used by 9 distinct call sites in `PipelineHandle::start`
+    /// (capsfilter / videoconvert / source / Pipeline::add(_) /
+    /// Element::link(_)). The variant + backend tag + canonical
+    /// `"{what}: {why}"` interpolation are the contract that
+    /// downstream code may switch on (e.g. tests that pattern-match
+    /// `OpenStreamError { backend: Some(GStreamer), .. }` to attribute
+    /// failures to the right backend).
+    ///
+    /// A regression that, e.g., dropped the backend tag, swapped the
+    /// variant for `GeneralError`, or rewrote the interpolation
+    /// (`format!("{what}: {why}")` → `format!("[{what}] {why}")`)
+    /// would silently break the contract. Pin all three.
+    #[test]
+    fn element_err_uses_open_stream_with_gstreamer_backend() {
+        use nokhwa_core::types::ApiBackend;
+
+        let err = element_err("capsfilter", "no plugin");
+        match err {
+            NokhwaError::OpenStreamError { message, backend } => {
+                assert_eq!(message, "capsfilter: no plugin");
+                assert_eq!(backend, Some(ApiBackend::GStreamer));
+            }
+            other => panic!("expected OpenStreamError, got {other:?}"),
+        }
+
+        // The 9 production call sites pass varied `what` strings —
+        // the helper must preserve them verbatim regardless of
+        // formatting (no trimming, lowercasing, prefixing).
+        let err = element_err("link convert->appsink", "negotiation failed");
+        match err {
+            NokhwaError::OpenStreamError { message, backend } => {
+                assert_eq!(message, "link convert->appsink: negotiation failed");
+                assert_eq!(backend, Some(ApiBackend::GStreamer));
+            }
+            other => panic!("expected OpenStreamError, got {other:?}"),
+        }
+    }
+
+    /// The `Display` implementation on `NokhwaError::OpenStreamError`
+    /// folds the optional `backend` tag into the user-facing message
+    /// when `Some(_)`. Pin the full Display string so a regression
+    /// that, e.g., dropped the parenthetical backend hint, swapped the
+    /// preposition (`"by backend"` → `"of backend"`), or renamed the
+    /// variant's `#[error(...)]` template fires here. Mirror of
+    /// `unsupported_returns_unsupported_operation_error` in
+    /// `controls.rs`.
+    #[test]
+    fn element_err_display_form_pins_backend_parenthetical() {
+        let err = element_err("capsfilter", "no plugin");
+        assert_eq!(
+            format!("{err}"),
+            "Could not open device stream (backend GStreamer): capsfilter: no plugin"
+        );
+    }
+
+    /// `caps_for` (pipeline.rs:214) builds the `video/x-raw` Caps that
+    /// `capsfilter` uses to lock the negotiation. The structure name
+    /// (`video/x-raw`) and the four fields (`format` / `width` /
+    /// `height` / `framerate`) are the documented contract:
+    /// `capsfilter` enforces them by failing pipeline negotiation if
+    /// the upstream source can't produce a matching cap. A regression
+    /// that, e.g., dropped the framerate field would leave negotiation
+    /// underconstrained and the resulting pipeline would run at
+    /// whatever framerate the source picked — silently violating the
+    /// `RequestedFormat` the user asked for.
+    ///
+    /// The `Caps::to_string()` form is GStreamer's documented
+    /// serialization (`gst-launch` parses it directly), so pin the
+    /// exact rendered string for a representative `(YUYV, 1920x1080,
+    /// 30 FPS)` input.
+    #[test]
+    fn caps_for_emits_video_x_raw_with_all_four_fields() {
+        ensure_gst_init();
+        let fmt_in = fmt(1920, 1080, FrameFormat::YUYV, 30);
+        let caps = caps_for(fmt_in, VideoFormat::Yuy2);
+
+        assert_eq!(caps.size(), 1, "caps_for must emit exactly one Structure");
+        let structure = caps.structure(0).expect("Some after size>0");
+        assert_eq!(structure.name(), "video/x-raw");
+        assert_eq!(structure.get::<&str>("format").unwrap(), "YUY2");
+        assert_eq!(structure.get::<i32>("width").unwrap(), 1920);
+        assert_eq!(structure.get::<i32>("height").unwrap(), 1080);
+        assert_eq!(
+            structure.get::<Fraction>("framerate").unwrap(),
+            Fraction::new(30, 1)
+        );
+    }
+
+    /// `caps_for` is a pure function of its two inputs. Pin a second
+    /// shape (`MJPEG, 640x480, 60 FPS`) to catch the alternative
+    /// regression where the helper hard-codes some dimension instead
+    /// of forwarding the input. (E.g. a refactor that swapped
+    /// `fmt.width()` for `1920` to "fix" a different bug would still
+    /// pass `caps_for_emits_video_x_raw_with_all_four_fields`.)
+    #[test]
+    fn caps_for_forwards_each_input_field_independently() {
+        ensure_gst_init();
+        let fmt_in = fmt(640, 480, FrameFormat::MJPEG, 60);
+        // We use `Encoded` here because the GStreamer raw-formats list
+        // doesn't enumerate MJPEG as a `video/x-raw` format — we still
+        // hit the same code path: `caps_for` only Display-formats the
+        // VideoFormat, it never inspects what kind of format it is.
+        let caps = caps_for(fmt_in, VideoFormat::Encoded);
+
+        let structure = caps.structure(0).unwrap();
+        assert_eq!(structure.get::<i32>("width").unwrap(), 640);
+        assert_eq!(structure.get::<i32>("height").unwrap(), 480);
+        assert_eq!(
+            structure.get::<Fraction>("framerate").unwrap(),
+            Fraction::new(60, 1)
+        );
+    }
+
+    /// `gstreamer::Caps::builder` requires the global registry to be
+    /// initialised. Same `Once`-guard pattern as
+    /// `controls::tests::ensure_gst_init` and `format::tests`.
+    fn ensure_gst_init() {
+        use std::sync::Once;
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            gstreamer::init().expect("gstreamer::init() must succeed in tests");
+        });
+    }
 }
