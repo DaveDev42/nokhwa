@@ -97,6 +97,20 @@
 
 ### Refactoring
 
+* **AVFoundation `current_authorization_status` extracts a pure
+  `decode_authorization_status(raw: isize) -> AVAuthorizationStatus`
+  helper.** The four-branch `NSInteger → AVAuthorizationStatus` decode
+  was inlined inside `current_authorization_status`, which calls
+  `AVCaptureDevice::authorizationStatusForMediaType` — meaning the
+  decode could not be unit-tested without a live `AVCaptureDevice`
+  round-trip. Pulled the I/O-free `match` into a standalone
+  `decode_authorization_status` helper and pinned all five branches:
+  `0 → NotDetermined`, `1 → Restricted`, `2 → Denied`,
+  `3 → Authorized`, and the catch-all (negative ints, `isize::MIN` /
+  `isize::MAX`, future Apple constants) collapsing to `NotDetermined`
+  to preserve the conservative-default invariant — unknown means
+  "prompt the user", never "assume `Authorized`". Tests execute on
+  the `AVFoundation unit tests (macOS)` CI job.
 * **AVFoundation `poll_loop` extracts a pure
   `reconcile_and_emit_with(tx, previous, current)` helper.** The
   diff/emit/cache-swap logic was inlined in `poll_loop` — the same
