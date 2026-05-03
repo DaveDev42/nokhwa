@@ -232,6 +232,26 @@
 
 ### Testing
 
+* **Pin `HotplugEvent` + `CameraEvent` derived-`Debug` exact
+  format.** `hotplug_event_debug_includes_variant_and_camera_info`
+  and `camera_event_debug_includes_variant_name`
+  (`nokhwa-core/src/traits_tests.rs`) only contains-checked
+  fragments of the `Debug` output ("Connected", "Cam",
+  "CaptureError", individual digits / chars). The derived `Debug`
+  on `HotplugEvent` (over `CameraInfo`) is the documented dedupe
+  / log-grep surface called out in the `HotplugSource` rustdoc,
+  and `CameraEvent::CaptureError { code, message }` is the
+  per-camera event-stream contract. A future hand-written `impl
+  Debug` that, say, dropped `description` / `misc` from
+  `CameraInfo` to "tidy up" log output, or that collapsed
+  `CaptureError { code, message }` to a tuple-style
+  `CaptureError(code, msg)`, would have passed the contains-only
+  assertions while silently breaking every downstream
+  log-shape consumer. Replaced both with
+  `assert_eq!(format!("{:?}", ev), "...")` exact-format pins
+  covering both `HotplugEvent` variants (`Connected` /
+  `Disconnected`) and all three `CameraEvent` variants
+  (`Disconnected` / `WillShutDown` / `CaptureError`).
 * **Tighten `Frame::into_buffer` round-trip and pin
   `NokhwaError` helper-constructor message-passthrough.**
   `frame_into_buffer_roundtrip` only asserted the recovered
