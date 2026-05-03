@@ -187,6 +187,28 @@
 
 ### Testing
 
+* **Pin derive surface and `CaptureFormat` super-trait bound on
+  every marker ZST in `nokhwa-core::format_types`.** The six
+  marker ZSTs (`Yuyv`, `Nv12`, `Mjpeg`, `Gray`, `RawRgb`,
+  `RawBgr`) derive `Copy + Clone + Default + Hash + Ord +
+  PartialOrd + Eq + PartialEq + Debug` so they can be used as
+  hash-map keys, in `BTreeSet`s, and in `Arc`-shared backend
+  state via the `CaptureFormat: Send + Sync + 'static`
+  super-trait. The existing `format_types_tests.rs` only pinned
+  the `FRAME_FORMAT` constant and `size_of::<T>() == 0`; nothing
+  caught a refactor that dropped `Hash` (silently breaking a
+  downstream `HashMap<Mjpeg, _>`) or loosened the `CaptureFormat`
+  super-trait to non-`Send`. Three new tests pin the contracts
+  via generic helpers (`assert_marker_traits<T>`,
+  `assert_capture_format_super_traits<T>`) so removing any
+  derive or super-trait fails compilation, plus a
+  `HashSet`/`BTreeSet` round-trip that exercises the derived
+  `Hash` + `Ord` for default-constructed markers. The
+  `Mjpeg::default()` call is gated behind
+  `#[allow(clippy::default_constructed_unit_structs)]` because
+  the verbose form is the contract — clippy would prefer
+  `Mjpeg`, hiding the `Default`-derive coverage.
+
 * **Pin documented `# Panics` contracts on
   `OpenedCamera` / `StreamCamera` / `ShutterCamera` /
   `HybridCamera::from_device`.** Each wrapper's `from_device` is
