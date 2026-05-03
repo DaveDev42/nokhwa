@@ -446,6 +446,28 @@ fn fulfill_highest_resolution_no_match() {
 }
 
 #[test]
+fn fulfill_highest_resolution_returns_none_when_only_match_has_wrong_decoder() {
+    // The requested resolution (1920x1080) IS present in the list, but only
+    // with NV12 — and the caller only accepts MJPEG. The decoder filter at
+    // types.rs:207 must drop the NV12 candidate before `max_by_key`, so the
+    // `?` at types.rs:208 short-circuits to None.
+    //
+    // Distinct from `fulfill_highest_resolution_no_match`, which has no
+    // candidate at the requested resolution at all. A regression that
+    // forgot the `wanted_decoder.contains(...)` check on `HighestResolution`
+    // would silently return the NV12 frame to an MJPEG-only caller.
+    let available = vec![
+        CameraFormat::new_from(1920, 1080, FrameFormat::NV12, 30),
+        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30),
+    ];
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::HighestResolution(Resolution::new(1920, 1080)),
+        &[FrameFormat::MJPEG],
+    );
+    assert!(req.fulfill(&available).is_none());
+}
+
+#[test]
 fn fulfill_highest_framerate_at_given_fps() {
     let available = vec![
         CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30),
@@ -460,6 +482,30 @@ fn fulfill_highest_framerate_at_given_fps() {
     assert_eq!(result.frame_rate(), 30);
     // Among 30fps formats, picks highest resolution
     assert_eq!(result.resolution(), Resolution::new(1280, 720));
+}
+
+#[test]
+fn fulfill_highest_framerate_returns_none_when_only_match_has_wrong_decoder() {
+    // Symmetric to the HighestResolution-decoder-filter test above:
+    // the requested fps (60) IS present but only with NV12, and the
+    // caller only accepts MJPEG. The decoder filter at types.rs:223
+    // must drop the NV12 candidate before `max_by_key`, so the `?` at
+    // types.rs:224 short-circuits to None.
+    //
+    // Distinct from `fulfill_highest_framerate_returns_none_when_no_candidate_at_fps`,
+    // which has no candidate at the requested fps at all. A regression
+    // that forgot the `wanted_decoder.contains(...)` check on
+    // `HighestFrameRate` would silently return the NV12 frame to an
+    // MJPEG-only caller.
+    let available = vec![
+        CameraFormat::new_from(1920, 1080, FrameFormat::NV12, 60),
+        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30),
+    ];
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::HighestFrameRate(60),
+        &[FrameFormat::MJPEG],
+    );
+    assert!(req.fulfill(&available).is_none());
 }
 
 #[test]
