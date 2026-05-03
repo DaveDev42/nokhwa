@@ -703,6 +703,58 @@ fn query_results_are_openable() {
     );
 }
 
+/// `OpenedCamera::info()` must match the corresponding `CameraInfo`
+/// returned by `query()` for the same index — at minimum on
+/// `human_name`, the field every picker UI shows the user. The
+/// existing `query_results_are_openable` only confirms the open
+/// itself succeeds and routes to the right backend; it doesn't
+/// catch a regression where `query()` reports device A's name at
+/// position 0 but `open(Index(0))` actually opens device B (and
+/// `info()` reports B's name). That's the kind of silent off-by-one
+/// that "I selected my Logitech but my Brio came up" bug reports
+/// trace back to. V4L2's `/dev/videoN` ordering can differ between
+/// `query()` (sorted) and `open()` (positional via `Camera::with_path`)
+/// if a future refactor changes one without the other; MSMF's
+/// `MFEnumDeviceSources` order is what `open(Index(i))` uses
+/// internally, so a regression that re-sorted one but not the
+/// other in the wrapper layer would surface here.
+#[test]
+fn open_info_matches_query_for_same_index() {
+    let devices = query(native_backend()).expect("query() returned an error");
+    let Some(first) = devices.first() else {
+        eprintln!("open_info_matches_query_for_same_index: query returned empty; skipping.");
+        return;
+    };
+    let CameraIndex::Index(idx) = first.index() else {
+        eprintln!(
+            "open_info_matches_query_for_same_index: native query returned a non-Index variant ({:?}); skipping.",
+            first.index()
+        );
+        return;
+    };
+    let cam = open(CameraIndex::Index(*idx), OpenRequest::any())
+        .unwrap_or_else(|e| panic!("open(query[0].index = {idx}) failed: {e}"));
+    let opened_info = match &cam {
+        OpenedCamera::Stream(c) => c.info(),
+        OpenedCamera::Shutter(c) => c.info(),
+        OpenedCamera::Hybrid(c) => c.info(),
+    };
+    assert_eq!(
+        opened_info.index(),
+        first.index(),
+        "OpenedCamera::info().index() {:?} does not match query[0].index() {:?}",
+        opened_info.index(),
+        first.index()
+    );
+    assert_eq!(
+        opened_info.human_name(),
+        first.human_name(),
+        "OpenedCamera::info().human_name() {:?} does not match query[0].human_name() {:?} — open() may have routed to a different device than query() advertised at that index",
+        opened_info.human_name(),
+        first.human_name()
+    );
+}
+
 /// Every entry in `compatible_formats()` must have a non-zero
 /// resolution. A 0×0 entry would silently feed into `set_format()` /
 /// `RequestedFormat::Exact` and either error or produce a degenerate
