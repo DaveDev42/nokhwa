@@ -300,3 +300,98 @@ fn buffer_partial_eq_distinguishes_timestamp_kind() {
     );
     assert_ne!(buf_capture, buf_presentation);
 }
+
+// `Buffer::from_vec` is documented "without copying" — i.e. the
+// `Vec<u8>` allocation is reused as the buffer's backing store
+// rather than memcpy'd into a fresh `Bytes`. This is the *only*
+// reason `from_vec` exists alongside `new` (which does
+// `Bytes::copy_from_slice`). A regression that silently changed
+// `Bytes::from(buf)` to `Bytes::copy_from_slice(&buf)` would still
+// pass every existing equality / round-trip test (the data bytes
+// are identical) while reintroducing a hidden allocation per
+// frame on every backend path that uses the zero-copy
+// constructor. Pin the contract via pointer equality between the
+// vec's data pointer and the resulting `buffer()` slice's pointer.
+// Use a non-empty vec so both pointers are well-defined (an empty
+// `Vec` has a dangling sentinel pointer and `Bytes::from(vec![])`
+// is allowed to dangle anywhere).
+#[test]
+fn buffer_from_vec_is_zero_copy() {
+    let res = Resolution::new(2, 2);
+    let mut data: Vec<u8> = vec![0; 12];
+    // Force a non-trivial allocation: write a sentinel pattern so
+    // the optimizer can't elide the buffer.
+    for (i, b) in data.iter_mut().enumerate() {
+        *b = u8::try_from(i).unwrap_or(0);
+    }
+    let original_ptr = data.as_ptr();
+    let buf = Buffer::from_vec(res, data, FrameFormat::RAWRGB);
+    assert_eq!(
+        buf.buffer().as_ptr(),
+        original_ptr,
+        "from_vec must reuse the Vec's allocation; if these pointers \
+         differ a hidden memcpy was reintroduced"
+    );
+}
+
+#[test]
+fn buffer_from_vec_with_timestamp_is_zero_copy() {
+    let res = Resolution::new(2, 2);
+    let mut data: Vec<u8> = vec![0; 12];
+    for (i, b) in data.iter_mut().enumerate() {
+        *b = u8::try_from(i).unwrap_or(0);
+    }
+    let original_ptr = data.as_ptr();
+    let buf = Buffer::from_vec_with_timestamp(
+        res,
+        data,
+        FrameFormat::RAWRGB,
+        Some((std::time::Duration::from_millis(5), TimestampKind::Capture)),
+    );
+    assert_eq!(
+        buf.buffer().as_ptr(),
+        original_ptr,
+        "from_vec_with_timestamp must also be zero-copy; the timestamp \
+         pathway must not reintroduce a memcpy"
+    );
+}
+
+// `Buffer` derives `Hash + Eq` (`buffer.rs:48`), which the public
+// API surfaces by allowing `Buffer` as a `HashMap` / `HashSet` key
+// and in dedup logic. No existing test exercises this — a
+// regression where a hand-written `impl Hash` (or `impl Eq`) hashed
+// or compared only `data` (dropping `resolution`, `format`, or
+// `capture_timestamp`) would silently treat distinct buffers as
+// duplicates. Pin the structural contract: equal buffers collapse
+// to one set entry, distinct buffers don't.
+#[test]
+fn buffer_is_hashable_and_dedups_in_hashset() {
+    use std::collections::HashSet;
+    let res = Resolution::new(2, 2);
+    let data = vec![0u8; 12];
+    let a = Buffer::new(res, &data, FrameFormat::RAWRGB);
+    let a_dup = Buffer::new(res, &data, FrameFormat::RAWRGB);
+    let different_format = Buffer::new(res, &data, FrameFormat::MJPEG);
+    let different_res_data = [0u8; 48];
+    let different_res = Buffer::new(
+        Resolution::new(4, 4),
+        &different_res_data,
+        FrameFormat::RAWRGB,
+    );
+    let different_ts = Buffer::with_timestamp(
+        res,
+        &data,
+        FrameFormat::RAWRGB,
+        Some((std::time::Duration::from_millis(1), TimestampKind::Capture)),
+    );
+
+    let mut set = HashSet::new();
+    set.insert(a);
+    set.insert(a_dup);
+    set.insert(different_format);
+    set.insert(different_res);
+    set.insert(different_ts);
+    // 4 distinct equivalence classes (a / different_format /
+    // different_res / different_ts); a_dup collapses with a.
+    assert_eq!(set.len(), 4);
+}

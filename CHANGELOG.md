@@ -232,6 +232,28 @@
 
 ### Testing
 
+* **Pin `Buffer::from_vec` zero-copy doc contract and
+  `Buffer` `Hash`/`Eq` dedup.** `Buffer::from_vec` and
+  `Buffer::from_vec_with_timestamp` (`nokhwa-core/src/buffer.rs:89-114`)
+  are documented "without copying" — they exist alongside
+  `Buffer::new` (which does `Bytes::copy_from_slice`) precisely to
+  hand the `Vec<u8>`'s allocation to `Bytes` without a memcpy. A
+  regression that silently changed `Bytes::from(buf)` to
+  `Bytes::copy_from_slice(&buf)` (or rolled the body into a
+  `Buffer::new(res, &buf, ...)` call) would still pass every
+  existing equality / round-trip test — the data bytes are
+  identical — while reintroducing a hidden allocation per frame on
+  every backend path that uses the zero-copy constructor. Pinned
+  the contract via pointer equality between the source `Vec`'s
+  `as_ptr()` and the resulting `buffer()` slice's `as_ptr()` for
+  both `from_vec` and `from_vec_with_timestamp`. Separately,
+  `Buffer` derives `Hash + Eq` (`buffer.rs:48`) and is therefore
+  usable as a `HashMap` / `HashSet` key, but no test exercised
+  that — a hand-written `impl Hash` that hashed only `data`
+  (dropping `resolution` / `format` / `capture_timestamp`) would
+  silently treat distinct buffers as duplicates. Added
+  `buffer_is_hashable_and_dedups_in_hashset` covering all four
+  fields.
 * **Tighten `NokhwaError` derived-`Debug` exact format and `Clone`
   message round-trip.** Three contains-only Debug tests in
   `nokhwa-core/src/error_tests.rs`
