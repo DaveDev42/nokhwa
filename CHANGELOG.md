@@ -232,6 +232,23 @@
 
 ### Testing
 
+* **Pin exact `Display` strings for the `None`-context arms of
+  `OpenStreamError`, `ReadFrameError`, and `StreamShutdownError`.**
+  The `Some(_)` arms of these three optional-context error variants
+  were already exact-pinned (`open_stream_error_display_with_backend_exact_format`,
+  `read_frame_error_display_with_format_exact_format`,
+  `stream_shutdown_error_display_with_backend_exact_format`), but the
+  matching `None` arms only had `contains`-style guards
+  (`open_stream_error_display_without_backend` etc.) — a refactor
+  that changed the no-context branch to e.g. `" (no backend)"`,
+  `"Frame capture failed:"`, or reordered the prefix tokens would
+  pass the existing checks while silently producing a different
+  user-visible error string. Added three exact-pin tests
+  asserting `"Could not open device stream: denied"`,
+  `"Could not capture frame: eof"`, and
+  `"Could not stop stream: busy"`. Guards
+  `nokhwa-core/src/error.rs:48`, `:53`, `:64` (the
+  `unwrap_or_default()` branches of the `thiserror` templates).
 * **Tighten `Frame::try_new` mismatch-error pin and add an
   all-integer `ControlValueSetter::RGB` Display pin.** The
   pre-existing `frame_try_new_mismatch_error_carries_src_and_destination`

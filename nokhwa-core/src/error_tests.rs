@@ -305,6 +305,36 @@ fn stream_shutdown_error_display_with_backend_exact_format() {
     );
 }
 
+// The `Some(_)` arms of the three optional-context error variants
+// (`OpenStreamError`, `ReadFrameError`, `StreamShutdownError`) are
+// already exact-pinned above. The matching `None` arms only have
+// `contains`-style guards (`open_stream_error_display_without_backend`,
+// `read_frame_error_display_without_format`,
+// `stream_shutdown_error_display_without_backend`), so a refactor that
+// changed the no-context branch to e.g. `" (no backend)"`,
+// `"Frame capture failed:"`, or reordered the prefix tokens would
+// pass the contains-checks while silently producing a different
+// user-visible error. Pin the exact strings emitted when the
+// optional context is absent.
+
+#[test]
+fn open_stream_error_display_without_backend_exact_format() {
+    let e = NokhwaError::open_stream("denied");
+    assert_eq!(format!("{e}"), "Could not open device stream: denied");
+}
+
+#[test]
+fn read_frame_error_display_without_format_exact_format() {
+    let e = NokhwaError::read_frame("eof");
+    assert_eq!(format!("{e}"), "Could not capture frame: eof");
+}
+
+#[test]
+fn stream_shutdown_error_display_without_backend_exact_format() {
+    let e = NokhwaError::stream_shutdown("busy");
+    assert_eq!(format!("{e}"), "Could not stop stream: busy");
+}
+
 #[test]
 fn initialize_error_display_includes_backend_and_error() {
     let e = NokhwaError::InitializeError {
