@@ -187,6 +187,22 @@
 
 ### Testing
 
+* **Pin `Frame<Nv12>` and `Frame<Yuyv>` end-to-end through
+  `into_rgb().write_to(...)` and `into_rgba().write_to(...)`
+  in `nokhwa-core/src/frame_tests.rs`.** The `materialize()`
+  path for both YCbCr 4:2:0 / 4:2:2 formats was pinned (video-
+  range black / white clamp / neutral-chroma gray / opaque
+  alpha), but the `write_to` zero-copy production path —
+  taken by streaming consumers that pre-allocate a destination
+  and reuse it across frames — went through a separate
+  `convert_to_rgb_buffer` / `convert_to_rgba_buffer` branch with
+  its own dest-size guard, and no test exercised it. A
+  regression in the buffer branch (wrong stride, wrong dest
+  length, or quietly falling back to a no-op) would slip past
+  the materialize-only suite and silently corrupt every NV12 /
+  YUYV streaming consumer — the most common formats from USB
+  UVC webcams. Four new tests pin neutral-chroma R==G==B and
+  alpha=255 for both formats × both targets.
 * **Pin `ControlValueDescription::Bytes` Display rendering in
   `nokhwa-core/src/types_tests.rs`.** The variant's `Display`
   impl writes `(Current: {value:x?}, Default: {default:x?})` —
