@@ -2047,16 +2047,20 @@ fn frame_format_from_str_recognises_every_variant() {
 
 #[test]
 fn frame_format_from_str_unknown_returns_structure_error() {
+    // The `FromStr` impl at `nokhwa-core/src/types.rs:418-435` uses
+    // `format!("No match for {s}")` for the error field. The previous
+    // contains-only check would pass even if the prefix was dropped
+    // (e.g. just `"H264"`) or the wording was reworded
+    // (e.g. `"unknown FrameFormat: H264"`) — both of which would
+    // silently change every downstream log line that includes this
+    // diagnostic. Pin the verbatim format string.
     let err = "H264"
         .parse::<FrameFormat>()
         .expect_err("unknown should err");
     match err {
         NokhwaError::StructureError { structure, error } => {
             assert_eq!(structure, "FrameFormat");
-            assert!(
-                error.contains("H264"),
-                "error message must echo the offending input, got: {error}"
-            );
+            assert_eq!(error, "No match for H264");
         }
         other => panic!("expected StructureError, got {other:?}"),
     }

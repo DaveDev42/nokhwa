@@ -232,6 +232,18 @@
 
 ### Testing
 
+* **Tighten 2 remaining `contains(...)` Display pins to exact-string
+  equality.** `tests/format_tests.rs:50` (`Resolution::Display`,
+  `nokhwa-core/src/types.rs:571-575`) → `"1920x1080"`; a wording or
+  separator change (e.g. `×`, `*`, or whitespace) would have slipped
+  past `s.contains("1920") && s.contains("1080")` while breaking any
+  downstream parser keying on the verbatim form. And
+  `nokhwa-core/src/types_tests.rs:2049` (`FrameFormat::from_str`
+  unknown-input error, `nokhwa-core/src/types.rs:418-435`) →
+  `"No match for H264"`; the previous `error.contains("H264")`
+  would have passed even if the prefix `"No match for "` was dropped
+  or reworded, silently regressing every log line that includes the
+  diagnostic.
 * **Remove 19 redundant `contains(...)` Display tests from
   `error_tests.rs`.** Every `NokhwaError` Display variant already has
   a verbatim `*_display_exact_format` pin (lines 130-336 of

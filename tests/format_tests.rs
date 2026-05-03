@@ -47,11 +47,15 @@ fn camera_format_default_values() {
 }
 
 #[test]
-fn resolution_display_contains_dimensions() {
+fn resolution_display_exact_format() {
+    // `Resolution`'s `Display` impl at `nokhwa-core/src/types.rs:571-575`
+    // writes `"{w}x{h}"` — pin the exact format. The previous
+    // contains-only test would still pass if the separator changed
+    // from `x` to `×`, `*`, or whitespace, or if the width / height
+    // ordering flipped — all of which would silently break downstream
+    // parsers and any logged-resolution assertion in user code.
     let res = Resolution::new(1920, 1080);
-    let s = format!("{res}");
-    assert!(s.contains("1920"));
-    assert!(s.contains("1080"));
+    assert_eq!(format!("{res}"), "1920x1080");
 }
 
 #[test]
