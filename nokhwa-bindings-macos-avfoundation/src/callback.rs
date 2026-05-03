@@ -252,10 +252,24 @@ pub fn request_permission_with_callback(callback: impl Fn(bool) + Send + Sync + 
 pub fn current_authorization_status() -> AVAuthorizationStatus {
     let media_type = AVMediaTypeLocal::Video.to_av_media_type();
     let status = unsafe { AVCaptureDevice::authorizationStatusForMediaType(media_type) };
-    // Map from objc2_av_foundation::AVAuthorizationStatus(NSInteger) to our local enum.
-    // Values match Apple's AVAuthorizationStatus enum:
-    // https://developer.apple.com/documentation/avfoundation/avauthorizationstatus
-    match status.0 {
+    decode_authorization_status(status.0)
+}
+
+/// Decode the raw `NSInteger` returned by
+/// `AVCaptureDevice::authorizationStatusForMediaType` into our local
+/// [`AVAuthorizationStatus`] enum. Split out from
+/// [`current_authorization_status`] so the four documented branches
+/// plus the "anything else" fallback can be pinned without an
+/// `AVCaptureDevice` round-trip.
+///
+/// Constants match Apple's `AVAuthorizationStatus`:
+/// <https://developer.apple.com/documentation/avfoundation/avauthorizationstatus>.
+/// Unknown values (negative ints, future Apple additions) collapse to
+/// `NotDetermined` — the conservative default that prompts the user
+/// rather than assuming access.
+#[must_use]
+fn decode_authorization_status(raw: isize) -> AVAuthorizationStatus {
+    match raw {
         1 => AVAuthorizationStatus::Restricted,
         2 => AVAuthorizationStatus::Denied,
         3 => AVAuthorizationStatus::Authorized,
@@ -321,8 +335,9 @@ impl Drop for AVCaptureVideoCallback {
 
 #[cfg(test)]
 mod tests {
-    use super::pts_to_wallclock;
+    use super::{decode_authorization_status, pts_to_wallclock};
     use crate::ffi::CMTime;
+    use crate::types::AVAuthorizationStatus;
     use std::time::{Duration, UNIX_EPOCH};
 
     fn cmtime(value: i64, timescale: i32) -> CMTime {
@@ -403,5 +418,61 @@ mod tests {
         let mono_now_nanos: u64 = 5_000_000_000;
         let wall = UNIX_EPOCH + Duration::from_nanos(1);
         assert_eq!(pts_to_wallclock(pts, mono_now_nanos, wall), None);
+    }
+
+    /// Apple's `AVAuthorizationStatus` constant `0` → `NotDetermined`.
+    /// This is also the conservative fallback for unknown values, so
+    /// pin the explicit `0` branch separately from the default arm.
+    #[test]
+    fn decode_authorization_status_zero_is_not_determined() {
+        assert_eq!(
+            decode_authorization_status(0),
+            AVAuthorizationStatus::NotDetermined
+        );
+    }
+
+    /// Apple's `AVAuthorizationStatus` constant `1` → `Restricted`
+    /// (parental controls / MDM block).
+    #[test]
+    fn decode_authorization_status_one_is_restricted() {
+        assert_eq!(
+            decode_authorization_status(1),
+            AVAuthorizationStatus::Restricted
+        );
+    }
+
+    /// Apple's `AVAuthorizationStatus` constant `2` → `Denied` (user
+    /// declined or revoked in System Settings).
+    #[test]
+    fn decode_authorization_status_two_is_denied() {
+        assert_eq!(
+            decode_authorization_status(2),
+            AVAuthorizationStatus::Denied
+        );
+    }
+
+    /// Apple's `AVAuthorizationStatus` constant `3` → `Authorized`.
+    #[test]
+    fn decode_authorization_status_three_is_authorized() {
+        assert_eq!(
+            decode_authorization_status(3),
+            AVAuthorizationStatus::Authorized
+        );
+    }
+
+    /// Anything Apple did not document — negative ints, `isize::MAX`,
+    /// future Apple additions — must collapse to `NotDetermined`. The
+    /// fallback prompts the user instead of silently treating the
+    /// unknown state as `Authorized`, which would be a security
+    /// regression.
+    #[test]
+    fn decode_authorization_status_unknown_values_fall_back_to_not_determined() {
+        for raw in [-1, 4, 100, isize::MIN, isize::MAX] {
+            assert_eq!(
+                decode_authorization_status(raw),
+                AVAuthorizationStatus::NotDetermined,
+                "raw={raw} must fall back to NotDetermined"
+            );
+        }
     }
 }
