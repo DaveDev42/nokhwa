@@ -2068,6 +2068,34 @@ fn requested_format_type_display_matches_debug() {
 }
 
 #[test]
+fn requested_format_type_display_matches_debug_all_remaining_variants() {
+    // The existing test covers `None`, `AbsoluteHighestResolution`,
+    // and `Exact`. The other four variants —
+    // `AbsoluteHighestFrameRate`, `HighestResolution(_)`,
+    // `HighestFrameRate(_)`, `Closest(_)` — were unpinned. The impl
+    // is `write!(f, "{self:?}")` which looks safe today, but a
+    // future hand-written `Display` replacing the `{:?}` delegation
+    // would silently break downstream callers that embed these
+    // strings into `NokhwaError::ReadFrameError` /
+    // `SetPropertyError` payloads. Pin every payload-bearing
+    // variant against its `Debug` rendering so the contract holds
+    // for the whole enum.
+    let abs_fps = RequestedFormatType::AbsoluteHighestFrameRate;
+    assert_eq!(abs_fps.to_string(), format!("{abs_fps:?}"));
+    assert_eq!(abs_fps.to_string(), "AbsoluteHighestFrameRate");
+
+    let highest_res = RequestedFormatType::HighestResolution(Resolution::new(1920, 1080));
+    assert_eq!(highest_res.to_string(), format!("{highest_res:?}"));
+
+    let highest_fps = RequestedFormatType::HighestFrameRate(60);
+    assert_eq!(highest_fps.to_string(), format!("{highest_fps:?}"));
+
+    let closest =
+        RequestedFormatType::Closest(CameraFormat::new_from(1280, 720, FrameFormat::YUYV, 30));
+    assert_eq!(closest.to_string(), format!("{closest:?}"));
+}
+
+#[test]
 fn requested_format_display_matches_debug() {
     let req = RequestedFormat::with_formats(
         RequestedFormatType::AbsoluteHighestResolution,
