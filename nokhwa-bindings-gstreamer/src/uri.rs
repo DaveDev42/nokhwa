@@ -412,4 +412,224 @@ mod tests {
             assert_eq!(v, vec![f], "wrong singleton for {f:?}");
         }
     }
+
+    /// `sample_format` (`uri.rs:240`) has 6 distinct error branches plus
+    /// a happy path with framerate fallback logic, and zero direct
+    /// coverage. The function is the URL-mode counterpart of
+    /// `format::caps_to_camera_formats` — `uridecodebin` negotiates
+    /// exactly one format and we extract its description from the
+    /// `appsink`'s first sample. A regression in any branch would
+    /// silently produce wrong-shaped `CameraFormat`s for every URL
+    /// source.
+    ///
+    /// The tests below construct `gstreamer::Sample` values with
+    /// hand-crafted Caps to drive each branch deterministically.
+    /// They use the same `Once`-init pattern as `format::tests`.
+    use std::sync::Once;
+
+    fn ensure_gst_init() {
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {
+            gstreamer::init().expect("gstreamer::init() must succeed in tests");
+        });
+    }
+
+    fn sample_with_caps(caps: &gstreamer::Caps) -> gstreamer::Sample {
+        gstreamer::Sample::builder().caps(caps).build()
+    }
+
+    /// Branch 1 — `sample.caps()` returns `None`. Pin the resulting
+    /// `StructureError`'s exact `structure` and `error` fields so a
+    /// regression that, e.g., changed the variant to `GeneralError`
+    /// or rephrased `"first sample had no caps"` (a contract that
+    /// surface debugging tools and downstream tests may quote) gets
+    /// caught.
+    #[test]
+    fn sample_format_errors_when_caps_missing() {
+        ensure_gst_init();
+        let sample = gstreamer::Sample::builder().build();
+        let err = super::sample_format(&sample).unwrap_err();
+        match err {
+            nokhwa_core::error::NokhwaError::StructureError { structure, error } => {
+                assert_eq!(structure, "sample caps");
+                assert_eq!(error, "first sample had no caps");
+            }
+            other => panic!("expected StructureError, got {other:?}"),
+        }
+    }
+
+    /// Branch 2 — `caps.structure(0)` returns `None` (caps with zero
+    /// structures). Pin the second-tier `StructureError` field
+    /// distinct from the no-caps branch — both error messages flow
+    /// into the same user-visible `Display`, but the `structure`
+    /// field is the diagnostic key.
+    #[test]
+    fn sample_format_errors_when_caps_have_no_structure() {
+        ensure_gst_init();
+        let caps = gstreamer::Caps::new_empty();
+        let sample = sample_with_caps(&caps);
+        let err = super::sample_format(&sample).unwrap_err();
+        match err {
+            nokhwa_core::error::NokhwaError::StructureError { structure, error } => {
+                assert_eq!(structure, "sample caps structure");
+                assert_eq!(error, "caps has no structure");
+            }
+            other => panic!("expected StructureError, got {other:?}"),
+        }
+    }
+
+    /// Branch 3 — `format` field missing from the structure. The
+    /// `gstreamer::Structure::get` error string format is GStreamer's
+    /// own (we forward `e.to_string()` verbatim), so we only pin the
+    /// `structure` field — a regression that silently swallowed the
+    /// inner error or relabeled the diagnostic key would slip past
+    /// any check tied solely to the wrapper variant.
+    #[test]
+    fn sample_format_errors_when_format_field_missing() {
+        ensure_gst_init();
+        let caps = gstreamer::Caps::builder("video/x-raw")
+            .field("width", 640i32)
+            .field("height", 480i32)
+            .build();
+        let sample = sample_with_caps(&caps);
+        let err = super::sample_format(&sample).unwrap_err();
+        match err {
+            nokhwa_core::error::NokhwaError::StructureError { structure, .. } => {
+                assert_eq!(structure, "format");
+            }
+            other => panic!("expected StructureError, got {other:?}"),
+        }
+    }
+
+    /// Branch 4 — the `format` field is a string that
+    /// `VideoFormat::from_string` can't decode (or that
+    /// `video_format_to_frame_format` returns `None` for, e.g.
+    /// 16-bit grayscale). Pin the canonical `"videoconvert produced
+    /// unsupported format: {format_name}"` interpolation — the
+    /// `format_name` echoes the user-visible diagnostic and a
+    /// regression that dropped it would leave operators staring at
+    /// "unsupported format" with no clue which name they got.
+    #[test]
+    fn sample_format_errors_on_unsupported_video_format() {
+        ensure_gst_init();
+        let caps = gstreamer::Caps::builder("video/x-raw")
+            .field("format", "GRAY16_BE")
+            .field("width", 640i32)
+            .field("height", 480i32)
+            .build();
+        let sample = sample_with_caps(&caps);
+        let err = super::sample_format(&sample).unwrap_err();
+        match err {
+            nokhwa_core::error::NokhwaError::StructureError { structure, error } => {
+                assert_eq!(structure, "format");
+                assert_eq!(error, "videoconvert produced unsupported format: GRAY16_BE");
+            }
+            other => panic!("expected StructureError, got {other:?}"),
+        }
+    }
+
+    /// Branch 5 — `width <= 0 || height <= 0`. The structured check
+    /// fires after both fields parse cleanly; pin the canonical
+    /// `"invalid dimensions {w}x{h}"` interpolation so a regression
+    /// that, e.g., changed the separator from `x` to `*` or dropped
+    /// the dimensions from the message gets caught.
+    #[test]
+    fn sample_format_errors_on_non_positive_dimensions() {
+        ensure_gst_init();
+        let caps = gstreamer::Caps::builder("video/x-raw")
+            .field("format", "YUY2")
+            .field("width", 0i32)
+            .field("height", 480i32)
+            .build();
+        let sample = sample_with_caps(&caps);
+        let err = super::sample_format(&sample).unwrap_err();
+        match err {
+            nokhwa_core::error::NokhwaError::StructureError { structure, error } => {
+                assert_eq!(structure, "resolution");
+                assert_eq!(error, "invalid dimensions 0x480");
+            }
+            other => panic!("expected StructureError, got {other:?}"),
+        }
+    }
+
+    /// Happy-path branch with no `framerate` field — RTSP sources
+    /// often don't advertise one. Documented behavior: fall back to
+    /// 30 FPS. A regression that, e.g., switched the fallback to 0
+    /// or to `u32::MAX` would silently break downstream code that
+    /// keys on `frame_rate()` (e.g. `RunnerConfig` poll-interval
+    /// tuning, `CameraFormat::Display`).
+    #[test]
+    fn sample_format_uses_thirty_fps_fallback_when_framerate_missing() {
+        ensure_gst_init();
+        let caps = gstreamer::Caps::builder("video/x-raw")
+            .field("format", "YUY2")
+            .field("width", 640i32)
+            .field("height", 480i32)
+            .build();
+        let sample = sample_with_caps(&caps);
+        let cf = super::sample_format(&sample).expect("happy path");
+        assert_eq!(cf.frame_rate(), 30);
+        assert_eq!(cf.width(), 640);
+        assert_eq!(cf.height(), 480);
+        assert_eq!(cf.format(), FrameFormat::YUYV);
+    }
+
+    /// Happy-path branch where the framerate fraction has a non-
+    /// integer value (`30000/1001` ≈ 29.97 NTSC). Documented
+    /// behavior: fall back to 30 FPS rather than truncate. Pin so a
+    /// refactor that turned the `n % d == 0` check into an
+    /// integer-division truncation (rounding down to 29 FPS, which
+    /// is *not* on the common-FPS table and would mis-route every
+    /// downstream rate-aware code path) gets caught.
+    #[test]
+    fn sample_format_falls_back_when_framerate_is_non_integer() {
+        ensure_gst_init();
+        let caps = gstreamer::Caps::builder("video/x-raw")
+            .field("format", "YUY2")
+            .field("width", 640i32)
+            .field("height", 480i32)
+            .field("framerate", gstreamer::Fraction::new(30_000, 1_001))
+            .build();
+        let sample = sample_with_caps(&caps);
+        let cf = super::sample_format(&sample).expect("happy path");
+        assert_eq!(cf.frame_rate(), 30);
+    }
+
+    /// Happy-path branch where the framerate is zero or negative
+    /// (`n <= 0` or `d <= 0`). Documented behavior: fall back to 30
+    /// FPS. A `0/1` fraction is a real-world value reported by
+    /// stalled RTSP streams.
+    #[test]
+    fn sample_format_falls_back_on_zero_or_negative_framerate() {
+        ensure_gst_init();
+        let caps = gstreamer::Caps::builder("video/x-raw")
+            .field("format", "YUY2")
+            .field("width", 640i32)
+            .field("height", 480i32)
+            .field("framerate", gstreamer::Fraction::new(0, 1))
+            .build();
+        let sample = sample_with_caps(&caps);
+        let cf = super::sample_format(&sample).expect("happy path");
+        assert_eq!(cf.frame_rate(), 30);
+    }
+
+    /// Happy-path branch where the framerate is a clean integer
+    /// (`60/1`). Documented behavior: pass through verbatim — pin
+    /// so the fallback isn't triggered too eagerly.
+    #[test]
+    fn sample_format_preserves_clean_integer_framerate() {
+        ensure_gst_init();
+        let caps = gstreamer::Caps::builder("video/x-raw")
+            .field("format", "NV12")
+            .field("width", 1920i32)
+            .field("height", 1080i32)
+            .field("framerate", gstreamer::Fraction::new(60, 1))
+            .build();
+        let sample = sample_with_caps(&caps);
+        let cf = super::sample_format(&sample).expect("happy path");
+        assert_eq!(cf.frame_rate(), 60);
+        assert_eq!(cf.width(), 1920);
+        assert_eq!(cf.height(), 1080);
+        assert_eq!(cf.format(), FrameFormat::NV12);
+    }
 }

@@ -350,6 +350,33 @@
 
 ### Testing
 
+* **Pin all 6 error branches and 4 happy-path framerate cases of
+  `sample_format` in `nokhwa-bindings-gstreamer/src/uri.rs`.**
+  `sample_format` (`uri.rs:240`) is the URL-mode counterpart of
+  `format::caps_to_camera_formats` — `uridecodebin` negotiates
+  exactly one format on the appsink pad and `sample_format`
+  extracts its description from the first sample. The function had
+  zero direct coverage despite 6 error branches (no-caps,
+  no-structure, missing format field, unsupported VideoFormat,
+  width-non-positive/missing, height-non-positive/missing) plus a
+  happy path with framerate fallback logic. Added 9 new tests that
+  construct `gstreamer::Sample` values via `Sample::builder().caps(_)`
+  with hand-crafted Caps to drive each branch deterministically:
+  the four error-message-pinning tests
+  (`_errors_when_caps_missing`, `_errors_when_caps_have_no_structure`,
+  `_errors_on_unsupported_video_format`, `_errors_on_non_positive_dimensions`)
+  pin the canonical `StructureError` `structure` and `error` fields
+  verbatim; the missing-format-field test pins only the `structure`
+  field because the inner error string is GStreamer's own; the four
+  happy-path tests
+  (`_uses_thirty_fps_fallback_when_framerate_missing`,
+  `_falls_back_when_framerate_is_non_integer` for `30000/1001` NTSC,
+  `_falls_back_on_zero_or_negative_framerate` for stalled-stream
+  `0/1`, `_preserves_clean_integer_framerate` for `60/1`) pin the
+  documented "fall back to 30 FPS unless the fraction is a clean
+  positive integer" contract. Reuses the same `Once`-init pattern as
+  `format::tests`. Test count grows 64 → 73.
+
 * **Pin `element_err` and `caps_for` in
   `nokhwa-bindings-gstreamer/src/pipeline.rs`.** Both helpers had
   zero direct coverage even though `element_err` is invoked by 9
