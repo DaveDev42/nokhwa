@@ -533,3 +533,38 @@ fn helper_constructors_default_optional_context_to_none() {
         panic!("wrong variant");
     }
 }
+
+// `helper_constructors_default_optional_context_to_none` discards
+// the `message` field via `..` — it pins only the variant identity
+// and the `None`-ness of the optional context. A regression in any
+// of the four helpers (`general` / `open_stream` / `read_frame` /
+// `stream_shutdown`, `nokhwa-core/src/error.rs:79-110`) that
+// silently mutated the message — e.g. prefixed it
+// (`format!("error: {}", message)`), called `.trim()`, uppercased
+// it, or swapped two helpers' bodies — would slip past. Pin the
+// message field as a verbatim round-trip.
+#[test]
+fn helper_constructors_pass_message_through_unchanged() {
+    if let NokhwaError::GeneralError { message, .. } = NokhwaError::general("sentinel") {
+        assert_eq!(message, "sentinel");
+    } else {
+        panic!("wrong variant");
+    }
+    if let NokhwaError::OpenStreamError { message, .. } = NokhwaError::open_stream("sentinel") {
+        assert_eq!(message, "sentinel");
+    } else {
+        panic!("wrong variant");
+    }
+    if let NokhwaError::ReadFrameError { message, .. } = NokhwaError::read_frame("sentinel") {
+        assert_eq!(message, "sentinel");
+    } else {
+        panic!("wrong variant");
+    }
+    if let NokhwaError::StreamShutdownError { message, .. } =
+        NokhwaError::stream_shutdown("sentinel")
+    {
+        assert_eq!(message, "sentinel");
+    } else {
+        panic!("wrong variant");
+    }
+}
