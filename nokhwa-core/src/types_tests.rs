@@ -2438,6 +2438,25 @@ fn control_value_description_display_string() {
     );
 }
 
+// `ControlValueDescription::String` Displays its `default` field via
+// `{:?}` on `Option<String>`, which emits asymmetric strings: `Some(_)`
+// renders as `Some("value")` (with inner quotes), `None` renders as
+// `None` (no quotes). The `Some` arm is pinned by
+// `control_value_description_display_string` above; the `None` arm is
+// not. A regression that replaced `{default:?}` with
+// `{default.as_deref().unwrap_or("(unset)")}` would silently change
+// the `None` rendering and break callers that key on `Default: None`
+// when reading `NokhwaError::SetPropertyError` payloads. Guards
+// `nokhwa-core/src/types.rs:1224-1226`.
+#[test]
+fn control_value_description_display_string_default_none() {
+    let desc = ControlValueDescription::String {
+        value: "v4l2_auto".to_string(),
+        default: None,
+    };
+    assert_eq!(desc.to_string(), "(Current: v4l2_auto, Default: None)");
+}
+
 #[test]
 fn control_value_description_display_key_value_pair() {
     let desc = ControlValueDescription::KeyValuePair {
@@ -2623,6 +2642,32 @@ fn camera_control_display_renders_canonical_log_line() {
     assert_eq!(
         ctrl.to_string(),
         "Control: Brightness, Name: Brightness, Value: (Current: 50, Default: 50, Step: 1, Range: (0, 100)), Flag: [Manual], Active: true"
+    );
+}
+
+// The canonical-log-line test above only pins `Active: true` and a
+// non-empty `Flag: [Manual]` rendering. `Active: false` and an empty
+// `Flag: []` are unpinned, yet both surface in real diagnostic output
+// (e.g. read-only / disabled controls and controls without flag
+// metadata). UI dashboards / log filters that grey-out disabled
+// controls match on the literal `"Active: false"` substring; a
+// refactor that swapped the boolean rendering to
+// `Active: (inactive)` or the empty Vec rendering to `Flag: (none)`
+// would pass `camera_control_display_renders_canonical_log_line`
+// while silently breaking those filters. Guards
+// `nokhwa-core/src/types.rs:1353-1361`.
+#[test]
+fn camera_control_display_inactive_with_empty_flags() {
+    let ctrl = CameraControl::new(
+        KnownCameraControl::Contrast,
+        "Contrast".to_string(),
+        ControlValueDescription::None,
+        vec![],
+        false,
+    );
+    assert_eq!(
+        ctrl.to_string(),
+        "Control: Contrast, Name: Contrast, Value: (None), Flag: [], Active: false"
     );
 }
 

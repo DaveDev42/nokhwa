@@ -232,6 +232,24 @@
 
 ### Testing
 
+* **Pin `CameraControl` + `ControlValueDescription` Display edge
+  cases.** The pre-existing
+  `camera_control_display_renders_canonical_log_line` only pins
+  `Active: true` with a non-empty `Flag: [Manual]`, leaving
+  `Active: false` and an empty `Flag: []` unpinned — both surface in
+  real diagnostic output (read-only / disabled controls and controls
+  without flag metadata). UI dashboards and log filters that grey-out
+  disabled controls match on the literal `"Active: false"` substring;
+  a refactor that swapped the boolean rendering or the empty-`Vec`
+  rendering would silently break those filters. Symmetrically, the
+  `ControlValueDescription::String` Display arm uses `{default:?}`
+  (asymmetric: `Some("v")` vs `None`); only the `Some` arm was
+  pinned. Added `camera_control_display_inactive_with_empty_flags`
+  (asserting `"Control: Contrast, Name: Contrast, Value: (None),
+  Flag: [], Active: false"`) and
+  `control_value_description_display_string_default_none`
+  (asserting `"(Current: v4l2_auto, Default: None)"`). Guards
+  `nokhwa-core/src/types.rs:1224-1226` and `:1353-1361`.
 * **Pin `NokhwaError` Display exact-format strings for backend / format
   parenthetical variants.** `GeneralError`, `OpenStreamError`,
   `StreamShutdownError`, and `ReadFrameError` all share an inline
