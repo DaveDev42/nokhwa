@@ -276,6 +276,58 @@ fn rawbgr_into_rgba_swaps_and_adds_alpha() {
     assert_eq!(img.get_pixel(0, 0).0, [30, 20, 10, 255]);
 }
 
+// `RgbaConversion::write_to` for RAWRGB and RAWBGR routes through
+// `convert_to_rgba_buffer`, distinct from `convert_to_rgba` taken by
+// `materialize()`. Mismatched-dest guards and the
+// `not_multiple_of_3` guard are pinned for both formats just below;
+// these are the matching happy-path pins. A regression that drops
+// the alpha byte, swaps RGBA channel order, or — for RAWBGR —
+// forgets to swap the B/R channels in the buffer branch would slip
+// past the materialize-only suite and produce blue-tinted "RGBA" or
+// transparent output for streaming consumers that pre-allocate.
+
+#[test]
+fn rawrgb_into_rgba_write_to_appends_alpha() {
+    let data = vec![10u8, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::RAWRGB);
+    let frame: Frame<RawRgb> = Frame::new(buf);
+    let mut dest = vec![0u8; 2 * 2 * 4];
+    frame
+        .into_rgba()
+        .write_to(&mut dest)
+        .expect("RAWRGB write_to RGBA");
+    // Pixel 0: [10, 20, 30, 255]
+    assert_eq!(&dest[0..4], &[10, 20, 30, 255]);
+    // Pixel 3: [100, 110, 120, 255]
+    assert_eq!(&dest[12..16], &[100, 110, 120, 255]);
+}
+
+#[test]
+fn rawbgr_into_rgba_write_to_swaps_and_appends_alpha() {
+    // Per-pixel-distinct B/G/R values so a missing swap surfaces
+    // immediately as the wrong channel order.
+    // BGR (10, 20, 30) → RGBA (30, 20, 10, 255)
+    // BGR (40, 80, 120) → RGBA (120, 80, 40, 255)
+    let data = vec![10u8, 20, 30, 40, 80, 120, 10, 20, 30, 40, 80, 120];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::RAWBGR);
+    let frame: Frame<RawBgr> = Frame::new(buf);
+    let mut dest = vec![0u8; 2 * 2 * 4];
+    frame
+        .into_rgba()
+        .write_to(&mut dest)
+        .expect("RAWBGR write_to RGBA");
+    assert_eq!(
+        &dest[0..4],
+        &[30, 20, 10, 255],
+        "BGR (10,20,30) must round-trip to RGBA (30,20,10,255)"
+    );
+    assert_eq!(
+        &dest[4..8],
+        &[120, 80, 40, 255],
+        "BGR (40,80,120) must round-trip to RGBA (120,80,40,255)"
+    );
+}
+
 // `Frame<Nv12>::into_rgb` / `into_rgba` runs YCbCr 4:2:0 → RGB
 // through `nv12_to_rgb_simd` (BT.601 video-range). The error
 // guards on `buf_nv12_to_rgb` are pinned in `types_tests.rs`, but
@@ -637,6 +689,51 @@ fn rawbgr_into_luma_write_to_writes_correct_averages() {
     let mut dest = vec![0u8; 2];
     frame.into_luma().write_to(&mut dest).unwrap();
     assert_eq!(dest, vec![20, 80]);
+}
+
+// `LumaConversion::write_to` for RAWRGB and GRAY: matching happy-path
+// pins for the existing RAWBGR happy-path
+// (`rawbgr_into_luma_write_to_writes_correct_averages`). RAWRGB
+// shares the `RAWRGB | RAWBGR` averaging arm but its happy-path
+// `write_to` was uncovered. GRAY's happy-path `write_to` is a
+// straight `dest.copy_from_slice(...)` and was uncovered too — only
+// the mismatched-dest guard was pinned. A regression that swaps the
+// destination orientation (e.g. accidentally striding by 3 bytes
+// instead of 1 for GRAY) or zeroes the output would slip past the
+// materialize-only suite and silently break grayscale streaming.
+
+#[test]
+fn rawrgb_into_luma_write_to_writes_correct_averages() {
+    // Pixel 0: RGB (30, 60, 90)   -> avg = 60
+    // Pixel 1: RGB (10, 20, 30)   -> avg = 20
+    let data = vec![30u8, 60, 90, 10, 20, 30];
+    let buf = Buffer::new(Resolution::new(2, 1), &data, FrameFormat::RAWRGB);
+    let frame: Frame<RawRgb> = Frame::new(buf);
+    let mut dest = vec![0u8; 2];
+    frame
+        .into_luma()
+        .write_to(&mut dest)
+        .expect("RAWRGB write_to luma");
+    assert_eq!(dest, vec![60, 20]);
+}
+
+#[test]
+fn gray_into_luma_write_to_passthrough() {
+    // GRAY → luma is a verbatim `dest.copy_from_slice(data)` — pin
+    // every byte position so a stride / orientation regression in
+    // the buffer arm of `convert_to_luma_buffer` is caught.
+    let data = vec![50u8, 100, 150, 200];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::GRAY);
+    let frame: Frame<Gray> = Frame::new(buf);
+    let mut dest = vec![0u8; 4];
+    frame
+        .into_luma()
+        .write_to(&mut dest)
+        .expect("GRAY write_to luma");
+    assert_eq!(
+        dest, data,
+        "GRAY write_to luma must copy the byte plane verbatim"
+    );
 }
 
 #[test]

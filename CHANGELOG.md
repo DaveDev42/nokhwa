@@ -187,6 +187,22 @@
 
 ### Testing
 
+* **Pin happy-path `write_to` for the four remaining
+  `RawRgb` / `RawBgr` / `Gray` conversion paths in
+  `nokhwa-core/src/frame_tests.rs`.** The mismatched-dest
+  guards were already pinned for every format × target combo,
+  but four happy-path `write_to` cells were uncovered:
+  `RawRgb→RGBA`, `RawBgr→RGBA`, `RawRgb→Luma`, and
+  `Gray→Luma`. `materialize()` for these formats already had
+  pixel-output assertions, but the corresponding buffer-branch
+  helpers (`convert_to_rgba_buffer`, `convert_to_luma_buffer`)
+  were exercised only on the error path. A regression that
+  drops alpha, swaps RGBA channel order, forgets the BGR→RGB
+  swap in the buffer branch, or strides the GRAY copy
+  incorrectly would slip past the materialize-only suite and
+  silently corrupt streaming consumers. Four new tests pin the
+  exact byte output for each path with per-pixel-distinct
+  values so any regression surfaces loudly.
 * **Pin `Frame<Nv12>` and `Frame<Yuyv>` end-to-end through
   `into_rgb().write_to(...)` and `into_rgba().write_to(...)`
   in `nokhwa-core/src/frame_tests.rs`.** The `materialize()`
