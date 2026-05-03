@@ -1214,6 +1214,60 @@ mod internal {
             assert_eq!(monotonic_to_wallclock(Timestamp::new(0, 0)), None);
         }
 
+        #[test]
+        fn monotonic_to_wallclock_future_timestamp_returns_none() {
+            // If the kernel ever hands us a frame timestamped *after*
+            // CLOCK_MONOTONIC's current reading (clock skew across
+            // subsystems, a reset clocksource, a buggy emulator), the
+            // function must return None rather than panic on subtraction
+            // overflow or yield a nonsensical "frame from the future"
+            // wallclock. Use sec=i64::MAX to guarantee the timestamp is
+            // far ahead of any real CLOCK_MONOTONIC value at runtime.
+            let far_future = Timestamp::new(i64::MAX, 0);
+            assert_eq!(
+                monotonic_to_wallclock(far_future),
+                None,
+                "future-monotonic timestamp must yield None, not panic or a future wallclock"
+            );
+        }
+
+        #[test]
+        fn monotonic_to_wallclock_recent_timestamp_close_to_current_realtime() {
+            // Happy path: a timestamp captured "just now" must produce a
+            // wallclock duration very close to the current realtime
+            // reading. The function reads CLOCK_MONOTONIC and CLOCK_REALTIME
+            // independently, so there's a small race window between the
+            // read inside the function and our snapshot here — but it's
+            // tightly bounded. We pin a tolerance of 1 second to give
+            // headroom for a slow CI host while still catching regressions
+            // that swap the clock IDs or invert the subtraction direction.
+            let mut mono_now = libc::timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            };
+            let mut wall_now = libc::timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            };
+            // SAFETY: passing valid pointers to kernel clock_gettime
+            unsafe {
+                libc::clock_gettime(libc::CLOCK_MONOTONIC, &raw mut mono_now);
+                libc::clock_gettime(libc::CLOCK_REALTIME, &raw mut wall_now);
+            }
+            let mono_now_ts = Timestamp::new(mono_now.tv_sec, mono_now.tv_nsec / 1000);
+            let wall_now_dur =
+                std::time::Duration::new(wall_now.tv_sec as u64, wall_now.tv_nsec as u32);
+
+            let observed = monotonic_to_wallclock(mono_now_ts)
+                .expect("recent monotonic timestamp must produce a wallclock");
+
+            let diff = observed.abs_diff(wall_now_dur);
+            assert!(
+                diff < std::time::Duration::from_secs(1),
+                "wallclock conversion drifted >1s from realtime: observed={observed:?}, wall_now={wall_now_dur:?}, diff={diff:?}"
+            );
+        }
+
         /// `frameformat_to_fourcc` and `fourcc_to_frameformat` are the
         /// thin shims that bridge `v4l::FourCC` ↔ `FrameFormat` at every
         /// V4L2 ioctl boundary (`set_format`, enumerate, frame metadata).

@@ -350,6 +350,23 @@
 
 ### Testing
 
+* **Pin `monotonic_to_wallclock` future-timestamp and happy-path
+  branches in `nokhwa-bindings-linux-v4l/src/lib.rs`.**
+  `monotonic_to_wallclock` (`lib.rs:1012`) converts a V4L2 buffer's
+  `CLOCK_MONOTONIC` timestamp to wallclock by reading both clocks now
+  and subtracting the frame age. Previously only the all-zero
+  "untimestamped buffer" branch was pinned. Added two new tests:
+  `monotonic_to_wallclock_future_timestamp_returns_none` uses
+  `Timestamp::new(i64::MAX, 0)` to force the `mono_now.checked_sub(...)`
+  to fail — pins that clock skew (or a buggy emulator handing us a
+  future timestamp) yields `None` rather than a panic or a future
+  wallclock; and
+  `monotonic_to_wallclock_recent_timestamp_close_to_current_realtime`
+  reads the current `CLOCK_MONOTONIC` itself and feeds it back in,
+  pinning that the result lands within 1 second of the current
+  `CLOCK_REALTIME` reading. Catches regressions that swap the clock
+  IDs or invert the subtraction direction. Test count grows 18 → 20.
+
 * **Pin `list_controls` early-return paths in
   `nokhwa-bindings-gstreamer/src/controls.rs`.** `list_controls`
   (`controls.rs:84`) iterates an Element's `list_properties()`, filters
