@@ -2285,6 +2285,26 @@ fn control_value_description_display_key_value_pair() {
     assert_eq!(desc.to_string(), "Current: (1, 2), Default: (3, 4)");
 }
 
+// ControlValueDescription::Bytes formats both the current and default
+// byte arrays with the lowercase-hex specifier (`{:x?}`). A refactor
+// that drops the `x` (downgrading to `{:?}`) would silently emit
+// decimal byte arrays in every Display rendering, which surfaces in
+// `SetPropertyError` payloads, error messages, and `eprintln!`
+// debugging — making opaque control blobs harder to read at the exact
+// moment they're being investigated. Pin the `x?` formatter contract.
+#[test]
+fn control_value_description_display_bytes_uses_hex() {
+    let desc = ControlValueDescription::Bytes {
+        value: vec![0x01, 0xab, 0xff],
+        default: vec![0x00, 0x10],
+    };
+    let s = desc.to_string();
+    assert_eq!(
+        s, "(Current: [1, ab, ff], Default: [0, 10])",
+        "Bytes Display must use lowercase-hex (`{{:x?}}`); got {s}"
+    );
+}
+
 #[test]
 fn control_value_description_display_point() {
     let desc = ControlValueDescription::Point {

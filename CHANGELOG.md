@@ -187,6 +187,22 @@
 
 ### Testing
 
+* **Pin `ControlValueDescription::Bytes` Display rendering in
+  `nokhwa-core/src/types_tests.rs`.** The variant's `Display`
+  impl writes `(Current: {value:x?}, Default: {default:x?})` —
+  the lowercase-hex specifier (`x?`) is the load-bearing part.
+  Existing `display_*` tests cover every other variant
+  (None, Integer, IntegerRange, Float, FloatRange, Boolean,
+  String, KeyValuePair, Point, Enum, RGB) but skip Bytes
+  entirely. A refactor that drops the `x` — accidentally
+  downgrading to `{:?}` — would silently emit decimal byte
+  arrays in every `SetPropertyError` payload, control-log
+  line, and `eprintln!` debug print. Hex output is the format
+  USB / V4L control opaque blobs are documented in, so the
+  decimal regression would make those opaque blobs much harder
+  to interpret at exactly the moment they're being
+  investigated. Pinned with one assertion against
+  `(Current: [1, ab, ff], Default: [0, 10])`.
 * **Pin `RequestedFormat::new::<F: CaptureFormat>(...)` typed
   constructor in `nokhwa-core/src/types_tests.rs`.** Every other
   `RequestedFormat` test in the suite went through `with_formats`,
