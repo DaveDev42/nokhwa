@@ -232,6 +232,22 @@
 
 ### Testing
 
+* **Pin `Frame::try_new` `ProcessFrameError` shape on format
+  mismatch.** `nokhwa-core/src/frame.rs:76-92` returns
+  `NokhwaError::ProcessFrameError { src, destination, error }` with
+  `src = buffer.source_frame_format()` and
+  `destination = format!("Frame<{:?}>", F::FRAME_FORMAT)`. Existing
+  `frame_try_new_mismatch_returns_error` only asserts `is_err()`. A
+  regression that swapped to a different variant
+  (e.g. `NokhwaError::OpenDeviceError`) or scrambled the
+  `src` / `destination` fields would slip past that check while
+  silently breaking callers `match`ing on
+  `NokhwaError::ProcessFrameError { src, .. }` for diagnostics. New
+  `frame_try_new_mismatch_error_carries_src_and_destination`
+  destructures the error and asserts (a) the variant, (b) `src` is
+  the buffer's actual format, (c) `destination` names the expected
+  `Frame<F>` format, (d) the human-readable `error` string mentions
+  both formats.
 * **Pin `HybridCamera` `open` / `is_open` / `close` lifecycle.**
   Companion to `stream_camera_open_frame_close_cycle`.
   `src/session.rs:504-520` exposes three pass-through methods —

@@ -57,6 +57,51 @@ fn frame_try_new_matching_succeeds() {
     assert!(result.is_ok());
 }
 
+/// Pin the *shape* of the error returned by `Frame::try_new` on
+/// format mismatch. `nokhwa-core/src/frame.rs:76-92` returns
+/// `NokhwaError::ProcessFrameError { src, destination, error }`
+/// with `src = buffer.source_frame_format()` and
+/// `destination = format!("Frame<{:?}>", F::FRAME_FORMAT)`.
+///
+/// The existing `frame_try_new_mismatch_returns_error` only asserts
+/// `result.is_err()`. A regression that swapped to a different
+/// variant (e.g. `NokhwaError::OpenDeviceError`) or scrambled the
+/// `src`/`destination` fields would slip past that check — but
+/// callers `match`ing on `NokhwaError::ProcessFrameError { src, .. }`
+/// to render diagnostics would silently break.
+#[test]
+fn frame_try_new_mismatch_error_carries_src_and_destination() {
+    let data = vec![128u8; 4]; // 2x2 gray
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::GRAY);
+    let err = Frame::<RawRgb>::try_new(buf).expect_err("GRAY buffer cannot become Frame<RawRgb>");
+    match err {
+        NokhwaError::ProcessFrameError {
+            src,
+            destination,
+            error,
+        } => {
+            assert_eq!(
+                src,
+                FrameFormat::GRAY,
+                "src must be the buffer's actual FrameFormat"
+            );
+            assert!(
+                destination.contains("RAWRGB"),
+                "destination must name the expected Frame<F> format; got {destination:?}"
+            );
+            // The diagnostic `error` string is informational, but if a
+            // regression dropped it (e.g. left it empty), debugging
+            // a real format mismatch would lose the human-readable
+            // hint. Pin that it mentions both formats.
+            assert!(
+                error.contains("RAWRGB") && error.contains("GRAY"),
+                "error string must mention both expected and actual formats; got {error:?}"
+            );
+        }
+        other => panic!("expected NokhwaError::ProcessFrameError, got {other:?}"),
+    }
+}
+
 #[test]
 #[should_panic(expected = "Buffer FrameFormat")]
 fn frame_new_panics_on_format_mismatch() {
