@@ -4,6 +4,23 @@
 
 ### Bug Fixes
 
+* **MSMF `format_refreshed` cached the `MF_MT_FRAME_RATE` *denominator*
+  in `device_format.frame_rate` instead of the numerator.** The inline
+  cast `let frame_rate = fps as u32;` truncated a packed `UINT64`
+  (Microsoft's `numerator << 32 | denominator` encoding) to its low
+  32 bits — the denominator, almost always `1`. After every
+  `set_camera_format` the negotiated `CameraFormat.frame_rate` reading
+  silently held `1` regardless of the fps the user requested, breaking
+  any consumer reading `negotiated_format()` to drive timing or UI
+  display. Fix: extract a tiny `frame_rate_numerator(packed: u64)
+  -> u32` helper that returns the high 32 bits and route the
+  call site through it. Pinned with 4 unit tests including a
+  bug-witness (`fraction as u32 == 1` proves the buggy shape) and
+  a `(30 << 32) | 1 -> 30` happy-path assertion. Sister helper to
+  `parse_frame_rate_fraction`, but intentionally less strict: by the
+  time `format_refreshed` runs, the source reader has already accepted
+  the mode so denominator validation is upstream's responsibility.
+  Fix executes on the `MSMF unit tests (Windows)` CI job.
 * **`cargo check --features docs-only,docs-nolink` and `cargo doc
   --features docs-only,docs-nolink,docs-features` failed off macOS /
   iOS.** Every export in `nokhwa-bindings-macos-avfoundation` was
