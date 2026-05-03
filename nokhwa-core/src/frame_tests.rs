@@ -926,6 +926,46 @@ fn yuyv_luma_write_to() {
     assert_eq!(dest, [100, 200, 50, 150]);
 }
 
+// `buf_yuyv_extract_luma` (`nokhwa-core/src/types.rs:1848-1872`) guards
+// two pre-conditions before the SIMD copy:
+//   1. `data.len() % 4 == 0` — YUYV is [Y0, U, Y1, V] quads
+//   2. `dest.len() == data.len() / 2` — one luma byte per pixel
+//
+// NV12's symmetric guards are pinned by
+// `nv12_into_luma_write_to_rejects_wrong_input_size` and
+// `nv12_into_luma_write_to_rejects_mismatched_dest`. YUYV had only
+// the happy-path `yuyv_luma_write_to` above. A regression that
+// dropped either guard would surface as either a `crate::simd`
+// out-of-bounds panic or silent truncation/garbage in the dest
+// buffer — neither produces a clean `ProcessFrameError`.
+
+#[test]
+fn yuyv_into_luma_write_to_rejects_wrong_input_size() {
+    // 6 bytes is not divisible by 4. We must construct a Buffer with
+    // that exact length and `FrameFormat::YUYV` so the guard at
+    // types.rs:1849-1853 fires before SIMD touches the slice.
+    let data = vec![100u8, 128, 200, 128, 50, 128];
+    let buf = Buffer::new(Resolution::new(2, 1), &data, FrameFormat::YUYV);
+    let frame: Frame<Yuyv> = Frame::new(buf);
+    // `dest` size doesn't matter — the input-length guard fires first.
+    let mut dest = vec![0u8; 4];
+    let err = frame.into_luma().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::YUYV, "Luma", "not divisible by 4");
+}
+
+#[test]
+fn yuyv_into_luma_write_to_rejects_mismatched_dest() {
+    // 8 bytes is a valid YUYV stream (2x2). The input guard passes;
+    // the dest guard at types.rs:1858-1867 must reject a wrongly-
+    // sized dest (3 bytes instead of pixel_count = 4).
+    let data = vec![100u8, 128, 200, 128, 50, 128, 150, 128];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::YUYV);
+    let frame: Frame<Yuyv> = Frame::new(buf);
+    let mut dest = vec![0u8; 3];
+    let err = frame.into_luma().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::YUYV, "Luma", "destination buffer size");
+}
+
 // ---------------------------------------------------------------------------
 // MJPEG conversion (requires "mjpeg" feature, not WASM)
 // ---------------------------------------------------------------------------
