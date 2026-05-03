@@ -104,11 +104,17 @@ declared capabilities.
 | ----------------- | -------- |
 | `output-threaded` | `runner` |
 
-## Disabled in 0.13.0
+## Disabled in 0.13.0 (and removed in 0.14.3)
 
-- `input-opencv` backend: pending migration. The feature definition is
-  preserved but enabling it triggers a `compile_error!` until the
-  backend is adapted to the new traits. Track progress in `TODO.md`.
+- `input-opencv` backend: was disabled in 0.13.0 (feature preserved but
+  `compile_error!` on enable, pending migration to the new traits) and
+  **permanently removed in 0.14.3**. GStreamer covers local capture +
+  controls + URL sources first-class now (see
+  [MIGRATING-0.14.md](./MIGRATING-0.14.md) and the GStreamer session
+  notes in `CHANGELOG.md`). The `nokhwa-core` `opencv-mat` feature for
+  `cv::Mat` interop on `Frame<_>` is unchanged and independent of the
+  removed capture backend — enable it directly if you want the
+  conversion helpers.
 
 ## `RunnerConfig` fields
 

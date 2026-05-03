@@ -233,6 +233,16 @@
 
 ### Documentation
 
+* **Mark OpenCV backend as removed (not just disabled) in
+  `MIGRATING-0.13.md`.** The "Disabled in 0.13.0" section listed
+  `input-opencv` as "pending migration" with the feature definition
+  preserved — accurate for 0.13.0, but the backend was permanently
+  removed in 0.14.3 (covered in `CHANGELOG.md` and listed under
+  TODO.md's "Closed — not returning"). Updated the heading to
+  "Disabled in 0.13.0 (and removed in 0.14.3)" and rewrote the bullet
+  to note the 0.14.3 removal, point at GStreamer as the supersession
+  path, and clarify that the unrelated `nokhwa-core/opencv-mat`
+  feature (for `cv::Mat` interop on `Frame<_>`) is unchanged.
 * **Relocate misplaced `GStreamerCaptureDevice` doc comment and
   remove stale "session 4" pending-feature line in
   `nokhwa-bindings-gstreamer/src/lib.rs`.** 22 lines of
