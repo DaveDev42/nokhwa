@@ -350,6 +350,36 @@
 
 ### Testing
 
+* **Pin `set_live_property` error and boolean-encoding branches in
+  `nokhwa-bindings-gstreamer/src/controls.rs`.** The function has
+  four branches: `Integer(i)` happy / `Integer(i)` overflow /
+  `Boolean(b)` / unsupported variant. The two error branches return
+  before `source.set_property` is reached and are pure functions of
+  the input, but had zero coverage — only the sibling
+  `v4l2_cid_value` had `_rejects_*` pins. Added three new tests:
+  (1) `set_live_property_rejects_i64_outside_i32_range` covers the
+  `i32::try_from` overflow on both ends and pins all three
+  `SetPropertyError` fields verbatim, including the asymmetry
+  between this branch (`value = i.to_string()`, the raw integer
+  text) and the unsupported-setter branch (`value =
+  setter.to_string()`); (2)
+  `set_live_property_rejects_unsupported_setters` walks every non-
+  `Integer`/non-`Boolean` `ControlValueSetter` variant and pins the
+  property name, the rejected setter's `Display` form, and the
+  canonical `"unsupported ControlValueSetter variant for live
+  property"` string — mirror of `v4l2_cid_value_rejects_unsupported_setters`;
+  (3) `set_live_property_boolean_maps_to_zero_or_one` writes a
+  `bool`-encoded value into a real `fakesrc` `i32` property
+  (`num-buffers`) and reads it back, pinning the documented
+  `false → 0` / `true → 1` mapping so a regression that swapped
+  `i32::from(*b)` for a different bool-to-integer encoding shows up
+  immediately. The old test surface left every `set_live_property`
+  branch unpinned, so a refactor that, e.g., collapsed the function
+  into `v4l2_cid_value` (silently dropping the eager `i32` overflow
+  check, since `v4l2_cid_value` is `i64`-passthrough) or rephrased
+  the canonical error string would have slipped past every existing
+  test in this module.
+
 * **Pin runner `Overflow::Block` end-to-end on hardware in
   `tests/device_tests.rs::runner_tests`.** New
   `runner_block_overflow_delivers_frames_and_stops`. The runner has

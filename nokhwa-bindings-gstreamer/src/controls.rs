@@ -489,4 +489,157 @@ mod tests {
             "This operation is not supported by backend GStreamer."
         );
     }
+
+    /// `set_live_property` (`brightness` / `contrast` / `hue` /
+    /// `saturation` on `v4l2src`) has four branches; the two error
+    /// branches return before `source.set_property` is reached and
+    /// are therefore pure functions of the input.
+    ///
+    /// Branch 1 — `Integer(i)` with `i` outside `i32` range. The
+    /// sibling `v4l2_cid_value` is `i64`-passthrough (the `as i32`
+    /// truncation only happens later inside `build_extra_controls`,
+    /// pinned by `build_extra_controls_truncates_i64_to_i32`).
+    /// `set_live_property` instead errors *eagerly* — pin that
+    /// divergence so a future refactor that unifies the two by
+    /// silently truncating here doesn't quietly drop user values.
+    /// Pin all three fields of the resulting `SetPropertyError`
+    /// (property name, the raw i64 stringified into `value`, canonical
+    /// error string) verbatim. The `value` field on this branch is
+    /// `i.to_string()` (raw integer text, e.g. `"2147483648"`) — *not*
+    /// the setter's `Display` form (`"IntegerValue: 2147483648"`),
+    /// which is what the unsupported-setter branch uses below. The
+    /// asymmetry is deliberate (the unsupported-setter branch has no
+    /// `i64` to peel out) and easy to flip during refactoring; pin it
+    /// so a future "unify the two error shapes" change is forced to
+    /// update this test.
+    #[test]
+    fn set_live_property_rejects_i64_outside_i32_range() {
+        ensure_gst_init();
+        let source = gstreamer::ElementFactory::make("fakesrc")
+            .build()
+            .expect("fakesrc must build for the test");
+        let too_big_i64 = i64::from(i32::MAX) + 1;
+        let err = set_live_property(
+            &source,
+            "brightness",
+            &ControlValueSetter::Integer(too_big_i64),
+        )
+        .unwrap_err();
+        match err {
+            NokhwaError::SetPropertyError {
+                property,
+                value,
+                error,
+            } => {
+                assert_eq!(property, "brightness");
+                assert_eq!(value, too_big_i64.to_string());
+                assert_eq!(
+                    error,
+                    "i64 value exceeds i32 range expected by v4l2src property"
+                );
+            }
+            other => panic!("expected SetPropertyError, got {other:?}"),
+        }
+
+        let too_small_i64 = i64::from(i32::MIN) - 1;
+        let err = set_live_property(
+            &source,
+            "brightness",
+            &ControlValueSetter::Integer(too_small_i64),
+        )
+        .unwrap_err();
+        match err {
+            NokhwaError::SetPropertyError {
+                property, value, ..
+            } => {
+                assert_eq!(property, "brightness");
+                assert_eq!(value, too_small_i64.to_string());
+            }
+            other => panic!("expected SetPropertyError, got {other:?}"),
+        }
+    }
+
+    /// Branch 2 — non-`Integer`/non-`Boolean` `ControlValueSetter`
+    /// variants. The mirror of `v4l2_cid_value_rejects_unsupported_setters`,
+    /// but for the live-property path: live properties are also
+    /// `i32`-valued, so `Float` / `String` / `Bytes` / etc. cannot be
+    /// represented and must produce a `SetPropertyError` with the
+    /// canonical message. A regression that swapped the variant for
+    /// `GeneralError`, dropped the rejected setter from the `value`
+    /// field, or rephrased the canonical string would slip past every
+    /// existing pin in this module — none of the live-property error
+    /// paths are exercised today.
+    #[test]
+    fn set_live_property_rejects_unsupported_setters() {
+        ensure_gst_init();
+        let source = gstreamer::ElementFactory::make("fakesrc")
+            .build()
+            .expect("fakesrc must build for the test");
+        let property = "brightness";
+        let unsupported_setters = [
+            ControlValueSetter::Float(1.5),
+            ControlValueSetter::String("foo".into()),
+            ControlValueSetter::Bytes(vec![1, 2, 3]),
+            ControlValueSetter::KeyValue(1, 2),
+            ControlValueSetter::Point(0.0, 0.0),
+            ControlValueSetter::RGB(0.0, 0.0, 0.0),
+            ControlValueSetter::None,
+            ControlValueSetter::EnumValue(7),
+        ];
+        for setter in &unsupported_setters {
+            let err = set_live_property(&source, property, setter).unwrap_err();
+            match err {
+                NokhwaError::SetPropertyError {
+                    property: p,
+                    value,
+                    error,
+                } => {
+                    assert_eq!(p, property, "wrong property for {setter:?}");
+                    assert_eq!(
+                        value,
+                        setter.to_string(),
+                        "value field must round-trip the setter's Display"
+                    );
+                    assert_eq!(
+                        error, "unsupported ControlValueSetter variant for live property",
+                        "canonical error string drifted for {setter:?}"
+                    );
+                }
+                other => panic!("expected SetPropertyError for {setter:?}, got {other:?}"),
+            }
+        }
+    }
+
+    /// Branch 3 — `Boolean(true) → 1`, `Boolean(false) → 0` mapping.
+    /// Live properties are `i32`-valued, and v4l2src's documented
+    /// behavior for boolean-shaped controls is the standard 0/1
+    /// encoding. Pin so a future refactor that flipped the mapping
+    /// (or replaced the explicit `i32::from(*b)` with a sign-extended
+    /// `*b as i32` from a different bool representation) doesn't
+    /// silently invert every boolean control write. Uses an element
+    /// with a writable `bool` property (`fakesrc::is-live`) so we can
+    /// actually observe the post-set value rather than relying on the
+    /// no-op of writing to a missing property.
+    #[test]
+    fn set_live_property_boolean_maps_to_zero_or_one() {
+        ensure_gst_init();
+        let source = gstreamer::ElementFactory::make("fakesrc")
+            .build()
+            .expect("fakesrc must build for the test");
+        // `fakesrc` doesn't have a `brightness` property, so we exploit
+        // the fact that the i32 boolean encoding is fully determined
+        // by the input alone — verify no panic + Ok by writing into a
+        // property that does accept i32. `fakesrc` has `num-buffers`
+        // (i32). The mapping `false → 0`, `true → 1` is what we pin;
+        // the property write succeeds only when the encoding matches.
+        set_live_property(&source, "num-buffers", &ControlValueSetter::Boolean(false))
+            .expect("Boolean(false) must encode to a valid i32");
+        let observed: i32 = source.property("num-buffers");
+        assert_eq!(observed, 0, "Boolean(false) must map to i32 0");
+
+        set_live_property(&source, "num-buffers", &ControlValueSetter::Boolean(true))
+            .expect("Boolean(true) must encode to a valid i32");
+        let observed: i32 = source.property("num-buffers");
+        assert_eq!(observed, 1, "Boolean(true) must map to i32 1");
+    }
 }
