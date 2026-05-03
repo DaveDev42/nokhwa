@@ -449,39 +449,60 @@ fn clone_optional_backend_field_preserves_some() {
         backend: Some(ApiBackend::Video4Linux),
     };
     let cloned = e.clone();
-    if let NokhwaError::GeneralError { backend, .. } = cloned {
+    // Previously destructured `backend, ..` and discarded the
+    // message field. A regression where `Clone` dropped or mutated
+    // the message field of `GeneralError` (e.g. derived with a
+    // hand-written impl that left message empty, or one that swapped
+    // it with the backend's `Display` form) would have slipped past
+    // the existing `Some(_)` check. Pin the message round-trip
+    // alongside the optional-context field.
+    if let NokhwaError::GeneralError { message, backend } = cloned {
+        assert_eq!(message, "x");
         assert_eq!(backend, Some(ApiBackend::Video4Linux));
     } else {
         panic!("clone changed variant");
     }
 }
 
+// Hardened from contains-only checks. The previous three tests
+// (`debug_format_includes_variant_name`,
+// `debug_format_for_timeout_includes_variant_and_duration`,
+// `debug_format_for_struct_variant_includes_field_names`) confirmed
+// that the variant name + a few selected substrings appeared in the
+// derived `Debug` output, but a regression that, say, replaced the
+// derive with a hand-written `impl Debug` collapsing the struct to
+// a tuple-style `OpenDeviceError("cam0", "ENOENT")`, or that
+// changed `TimeoutError(2s)` to `TimeoutError { duration: 2s }`,
+// would still satisfy the loose checks while breaking any log
+// scraper or downstream test pinned to the exact form. Pin all
+// three variants verbatim. `Duration`'s `Debug` formats whole
+// seconds as `2s`, which the timeout pin captures.
 #[test]
-fn debug_format_includes_variant_name() {
-    let e = NokhwaError::UninitializedError;
-    let s = format!("{e:?}");
-    assert!(s.contains("UninitializedError"), "got: {s}");
+fn debug_format_unit_variant_exact_format() {
+    assert_eq!(
+        format!("{:?}", NokhwaError::UninitializedError),
+        "UninitializedError"
+    );
 }
 
 #[test]
-fn debug_format_for_timeout_includes_variant_and_duration() {
-    let e = NokhwaError::TimeoutError(Duration::from_secs(2));
-    let s = format!("{e:?}");
-    assert!(s.contains("TimeoutError"), "got: {s}");
-    assert!(s.contains('2'), "duration not in debug output: {s}");
+fn debug_format_timeout_variant_exact_format() {
+    assert_eq!(
+        format!("{:?}", NokhwaError::TimeoutError(Duration::from_secs(2))),
+        "TimeoutError(2s)"
+    );
 }
 
 #[test]
-fn debug_format_for_struct_variant_includes_field_names() {
+fn debug_format_open_device_struct_variant_exact_format() {
     let e = NokhwaError::OpenDeviceError {
         device: "cam0".to_string(),
         error: "ENOENT".to_string(),
     };
-    let s = format!("{e:?}");
-    assert!(s.contains("OpenDeviceError"), "got: {s}");
-    assert!(s.contains("device"), "missing field name 'device': {s}");
-    assert!(s.contains("cam0"), "missing field value: {s}");
-    assert!(s.contains("ENOENT"), "missing field value: {s}");
+    assert_eq!(
+        format!("{e:?}"),
+        "OpenDeviceError { device: \"cam0\", error: \"ENOENT\" }"
+    );
 }
 
 #[test]
