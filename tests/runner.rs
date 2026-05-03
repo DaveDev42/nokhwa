@@ -1161,3 +1161,151 @@ fn runner_hybrid_dropped_pictures_receiver_keeps_frame_stream_alive() {
             });
     }
 }
+
+// ──────── event worker: receiver-drop shutdown + event_tick forwarding ─
+//
+// `src/runner.rs:403-412` defines a separate event-poll thread that
+// `poll.next_timeout(event_tick)`s in a loop and forwards each event
+// through `ev_tx`. Two contracts are silently degradable:
+//
+//   1. **Receiver-drop self-shutdown** (line 408-410). If the user
+//      drops the events receiver, the next `ev_tx.send(event)` returns
+//      `SendError`; the worker breaks out of the loop. A regression
+//      that turned that into `let _ = ev_tx.send(event)` would leak
+//      the event thread per-runner — invisible until thread-count
+//      monitoring or a long-running test caught it.
+//
+//   2. **`event_tick` forwarding** (line 402, 407). The user's
+//      `RunnerConfig::event_tick` is captured into the closure and
+//      passed verbatim to `poll.next_timeout(event_tick)`. A regression
+//      that hard-coded `Duration::from_millis(50)` (the default), or
+//      passed `Duration::ZERO`, or accidentally swapped to `poll_interval`,
+//      would silently change the event-poll cadence. Existing test
+//      `runner_config_default_pins_field_values` only checks the
+//      default *value*, not that it's actually used.
+
+/// `EventPoll` that records the `Duration` it was last called with,
+/// emits events from a shared queue, and respects a "stop" flag the
+/// test thread can flip to make `next_timeout` return `None` forever.
+struct RecordingEventPoll {
+    last_timeout: std::sync::Arc<std::sync::Mutex<Option<Duration>>>,
+    queue: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<CameraEvent>>>,
+}
+
+impl EventPoll for RecordingEventPoll {
+    fn try_next(&mut self) -> Option<CameraEvent> {
+        self.queue.lock().unwrap().pop_front()
+    }
+    fn next_timeout(&mut self, d: Duration) -> Option<CameraEvent> {
+        *self.last_timeout.lock().unwrap() = Some(d);
+        let popped = self.queue.lock().unwrap().pop_front();
+        if popped.is_none() {
+            // Sleep briefly so the worker doesn't busy-loop hammering
+            // the lock when the queue is empty (matches the contract
+            // of a real `EventPoll` blocking up to `d`).
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        popped
+    }
+}
+
+#[test]
+fn runner_event_worker_forwards_event_tick_to_poll() {
+    use std::collections::VecDeque;
+    use std::sync::{Arc, Mutex};
+
+    let last_timeout: Arc<Mutex<Option<Duration>>> = Arc::new(Mutex::new(None));
+    let queue: Arc<Mutex<VecDeque<CameraEvent>>> = Arc::new(Mutex::new(VecDeque::new()));
+    let poll = RecordingEventPoll {
+        last_timeout: Arc::clone(&last_timeout),
+        queue: Arc::clone(&queue),
+    };
+
+    // Hybrid with at least one frame so the frames worker has work
+    // (otherwise it would spin in the error-sleep path; harmless but
+    // wastes cycles).
+    let mut h = MockHybrid::new(0, vec![mock_frame(4, 4, FrameFormat::MJPEG)]);
+    h.push_frame(mock_frame(4, 4, FrameFormat::YUYV));
+    let dev = HybridWithEvents::new(h, Box::new(poll));
+    let opened = OpenedCamera::from_device(Box::new(dev));
+
+    let custom_tick = Duration::from_millis(173);
+    let cfg = RunnerConfig {
+        event_tick: custom_tick,
+        ..RunnerConfig::default()
+    };
+    let runner = CameraRunner::spawn(opened, cfg).unwrap();
+
+    // Wait until the event worker has called `next_timeout` at least
+    // once; 100ms is comfortably more than the 10ms sleep inside the
+    // poll's empty-queue path.
+    let deadline = std::time::Instant::now() + Duration::from_millis(500);
+    loop {
+        if last_timeout.lock().unwrap().is_some() {
+            break;
+        }
+        if std::time::Instant::now() >= deadline {
+            panic!("event worker never called RecordingEventPoll::next_timeout");
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+
+    assert_eq!(
+        last_timeout.lock().unwrap().unwrap(),
+        custom_tick,
+        "RunnerConfig::event_tick must be forwarded verbatim to EventPoll::next_timeout"
+    );
+
+    // Clean shutdown to avoid leaking the worker into the next test.
+    runner.stop().unwrap();
+}
+
+#[test]
+fn runner_event_worker_exits_when_events_receiver_dropped() {
+    use std::collections::VecDeque;
+    use std::sync::{Arc, Mutex};
+
+    let last_timeout: Arc<Mutex<Option<Duration>>> = Arc::new(Mutex::new(None));
+    let queue: Arc<Mutex<VecDeque<CameraEvent>>> = Arc::new(Mutex::new(VecDeque::new()));
+    let poll = RecordingEventPoll {
+        last_timeout: Arc::clone(&last_timeout),
+        queue: Arc::clone(&queue),
+    };
+
+    let mut h = MockHybrid::new(0, vec![mock_frame(4, 4, FrameFormat::MJPEG)]);
+    h.push_frame(mock_frame(4, 4, FrameFormat::YUYV));
+    let dev = HybridWithEvents::new(h, Box::new(poll));
+    let opened = OpenedCamera::from_device(Box::new(dev));
+    let mut runner = CameraRunner::spawn(opened, RunnerConfig::default()).unwrap();
+
+    // Take + drop the events receiver so the next `ev_tx.send` errors.
+    let ev_rx = runner.take_events().expect("hybrid has events channel");
+    drop(ev_rx);
+
+    // Push enough events that the worker is guaranteed to attempt at
+    // least one `ev_tx.send` after the receiver is gone.
+    {
+        let mut q = queue.lock().unwrap();
+        for _ in 0..8 {
+            q.push_back(CameraEvent::Disconnected);
+        }
+    }
+
+    // The worker must observe the SendError and exit. We can't directly
+    // observe its `JoinHandle`, but we can verify the runner stops
+    // cleanly within a bounded time — `stop()` joins the main worker,
+    // which in turn joins the event worker via the `(ev_cmd_tx, handle)`
+    // pair. If the event worker leaked, this would hang forever.
+    let stopper = std::thread::spawn(move || runner.stop());
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    while !stopper.is_finished() {
+        if std::time::Instant::now() >= deadline {
+            panic!(
+                "runner.stop() hung; event worker likely did not exit on \
+                 dropped events receiver (src/runner.rs:408-410 regressed)"
+            );
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    stopper.join().unwrap().unwrap();
+}

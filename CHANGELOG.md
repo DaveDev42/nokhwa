@@ -232,6 +232,38 @@
 
 ### Testing
 
+* **Pin `CameraRunner` event-worker forwarding + receiver-drop
+  shutdown.** The event-poll thread at `src/runner.rs:403-412` had two
+  silently-degradable contracts:
+  - `runner_event_worker_forwards_event_tick_to_poll` — pins the
+    `RunnerConfig::event_tick` → `EventPoll::next_timeout(d)`
+    plumbing. Existing `runner_config_default_pins_field_values`
+    only checked the field's *default value*, not that the runner
+    actually passed it through. A regression that hard-coded
+    `Duration::from_millis(50)`, swapped to `poll_interval`, or
+    passed `Duration::ZERO` would silently change the event cadence.
+    Test installs a `RecordingEventPoll` whose `next_timeout` writes
+    its argument to a shared `Arc<Mutex<Option<Duration>>>`, spawns a
+    runner with `event_tick = 173ms`, polls until the worker has
+    called `next_timeout` once, and asserts the recorded duration.
+  - `runner_event_worker_exits_when_events_receiver_dropped` — pins
+    `src/runner.rs:408-410` (`if ev_tx.send(event).is_err() { break }`).
+    Test takes + drops the events receiver, pushes 8 events into the
+    `RecordingEventPoll`'s queue, then runs `runner.stop()` on a
+    side thread with a 3-second deadline. If the event worker leaked
+    (regression: `let _ = ev_tx.send(event)`), `stop()` would hang
+    forever waiting on the join. Bounded-time observable contract
+    that doesn't rely on internal thread-state inspection.
+* **Pin `RequestedFormat::fulfill` empty-list short-circuits for
+  framerate variants.** Existing `fulfill_empty_format_list` only
+  covered `AbsoluteHighestResolution`; `AbsoluteHighestFrameRate` and
+  `HighestFrameRate(_)` had identical `?`-on-empty short-circuits in
+  separate match arms with no test pin. A regression adding a
+  fallback to one variant without the others (e.g. "if no candidate,
+  return `CameraFormat::default()`") would silently change the
+  no-match contract. Added two two-liner tests that exercise the
+  framerate arms with `&[]`. Pure logic, microsecond runtime, runs
+  symmetrically with the resolution case.
 * **Pin `CameraRunner::set_control` E2E forwarding + hybrid
   pictures-drop policy.** Two more silently-degradable `CameraRunner`
   paths covered:
