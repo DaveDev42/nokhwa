@@ -97,6 +97,20 @@
 
 ### Refactoring
 
+* **MSMF `reconcile_and_emit` extracts a pure
+  `reconcile_and_emit_with(tx, previous, current)` helper.** The
+  previous shape took a `&SharedState` and called `take_snapshot()`
+  inline, which meant the diff/emit/cache-swap logic could not be
+  unit-tested without driving real `MediaFoundation` enumeration
+  (impossible on Linux CI). Pulled the I/O-free part into
+  `reconcile_and_emit_with` mirroring the V4L pattern at
+  `nokhwa-bindings-linux-v4l/src/hotplug.rs:310`, with the public
+  `reconcile_and_emit` shrinking to "snapshot, then delegate". 5
+  unit tests pin the contract (cache swap, arrivals + removals
+  emitted, arrivals precede removals in emission order, identical
+  snapshots emit no events, returns false when channel closed).
+  These execute on the `MSMF unit tests (Windows)` CI job which
+  was previously only exercising 9 GUID-parser tests.
 * **Centralise the decoded-pixel-byte-width table on
   `FrameFormat::decoded_pixel_byte_width()`.** Two copies of the
   same `match` (mapping each `FrameFormat` to `1` for `GRAY` or `3`
