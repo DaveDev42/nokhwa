@@ -140,29 +140,6 @@ mod internal {
         Ok(cameras)
     }
 
-    /// Cross-platform `GStreamer` capture device.
-    ///
-    /// Session 2 (this release) implements streaming via a
-    /// `source ! capsfilter ! videoconvert ! appsink` pipeline. The
-    /// source element is the one `Device::create_element()` hands us —
-    /// `v4l2src` on Linux, `mfvideosrc` on Windows, `avfvideosrc` on
-    /// macOS — so format enumeration and actual negotiation happen
-    /// against the real device caps rather than a hardcoded element
-    /// name.
-    ///
-    /// Controls (session 3) are Linux-only: `v4l2src` exposes four
-    /// `controllable` GObject properties (brightness / contrast / hue
-    /// / saturation) that work at any pipeline state, plus the
-    /// write-only `extra-controls` structure for the rest of the V4L2
-    /// CID namespace (exposure / zoom / focus / pan / tilt etc).
-    /// Windows `mfvideosrc` / `ksvideosrc` and macOS `avfvideosrc`
-    /// expose no camera-control properties — on those platforms
-    /// `controls()` returns an empty list and `set_control()` errors.
-    /// Users who need full control support on Windows / macOS should
-    /// use the native `input-msmf` / `input-avfoundation` backends.
-    ///
-    /// Not yet implemented: `nokhwa::open()` dispatch integration
-    /// (session 4).
     /// Local-device source metadata: what `DeviceMonitor` + `Device`
     /// gave us at `new()` time. Lives inside [`BackendSource::Local`].
     struct LocalSource {
@@ -217,6 +194,35 @@ mod internal {
         }
     }
 
+    /// Cross-platform `GStreamer` capture device.
+    ///
+    /// Streaming uses a `source ! capsfilter ! videoconvert ! appsink`
+    /// pipeline for local devices and a `uridecodebin ! videoconvert !
+    /// appsink` pipeline for URL sources. The local-device source
+    /// element is the one `Device::create_element()` hands us —
+    /// `v4l2src` on Linux, `mfvideosrc` on Windows, `avfvideosrc` on
+    /// macOS — so format enumeration and actual negotiation happen
+    /// against the real device caps rather than a hardcoded element
+    /// name. URL dispatch (`rtsp://` / `http://` / `https://` /
+    /// `file://`, see `uri::looks_like_uri`) routes through
+    /// `uridecodebin` regardless of platform. The two pipelines live
+    /// in `BackendSource::Local` and `BackendSource::Uri`
+    /// respectively.
+    ///
+    /// Controls are Linux-only: `v4l2src` exposes four `controllable`
+    /// GObject properties (brightness / contrast / hue / saturation)
+    /// that work at any pipeline state, plus the write-only
+    /// `extra-controls` structure for the rest of the V4L2 CID
+    /// namespace (exposure / zoom / focus / pan / tilt etc). Windows
+    /// `mfvideosrc` / `ksvideosrc` and macOS `avfvideosrc` expose no
+    /// camera-control properties — on those platforms `controls()`
+    /// returns an empty list and `set_control()` errors. Users who
+    /// need full control support on Windows / macOS should use the
+    /// native `input-msmf` / `input-avfoundation` backends.
+    ///
+    /// `nokhwa::open()` dispatches `CameraIndex::Index(_)` to the
+    /// platform native backend and URL-shaped `CameraIndex::String`s
+    /// here.
     pub struct GStreamerCaptureDevice {
         info: CameraInfo,
         source: BackendSource,

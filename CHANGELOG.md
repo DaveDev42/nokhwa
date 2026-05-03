@@ -233,6 +233,19 @@
 
 ### Documentation
 
+* **Relocate misplaced `GStreamerCaptureDevice` doc comment and
+  remove stale "session 4" pending-feature line in
+  `nokhwa-bindings-gstreamer/src/lib.rs`.** 22 lines of
+  "Cross-platform GStreamer capture device" prose were attached to
+  the private `LocalSource` struct (line 168) instead of the public
+  `GStreamerCaptureDevice` (line 220, which had no docs at all).
+  Same block also claimed "Not yet implemented: `nokhwa::open()`
+  dispatch integration (session 4)" — session 4 (#164) and session
+  5 (#163, URL sources via `uridecodebin`) both shipped before
+  0.14.3. Moved the prose to its proper home, refreshed the
+  pipeline + URL-dispatch description to reflect the current
+  surface, and dropped the stale completeness claim. `LocalSource`
+  retains its accurate one-line description.
 * **Fix wrong-from-day-one doc comment on
   `compatible_fourcc_from_negotiated` in
   `nokhwa-bindings-gstreamer/src/uri.rs`.** The comment claimed
