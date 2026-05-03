@@ -205,6 +205,27 @@ pub mod wmf {
         Some(numerator)
     }
 
+    /// Extract the numerator from a packed `MF_MT_FRAME_RATE` `UINT64`
+    /// (`numerator << 32 | denominator`) without the strict
+    /// integer-only / nonzero validation [`parse_frame_rate_fraction`]
+    /// applies during enumeration.
+    ///
+    /// Used by `format_refreshed` to decode the *negotiated* media
+    /// type after a successful `set_camera_format`. By that point the
+    /// source reader has already accepted the mode, so we trust the
+    /// numerator and ignore the denominator (we cannot represent
+    /// fractional rates in `CameraFormat`'s `u32` fps anyway —
+    /// enumeration dropped such modes upstream, so an active mode
+    /// reaching this helper is integer-fps in practice).
+    ///
+    /// Replaces an inline `fps as u32` cast that was reading the
+    /// *denominator* (low 32 bits) instead of the numerator — the
+    /// `device_format` cache silently held `frame_rate = 1` after
+    /// every format change.
+    fn frame_rate_numerator(fraction_u64: u64) -> u32 {
+        (fraction_u64 >> 32) as u32
+    }
+
     fn parse_native_media_types(
         source_reader: &IMFSourceReader,
     ) -> Result<Vec<ParsedMediaType>, NokhwaError> {
@@ -974,7 +995,7 @@ pub mod wmf {
                     };
 
                     let frame_rate = match unsafe { media_type.GetUINT64(&MF_MT_FRAME_RATE) } {
-                        Ok(fps) => fps as u32,
+                        Ok(fps) => frame_rate_numerator(fps),
                         Err(why) => {
                             return Err(NokhwaError::GetPropertyError {
                                 property: "MF_MT_FRAME_RATE".to_string(),
@@ -1428,6 +1449,64 @@ pub mod wmf {
         fn parse_frame_rate_fraction_max_numerator_round_trips() {
             let fraction = (u64::from(u32::MAX) << 32) | 1_u64;
             assert_eq!(parse_frame_rate_fraction(fraction), Some(u32::MAX));
+        }
+
+        /// Regression for `format_refreshed` silently reading the
+        /// denominator instead of the numerator. The previous shape
+        /// `let frame_rate = fps as u32` cast a `u64` to `u32` which
+        /// keeps the *low* 32 bits — i.e. the denominator (almost
+        /// always `1`). After every `set_camera_format` the cached
+        /// `device_format.frame_rate` was therefore `1`, regardless
+        /// of what fps the user had actually requested. The fix
+        /// routes through `frame_rate_numerator`, which returns the
+        /// *high* 32 bits.
+        ///
+        /// `30 << 32 | 1` is the canonical "30 fps integer-rate"
+        /// MSMF fraction. The buggy shape returned `1`; the helper
+        /// returns `30`.
+        #[test]
+        fn frame_rate_numerator_returns_high_word_not_denominator() {
+            let fraction: u64 = (30_u64 << 32) | 1_u64;
+            // Buggy shape (kept here as a witness, not used):
+            assert_eq!(fraction as u32, 1, "the buggy `as u32` cast read 1");
+            // Helper returns the numerator we actually want.
+            assert_eq!(frame_rate_numerator(fraction), 30);
+        }
+
+        /// `frame_rate_numerator` is intentionally *less* strict than
+        /// `parse_frame_rate_fraction`: it is called on the
+        /// negotiated media type after the source reader has
+        /// accepted the mode, so denominator validation is the
+        /// caller's responsibility. Pin that a `denominator != 1`
+        /// fraction (e.g. NTSC's `30000 / 1001`) still surfaces the
+        /// numerator. In practice enumeration drops such modes
+        /// upstream, but if Apple/Microsoft ever accepts one we
+        /// surface the fps the device negotiated rather than `0` or
+        /// the denominator.
+        #[test]
+        fn frame_rate_numerator_ignores_denominator() {
+            let fraction: u64 = (30_000_u64 << 32) | 0x3E9_u64; // 1001
+            assert_eq!(frame_rate_numerator(fraction), 30_000);
+        }
+
+        /// Both halves at `u32::MAX` round-trip — the helper must
+        /// not lose the high bit on the `(u64 >> 32) as u32`
+        /// cast, the same invariant we pin on
+        /// `parse_frame_rate_fraction`'s numerator path.
+        #[test]
+        fn frame_rate_numerator_max_value_round_trips() {
+            let fraction: u64 = (u64::from(u32::MAX) << 32) | u64::from(u32::MAX);
+            assert_eq!(frame_rate_numerator(fraction), u32::MAX);
+        }
+
+        /// All-zero packed value — the documented "no rate" sentinel
+        /// the source reader returns when a stream has no rate hint.
+        /// The helper must not panic on this; it returns `0`. The
+        /// caller is expected to treat `0` as "unknown" rather than
+        /// a real frame rate, but that policy is outside the helper.
+        #[test]
+        fn frame_rate_numerator_zero_packed_returns_zero() {
+            assert_eq!(frame_rate_numerator(0), 0);
         }
     }
 }
