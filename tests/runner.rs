@@ -477,3 +477,124 @@ fn runner_take_events_yields_receiver_on_event_hybrid() {
         .recv_timeout(Duration::from_millis(500))
         .expect("owned events receiver still delivers");
 }
+
+// ─────────────────── Overflow policy: E2E through CameraRunner ────────
+//
+// `make_channel(capacity, policy)` is unit-tested directly in
+// `src/runner.rs`, but the full path from `CameraRunner::spawn(opened,
+// RunnerConfig { overflow: ..., frames_capacity: ..., .. })` through
+// the worker thread to the user-facing `Receiver<Buffer>` was never
+// exercised end-to-end. A regression that hard-coded a single policy
+// in `spawn`, swapped a pair of `frames_capacity` / `events_capacity`
+// arguments, or forgot to wire the relay thread for `DropOldest`
+// would silently degrade the policy without any test failing.
+//
+// These two tests pin the spawn → policy → user channel wiring with
+// a sequence-number tag in the first byte of each frame so we can
+// distinguish dropped vs. delivered without relying on raw counts.
+
+/// Build a `MockFrameSource` whose Nth pushed frame has its first
+/// data byte set to N (truncated to u8). Used to verify ordering
+/// invariants without the test depending on exact frame counts.
+fn make_sequenced_frame_source(count: u8) -> FrameOnly {
+    let mut s = MockFrameSource::new(0);
+    for n in 0..count {
+        // 4×4 GRAY → 16 bytes; bpp=1 so the first byte is observable.
+        let mut buf = mock_frame(4, 4, FrameFormat::GRAY).buffer().to_vec();
+        buf[0] = n;
+        s.push_frame(Buffer::from_vec(
+            nokhwa_core::types::Resolution::new(4, 4),
+            buf,
+            FrameFormat::GRAY,
+        ));
+    }
+    FrameOnly(s)
+}
+
+/// `Overflow::Block` end-to-end: with `frames_capacity = 1` and a
+/// finite frame queue, the worker must block on a full channel
+/// rather than drop frames. Pushing 4 sequenced frames and draining
+/// after the source has stalled (errored on empty queue) must yield
+/// exactly those 4 frames in order. A regression that swapped Block
+/// for DropOldest / DropNewest would lose frames; a regression that
+/// dropped Block to a no-op would fail to produce them at all.
+#[test]
+fn runner_overflow_block_delivers_every_frame_in_order() {
+    let opened = OpenedCamera::from_device(Box::new(make_sequenced_frame_source(4)));
+    let cfg = RunnerConfig {
+        frames_capacity: 1,
+        overflow: Overflow::Block,
+        ..RunnerConfig::default()
+    };
+    let runner = CameraRunner::spawn(opened, cfg).unwrap();
+    let rx = runner.frames().expect("stream runner has frames channel");
+
+    let mut received = Vec::new();
+    // Pull until the source stalls. Each `recv_timeout` window must
+    // be long enough to cover the runner's `poll_interval` (10ms
+    // default) plus channel send latency.
+    while let Ok(buf) = rx.recv_timeout(Duration::from_millis(500)) {
+        received.push(buf.buffer()[0]);
+        if received.len() == 4 {
+            // Drained the entire pushed sequence; subsequent recv
+            // would just time out on the stalled (empty-queue) source.
+            break;
+        }
+    }
+
+    assert_eq!(
+        received,
+        vec![0, 1, 2, 3],
+        "Block must deliver every produced frame in order; got {received:?}"
+    );
+}
+
+/// `Overflow::DropOldest` end-to-end: the relay thread is wired only
+/// when this policy is selected. Pin two invariants — (a) frames
+/// arrive in order (DropOldest never reorders), and (b) when the
+/// source produces faster than we drain, the *last* frame produced
+/// (highest sequence number) must always be observable, because
+/// DropOldest evicts the front of the buffer to make room.
+///
+/// The test uses 16 finite sequenced frames (range fits in u8) and a
+/// `frames_capacity = 1` channel. We don't drain during production —
+/// we sleep long enough for the runner to walk the entire queue —
+/// then drain everything that arrived. The sequence we observe must
+/// be strictly monotonic, and 15 (the last frame) must appear at
+/// the tail. Doesn't depend on the exact number of survivors, only
+/// on the ordering invariant + last-frame survivability.
+#[test]
+fn runner_overflow_drop_oldest_preserves_order_and_keeps_latest_frame() {
+    let opened = OpenedCamera::from_device(Box::new(make_sequenced_frame_source(16)));
+    let cfg = RunnerConfig {
+        frames_capacity: 1,
+        overflow: Overflow::DropOldest,
+        ..RunnerConfig::default()
+    };
+    let runner = CameraRunner::spawn(opened, cfg).unwrap();
+
+    // Let the runner produce ALL 16 frames. With a 10ms poll_interval
+    // default + 5ms relay drain tick, 1s is comfortably enough for
+    // the source to drain (16 frames × ~10ms each = ~160ms).
+    std::thread::sleep(Duration::from_millis(1000));
+
+    let rx = runner.frames().expect("stream runner has frames channel");
+    let mut received = Vec::new();
+    while let Ok(buf) = rx.recv_timeout(Duration::from_millis(200)) {
+        received.push(buf.buffer()[0]);
+    }
+
+    assert!(
+        !received.is_empty(),
+        "DropOldest must surface at least one frame"
+    );
+    assert!(
+        received.windows(2).all(|w| w[0] < w[1]),
+        "DropOldest must preserve order; got {received:?}"
+    );
+    assert_eq!(
+        received.last().copied(),
+        Some(15),
+        "DropOldest must keep the most recent frame at the tail; got {received:?}"
+    );
+}
