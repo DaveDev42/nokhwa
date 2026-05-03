@@ -144,6 +144,17 @@
 
 ### Cleanup
 
+* **Add `publish = false` to all five example `Cargo.toml`s
+  (`captesting`, `capture`, `setting`, `threaded-capture`,
+  `decoder_test`).** Per CLAUDE.md this fork **never publishes to
+  crates.io** — the `nokhwa` crate name belongs to upstream
+  `l1npengtul/nokhwa`. Without `publish = false` on the example
+  crates, anyone with credentials running `cargo publish` from inside
+  one of those `examples/*` workspaces could accidentally push a
+  rogue crate (e.g. `nokhwactl 0.10.0`) to crates.io. The setting is
+  defensive, costs nothing, and matches what `examples/live_view`
+  already had. No source change; standalone-workspace `cargo check`
+  still passes for every example.
 * **Bump `examples/threaded-capture` to Rust edition 2021.** It was
   the only example still pinned to `edition = "2018"`; every other
   example (`captesting`, `capture`, `decoder_test`, `live_view`,
