@@ -232,6 +232,26 @@
 
 ### Testing
 
+* **Pin `CameraRunner::spawn_stream` worker exit on dropped frames
+  receiver.** `src/runner.rs:305-307` documents the receiver-drop
+  shutdown — `if frame_tx.send(buf).is_err() { break }` — for the
+  stream-only worker. The contract is asymmetric to the hybrid
+  picture-drop arm (which silently swallows the send error and keeps
+  streaming, pinned by `runner_hybrid_dropped_pictures_receiver_keeps_frame_stream_alive`):
+  for the stream worker, frames are the only output channel, so a
+  dropped consumer means there's no work left to do. A regression that
+  swapped to `let _ = frame_tx.send(buf)` would leak the worker thread
+  per-runner — invisible until thread-count monitoring or a long-running
+  test caught it. New `runner_spawn_stream_worker_exits_on_dropped_frames_receiver`
+  installs an `EndlessFrameSource` (always returns `Ok` from `frame()`,
+  so the worker is always on the send path), drains one frame to confirm
+  liveness, drops the frames receiver, then polls `runner.set_control(...)`
+  with a 3-second deadline. Once the worker exits via the `is_err()`
+  branch it drops `cmd_rx`; subsequent `cmd.send(...)` returns
+  `SendError`, so `set_control` flips from `Ok` to `Err("runner thread
+  gone: ...")` — observable signal that the worker actually exited
+  via the receiver-drop path (and not, say, via the `Command::Die`
+  shutdown).
 * **Pin `RequestedFormat::fulfill` decoder-filter exclusion for
   `HighestResolution` / `HighestFrameRate`.** Both narrow variants at
   `nokhwa-core/src/types.rs:204-219` and `220-235` filter candidates

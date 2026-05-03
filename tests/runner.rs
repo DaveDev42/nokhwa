@@ -1609,3 +1609,154 @@ fn runner_spawn_hybrid_propagates_open_error() {
         "expected open() error to surface unchanged; got: {msg}"
     );
 }
+
+// ──────── spawn_stream worker exits on dropped frames receiver ────────
+//
+// `src/runner.rs:305-307` documents that the stream worker treats a
+// dropped frames receiver as a shutdown signal:
+//
+//     if frame_tx.send(buf).is_err() {
+//         break;
+//     }
+//
+// The receiver-drop policy is asymmetric to the dropped-pictures arm in
+// `spawn_hybrid` (which silently swallows the send-error and keeps
+// streaming): for the stream-only worker, frames are the *only* output
+// channel, so a dropped consumer means there is no work left to do.
+// A regression that swapped to `let _ = frame_tx.send(buf)` would leak
+// the worker thread per-runner — invisible until thread-count monitoring
+// or a long-running test caught it.
+//
+// The hybrid path's parallel `frame_tx.send(...).is_err() { break }` at
+// `src/runner.rs:449-451` is similarly un-pinned for the *frames*-drop
+// case (the existing `runner_hybrid_dropped_pictures_receiver_keeps_frame_stream_alive`
+// only covers the picture-drop asymmetry). This test deliberately scopes
+// to the stream worker so the observable channel is unambiguous.
+//
+// Observable contract: after dropping the frames receiver, the worker's
+// next `frame_tx.send(buf)` returns `SendError`, the worker breaks the
+// loop, and `cmd_rx` (which the worker owns) drops. Subsequent calls
+// to `set_control` / `trigger` on the runner — both forward to the
+// command channel via `cmd.send(...)` — must return `Err("runner thread
+// gone: ...")` because the worker's `cmd_rx` is closed.
+
+/// `FrameSource` that produces an unbounded sequence of fresh frames so
+/// the worker is always on the `frame_tx.send` path (never on the
+/// sleep+retry frame()-error path). Required to make the
+/// `is_err() { break }` branch deterministic — a finite seed could let
+/// the worker exit via empty-queue errors before observing the dropped
+/// receiver.
+struct EndlessFrameSource {
+    info: CameraInfo,
+    format: CameraFormat,
+}
+
+impl CameraDevice for EndlessFrameSource {
+    fn backend(&self) -> ApiBackend {
+        ApiBackend::Browser
+    }
+    fn info(&self) -> &CameraInfo {
+        &self.info
+    }
+    fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        Ok(vec![])
+    }
+    fn set_control(
+        &mut self,
+        _id: KnownCameraControl,
+        _v: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+}
+
+impl FrameSource for EndlessFrameSource {
+    fn negotiated_format(&self) -> CameraFormat {
+        self.format
+    }
+    fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
+        self.format = f;
+        Ok(())
+    }
+    fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+        Ok(vec![self.format])
+    }
+    fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
+        Ok(vec![self.format.format()])
+    }
+    fn open(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+    fn is_open(&self) -> bool {
+        true
+    }
+    fn frame(&mut self) -> Result<Buffer, NokhwaError> {
+        Ok(mock_frame(4, 4, self.format.format()))
+    }
+    fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
+        Ok(Cow::Owned(
+            mock_frame(4, 4, self.format.format()).buffer().to_vec(),
+        ))
+    }
+    fn close(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+}
+
+nokhwa_backend!(EndlessFrameSource: FrameSource);
+
+#[test]
+fn runner_spawn_stream_worker_exits_on_dropped_frames_receiver() {
+    use nokhwa_core::types::CameraIndex;
+    use std::time::Instant;
+
+    let src = EndlessFrameSource {
+        info: CameraInfo::new("endless", "endless", "endless", CameraIndex::Index(0)),
+        format: CameraFormat::new(
+            nokhwa_core::types::Resolution::new(4, 4),
+            FrameFormat::YUYV,
+            30,
+        ),
+    };
+    let opened = OpenedCamera::from_device(Box::new(src));
+    let mut runner = CameraRunner::spawn(opened, RunnerConfig::default()).unwrap();
+
+    // Drain one frame to confirm the worker is on the send path before
+    // we drop the receiver. Without this confirmation, a regression that
+    // never reaches `frame_tx.send` (e.g. a worker that exited at startup)
+    // could pass spuriously.
+    let rx = runner
+        .take_frames()
+        .expect("stream runner has frames channel");
+    rx.recv_timeout(Duration::from_millis(500))
+        .expect("frame stream not producing before frames-drop");
+
+    // Drop the frames receiver. The worker's next `frame_tx.send(buf)`
+    // call must return SendError, after which it breaks the loop and
+    // drops `cmd_rx`.
+    drop(rx);
+
+    // Observable: once the worker has exited, `cmd.send(...)` (used by
+    // `set_control` and `trigger`) returns `SendError` because the
+    // worker dropped `cmd_rx`. Poll until that flips, with a 3-second
+    // deadline. If the test hangs, the worker is leaking — exactly the
+    // regression this test is here to catch.
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < deadline {
+        if runner
+            .set_control(
+                KnownCameraControl::Brightness,
+                ControlValueSetter::Integer(0),
+            )
+            .is_err()
+        {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    panic!(
+        "stream worker did not exit after dropping frames receiver — \
+         src/runner.rs:305-307 receiver-drop policy regressed (set_control \
+         still routes to a live worker after 3s)"
+    );
+}
