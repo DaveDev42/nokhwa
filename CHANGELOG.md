@@ -232,6 +232,24 @@
 
 ### Testing
 
+* **Pin `CameraIndex` structural `PartialEq` and tighten the
+  `Default` test.** `CameraIndex` derives `PartialEq`
+  (`nokhwa-core/src/types.rs:304`), making `Index(0)` and
+  `String("0")` distinct even though `as_index()` resolves both to
+  the same numeric value. No existing test pinned this. A plausible
+  "fix" replacing the derive with a hand-written impl that
+  delegated to `as_index()` (rationale: "the dual-form resolution
+  logic should be transitive across variants") would silently make
+  `Index(3) == String("3")`, breaking camera deduplication in device
+  enumeration where `Vec<CameraInfo>::contains` filters duplicates
+  between numeric V4L indices and string-form GStreamer URIs.
+  Added `camera_index_partial_eq_is_structural_not_numeric`
+  asserting cross-variant inequality plus same-variant
+  equality/inequality sanity checks. Also extended
+  `camera_index_default_is_index_zero` with a direct
+  `assert_eq!(idx, CameraIndex::Index(0))` so the Default contract
+  is pinned by structural equality, not just by the indirect
+  `is_index() && as_index() == 0` pair.
 * **Pin `RequestedFormatType::default() == None` and
   `Resolution::default() == (0, 0)`.** Both types carry `Default`
   contracts that no existing test exercised: `RequestedFormatType`
