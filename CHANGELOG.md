@@ -232,6 +232,15 @@
 
 ### Testing
 
+* **Tighten `Resolution::Display` to an exact-format pin.** The
+  pre-existing `resolution_display` test asserted only
+  `s.contains("640")` and `s.contains("480")`, so a refactor that
+  swapped the separator to `" x "` / `"×"` or reordered to `HxW`
+  would silently pass. `CameraFormat::Display` delegates to
+  `Resolution::Display`, so downstream log scrapers that split on
+  `'x'` to recover dimensions depend on this exact shape. Replaced
+  the weak test with `resolution_display_exact_format` asserting
+  the verbatim `"640x480"`. Guards `nokhwa-core/src/types.rs:571-575`.
 * **Pin remaining `NokhwaError` Display exact-format strings.**
   Every variant other than the four `(backend …)` / `(format …)`
   parenthetical ones (pinned previously) had only `contains(...)`

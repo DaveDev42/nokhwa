@@ -11,12 +11,19 @@ fn resolution_new() {
     assert_eq!(res.height_y, 1080);
 }
 
+// `Resolution::Display` emits `"{w}x{h}"` (e.g. `"640x480"`).
+// Previously this test used `contains("640")` + `contains("480")`,
+// which would silently pass after a refactor that flipped the
+// separator to `" x "` / `"×"`, swapped order to `HxW`, or
+// re-arranged the form. `CameraFormat::Display` *delegates* to
+// this impl (see `camera_format_display_renders_resolution_at_fps_then_format`),
+// so any downstream log scraper that splits on `'x'` to recover
+// the dimensions of a `CameraFormat` string depends on this exact
+// shape. Pin it verbatim. Guards `nokhwa-core/src/types.rs:571-575`.
 #[test]
-fn resolution_display() {
+fn resolution_display_exact_format() {
     let res = Resolution::new(640, 480);
-    let display = format!("{res}");
-    assert!(display.contains("640"));
-    assert!(display.contains("480"));
+    assert_eq!(format!("{res}"), "640x480");
 }
 
 #[test]
