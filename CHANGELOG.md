@@ -232,6 +232,19 @@
 
 ### Testing
 
+* **Pin `HybridCamera::take_events` idempotency on the no-event
+  branch.** `src/session.rs:548-551` short-circuits to `None` when
+  `self.event_source` is `false`, before touching `self.events`.
+  Existing `hybrid_camera_without_events_returns_none` only called
+  `take_events()` once. A regression that moved `self.events.take()`
+  *before* the early-return guard would still pass that single-call
+  test (returning `None`) while changing the no-event invariant. New
+  test `hybrid_camera_without_events_take_events_is_idempotent` calls
+  `take_events()` 5× on a `HybridCamera::from_device(make_hybrid())`
+  (no `EventSource`) and asserts each returns `None`, then proves the
+  device surface (`open` + `frame`) is still functional after
+  repeated takes. Companion to the with-events idempotency assertion
+  already pinned in `hybrid_camera_with_events_delivers_poller`.
 * **Pin `CameraRunner` event-worker forwarding + receiver-drop
   shutdown.** The event-poll thread at `src/runner.rs:403-412` had two
   silently-degradable contracts:

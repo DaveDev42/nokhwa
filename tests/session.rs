@@ -243,6 +243,31 @@ fn hybrid_camera_without_events_returns_none() {
     assert!(cam.take_events().is_none());
 }
 
+/// Pin idempotency on the `event_source = false` early-return path
+/// (`src/session.rs:548-551`). The existing
+/// `hybrid_camera_without_events_returns_none` only calls
+/// `take_events()` once, so a regression that moves the
+/// `self.events.take()` line *before* the `if !self.event_source` guard
+/// would still return `None` on the first call but could mutate
+/// `self.events` if it were ever (incorrectly) constructed as
+/// `Some(_)` on a non-event hybrid. Pin both the multi-call invariant
+/// and the post-condition that the rest of the device surface stays
+/// usable. Companion to the events-with-events idempotency assertion
+/// in `hybrid_camera_with_events_delivers_poller`.
+#[test]
+fn hybrid_camera_without_events_take_events_is_idempotent() {
+    let mut cam = HybridCamera::from_device(Box::new(make_hybrid()));
+    for i in 0..5 {
+        assert!(
+            cam.take_events().is_none(),
+            "take_events() call {i} on no-event Hybrid must return None"
+        );
+    }
+    // Surface remaining functional after repeated take_events calls.
+    assert!(cam.open().is_ok());
+    assert!(cam.frame().is_ok());
+}
+
 // ─────────────────── External FrameSource+ShutterCapture+EventSource ──────
 //
 // Proves that a downstream crate can declare all three capabilities on the
