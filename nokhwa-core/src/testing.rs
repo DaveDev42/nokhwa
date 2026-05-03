@@ -431,6 +431,116 @@ mod tests {
         assert_eq!(p.resolution(), Resolution::new(2, 2));
     }
 
+    // `MockShutter` uses a two-queue (`triggered → pending`) FIFO so that
+    // `trigger()` and `take_picture()` are independent state moves —
+    // exactly the contract a real shutter backend has. The single
+    // `shutter_triggers_and_takes_pictures` test only exercises one
+    // trigger+take, so a regression that swapped the queues, drained
+    // them in LIFO order, or short-circuited the dance with a single
+    // `VecDeque` would slip through. Pin the multi-step contract.
+    #[test]
+    fn mock_shutter_multi_trigger_drains_in_fifo_order() {
+        let pics = vec![
+            mock_frame(2, 2, FrameFormat::MJPEG),
+            mock_frame(3, 3, FrameFormat::MJPEG),
+            mock_frame(4, 4, FrameFormat::MJPEG),
+        ];
+        let mut sh = MockShutter::new(pics);
+        sh.trigger().unwrap();
+        sh.trigger().unwrap();
+        sh.trigger().unwrap();
+        let a = sh.take_picture(Duration::ZERO).unwrap();
+        let b = sh.take_picture(Duration::ZERO).unwrap();
+        let c = sh.take_picture(Duration::ZERO).unwrap();
+        assert_eq!(a.resolution(), Resolution::new(2, 2));
+        assert_eq!(b.resolution(), Resolution::new(3, 3));
+        assert_eq!(c.resolution(), Resolution::new(4, 4));
+        assert!(matches!(
+            sh.take_picture(Duration::ZERO),
+            Err(NokhwaError::TimeoutError(_))
+        ));
+    }
+
+    // `trigger()` on a `MockShutter` whose pool is empty is a silent
+    // no-op (returns Ok, enqueues nothing). This matches a real
+    // backend that accepted the command but had no picture ready. Pin
+    // it so a regression that started returning `Err` on empty-pool
+    // trigger (which would surface as spurious failures in any test
+    // that ignores the picture pool) fails fast here.
+    #[test]
+    fn mock_shutter_trigger_on_empty_pool_is_silent_noop() {
+        let mut sh = MockShutter::new(vec![]);
+        sh.trigger().unwrap();
+        sh.trigger().unwrap();
+        assert!(matches!(
+            sh.take_picture(Duration::ZERO),
+            Err(NokhwaError::TimeoutError(d)) if d == Duration::ZERO
+        ));
+    }
+
+    // `take_picture` on an empty `pending` queue must propagate the
+    // exact `Duration` the caller passed in via `TimeoutError`. A
+    // regression that hard-coded `Duration::ZERO` (or some other
+    // sentinel) into the error would silently mislead callers about
+    // how long they waited. Pin the round-trip.
+    #[test]
+    fn mock_shutter_take_picture_propagates_passed_timeout() {
+        let mut sh = MockShutter::new(vec![]);
+        let d = Duration::from_millis(123);
+        assert!(matches!(
+            sh.take_picture(d),
+            Err(NokhwaError::TimeoutError(got)) if got == d
+        ));
+    }
+
+    // `lock_ui` / `unlock_ui` are no-op `Ok` defaults on the
+    // `ShutterCapture` trait — webcams have no UI to lock. Pin that
+    // `MockShutter` (which doesn't override them) inherits the default
+    // and that the `capture()` convenience routes through the full
+    // `lock_ui → trigger → take_picture → unlock_ui` sequence. A
+    // regression that gave `MockShutter` an explicit `lock_ui`
+    // returning `Err` would break the `capture()` convenience for
+    // every consumer relying on the trait default.
+    #[test]
+    fn mock_shutter_default_lock_unlock_ui_are_ok() {
+        let mut sh = MockShutter::new(vec![mock_frame(2, 2, FrameFormat::MJPEG)]);
+        sh.lock_ui().unwrap();
+        sh.unlock_ui().unwrap();
+        let pic = sh.capture(Duration::from_millis(10)).unwrap();
+        assert_eq!(pic.resolution(), Resolution::new(2, 2));
+    }
+
+    // `MockHybrid` forwards `ShutterCapture` to its inner `MockShutter`
+    // but does not override `lock_ui`/`unlock_ui`, so they resolve to
+    // the trait defaults. Pin the same contract on the hybrid path so
+    // `capture()` also works there — a regression where `MockHybrid`
+    // grew an explicit `lock_ui` impl that errored would silently
+    // break dual-capability tests using the convenience method.
+    #[test]
+    fn mock_hybrid_default_lock_unlock_ui_and_capture() {
+        let mut h = MockHybrid::new(0, vec![mock_frame(5, 5, FrameFormat::MJPEG)]);
+        h.lock_ui().unwrap();
+        h.unlock_ui().unwrap();
+        let pic = h.capture(Duration::from_millis(10)).unwrap();
+        assert_eq!(pic.resolution(), Resolution::new(5, 5));
+        assert_eq!(pic.source_frame_format(), FrameFormat::MJPEG);
+    }
+
+    // `EventPoll: Send` is a super-trait bound that lets pollers be
+    // moved across thread boundaries (e.g. boxed into a worker thread
+    // by `CameraRunner`). `MpscEventPoll` has to satisfy it for the
+    // `Box<dyn EventPoll + Send>` path in `EventSource::take_events`
+    // to even type-check. A refactor that introduced a non-`Send`
+    // field (e.g. an `Rc`) would break that downstream boxing without
+    // failing any current test directly. Pin via a generic shim — if
+    // the bound regresses, this file fails to compile.
+    fn assert_send<T: Send>() {}
+
+    #[test]
+    fn mpsc_event_poll_is_send() {
+        assert_send::<MpscEventPoll>();
+    }
+
     #[test]
     fn mpsc_poll_delivers_events() {
         let (tx, rx) = channel();
