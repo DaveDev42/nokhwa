@@ -409,7 +409,24 @@ mod tests {
     #[test]
     fn v4l2_cid_value_rejects_unsupported_setters() {
         // V4L2 CIDs are int-valued — Float / String / RGB etc. must
-        // fail with a SetPropertyError that names the offending CID.
+        // fail with a SetPropertyError that pins the offending CID,
+        // the rejected setter's `Display` form, and the canonical
+        // explanation. The previous version of this test only checked
+        // `Display::contains("focus_absolute")`, which would still
+        // pass if a future refactor:
+        //   - swapped the variant for `GeneralError` / `StructureError`
+        //     (callers pattern-matching on `SetPropertyError` would
+        //      silently break),
+        //   - dropped the rejected `value` from the struct (debugging
+        //     a misuse becomes "unsupported variant" with no hint of
+        //     *which* variant was passed),
+        //   - or rephrased the canonical "unsupported
+        //     ControlValueSetter variant for V4L2 CID" string,
+        //     which is documented end-user contract for the GStreamer
+        //     V4L2-CID path.
+        // Pin all three fields verbatim per setter so each branch is
+        // covered.
+        let cid = "focus_absolute";
         let unsupported_setters = [
             ControlValueSetter::Float(1.5),
             ControlValueSetter::String("foo".into()),
@@ -421,12 +438,26 @@ mod tests {
             ControlValueSetter::EnumValue(7),
         ];
         for setter in &unsupported_setters {
-            let err = v4l2_cid_value("focus_absolute", setter).unwrap_err();
-            let s = format!("{err}");
-            assert!(
-                s.contains("focus_absolute"),
-                "error message must mention CID, got: {s}"
-            );
+            let err = v4l2_cid_value(cid, setter).unwrap_err();
+            match err {
+                NokhwaError::SetPropertyError {
+                    property,
+                    value,
+                    error,
+                } => {
+                    assert_eq!(property, cid, "wrong property for {setter:?}");
+                    assert_eq!(
+                        value,
+                        setter.to_string(),
+                        "value field must round-trip the setter's Display"
+                    );
+                    assert_eq!(
+                        error, "unsupported ControlValueSetter variant for V4L2 CID",
+                        "canonical error string drifted for {setter:?}"
+                    );
+                }
+                other => panic!("expected SetPropertyError for {setter:?}, got {other:?}"),
+            }
         }
     }
 
