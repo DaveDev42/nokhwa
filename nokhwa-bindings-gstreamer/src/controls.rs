@@ -642,4 +642,43 @@ mod tests {
         let observed: i32 = source.property("num-buffers");
         assert_eq!(observed, 1, "Boolean(true) must map to i32 1");
     }
+
+    /// Pin: `list_controls` returns an empty list for an element whose
+    /// properties contain none of the four v4l2src names
+    /// (`brightness`/`contrast`/`hue`/`saturation`). This is the common
+    /// case on Windows (`mfvideosrc`/`ksvideosrc`) and macOS
+    /// (`avfvideosrc`); the module docstring promises an empty list
+    /// there. `fakesrc` is the closest stock proxy: it has properties
+    /// (`is-live`, `num-buffers`, `sync`, …) but none of them match.
+    #[test]
+    fn list_controls_returns_empty_for_element_without_matching_property_names() {
+        ensure_gst_init();
+        let source = gstreamer::ElementFactory::make("fakesrc")
+            .build()
+            .expect("fakesrc must build for the test");
+        let controls = list_controls(&source);
+        assert!(
+            controls.is_empty(),
+            "fakesrc has no v4l2src control names, list_controls must return empty; got {controls:?}"
+        );
+    }
+
+    /// Pin: `list_controls` filters by exact property name even when
+    /// the element exposes a much richer property surface than
+    /// `fakesrc`. `videotestsrc` has 25+ properties (`pattern`, `kt`,
+    /// `kx`, `motion`, `is-live`, …) but none match the four allow-listed
+    /// v4l2src names. If the filter ever drifts to substring or
+    /// case-insensitive matching this test will catch it.
+    #[test]
+    fn list_controls_returns_empty_for_videotestsrc() {
+        ensure_gst_init();
+        let source = gstreamer::ElementFactory::make("videotestsrc")
+            .build()
+            .expect("videotestsrc must build for the test");
+        let controls = list_controls(&source);
+        assert!(
+            controls.is_empty(),
+            "videotestsrc has no v4l2src control names, list_controls must return empty; got {controls:?}"
+        );
+    }
 }
