@@ -1748,11 +1748,28 @@ fn camera_index_as_index_returns_err_for_string() {
     assert!(idx.as_index().is_err());
 }
 
+// `CameraIndex::Display` delegates to `as_string()`, which emits the
+// raw decimal for `Index(_)` and the inner `s.clone()` for
+// `String(_)`. The previous test only asserted `s.contains('5')` for
+// the `Index` variant and never exercised the `String` variant at
+// all. A wrapping refactor like `format!("Index({i})")` /
+// `format!("String({s})")` would silently break GStreamer URL
+// dispatch error messages — `CameraIndex::String("rtsp://...")` is
+// passed through `OpenedCamera`'s routing and surfaces in
+// `OpenDeviceError`'s `{device}` slot. Pin both variants verbatim.
+// Guards `nokhwa-core/src/types.rs:349-353`.
 #[test]
-fn camera_index_display() {
-    let idx = CameraIndex::Index(5);
-    let s = format!("{idx}");
-    assert!(s.contains('5'));
+fn camera_index_display_exact_format() {
+    assert_eq!(CameraIndex::Index(5).to_string(), "5");
+    assert_eq!(CameraIndex::Index(0).to_string(), "0");
+    assert_eq!(
+        CameraIndex::String("rtsp://cam.local/stream".to_string()).to_string(),
+        "rtsp://cam.local/stream"
+    );
+    assert_eq!(
+        CameraIndex::String("/dev/video0".to_string()).to_string(),
+        "/dev/video0"
+    );
 }
 
 #[test]
