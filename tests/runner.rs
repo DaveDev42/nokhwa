@@ -1309,3 +1309,120 @@ fn runner_event_worker_exits_when_events_receiver_dropped() {
     }
     stopper.join().unwrap().unwrap();
 }
+
+// ───── spawn_hybrid: take_events() Err is swallowed (events=None) ─────
+//
+// `src/runner.rs:368-378` discriminates three cases when constructing
+// the events channel:
+//
+//   - `Some(Ok(poll))` → spin up the event worker thread.
+//   - `Some(Err(e))`   → log + treat the same as `None` (no event
+//                        worker, no events receiver).
+//   - `None`           → backend has no `EventSource` capability.
+//
+// The middle arm is exercised whenever a hybrid backend advertises
+// `EventSource` capability but the runtime acquisition fails (e.g. the
+// inotify fd / RegisterDeviceNotificationW window couldn't be created).
+// A regression that propagated that error out of `spawn_hybrid` would
+// turn a transient OS-resource failure into "the entire camera runner
+// refuses to spawn" — frames + pictures would never start.
+
+/// Hybrid backend whose `take_events()` always returns `Err`.
+struct HybridEventErr {
+    inner: MockHybrid,
+}
+
+impl CameraDevice for HybridEventErr {
+    fn backend(&self) -> ApiBackend {
+        self.inner.backend()
+    }
+    fn info(&self) -> &CameraInfo {
+        self.inner.info()
+    }
+    fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        self.inner.controls()
+    }
+    fn set_control(
+        &mut self,
+        id: KnownCameraControl,
+        value: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        self.inner.set_control(id, value)
+    }
+}
+impl FrameSource for HybridEventErr {
+    fn negotiated_format(&self) -> CameraFormat {
+        self.inner.negotiated_format()
+    }
+    fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
+        self.inner.set_format(f)
+    }
+    fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+        self.inner.compatible_formats()
+    }
+    fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
+        self.inner.compatible_fourcc()
+    }
+    fn open(&mut self) -> Result<(), NokhwaError> {
+        self.inner.open()
+    }
+    fn is_open(&self) -> bool {
+        self.inner.is_open()
+    }
+    fn frame(&mut self) -> Result<Buffer, NokhwaError> {
+        self.inner.frame()
+    }
+    fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
+        self.inner.frame_raw()
+    }
+    fn close(&mut self) -> Result<(), NokhwaError> {
+        self.inner.close()
+    }
+}
+impl ShutterCapture for HybridEventErr {
+    fn trigger(&mut self) -> Result<(), NokhwaError> {
+        self.inner.trigger()
+    }
+    fn take_picture(&mut self, t: Duration) -> Result<Buffer, NokhwaError> {
+        self.inner.take_picture(t)
+    }
+}
+impl EventSource for HybridEventErr {
+    fn take_events(&mut self) -> Result<Box<dyn EventPoll + Send>, NokhwaError> {
+        Err(NokhwaError::UnsupportedOperationError(ApiBackend::Browser))
+    }
+}
+
+nokhwa_backend!(HybridEventErr: FrameSource, ShutterCapture, EventSource);
+
+#[test]
+fn runner_spawn_hybrid_swallows_take_events_error() {
+    let mut h = MockHybrid::new(0, vec![mock_frame(4, 4, FrameFormat::MJPEG)]);
+    for _ in 0..8 {
+        h.push_frame(mock_frame(4, 4, FrameFormat::YUYV));
+    }
+    let dev = HybridEventErr { inner: h };
+    let opened = OpenedCamera::from_device(Box::new(dev));
+
+    // spawn must NOT propagate the take_events error out — the runner
+    // should come up healthy with events=None.
+    let mut runner = CameraRunner::spawn(opened, RunnerConfig::default())
+        .expect("spawn must swallow take_events() Err and return Ok");
+
+    assert!(
+        runner.events().is_none(),
+        "events channel must be absent when backend's take_events() errored"
+    );
+    assert!(
+        runner.take_events().is_none(),
+        "take_events() must be None when backend's take_events() errored"
+    );
+
+    // Frames must still flow — the take_events failure must not have
+    // poisoned the frame worker.
+    runner
+        .frames()
+        .expect("hybrid runner must still expose frames channel")
+        .recv_timeout(Duration::from_millis(500))
+        .expect("frame must arrive after take_events Err was swallowed");
+}
