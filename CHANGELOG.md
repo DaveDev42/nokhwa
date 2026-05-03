@@ -232,6 +232,23 @@
 
 ### Testing
 
+* **Pin `set_control` `SendError` variant + message prefix in three
+  receiver-drop runner tests.** The sibling tests
+  `runner_spawn_stream_worker_exits_on_dropped_frames_receiver`,
+  `runner_spawn_hybrid_worker_exits_on_dropped_frames_receiver`, and
+  `runner_spawn_shutter_worker_exits_on_dropped_pictures_receiver`
+  (`tests/runner.rs:1773,1928,2043`) all polled `set_control(...)` in
+  a deadline loop and exited via `is_err()`. `set_control`
+  (`src/runner.rs:517-520`) maps the `mpsc::SendError` through
+  `NokhwaError::general(format!("runner thread gone: {e}"))`, but the
+  loops would have happily exited on any error variant. A regression
+  that wrapped the `SendError` in a different variant
+  (e.g. `OpenStreamError`, `StreamShutdownError`) or stripped the
+  `"runner thread gone: "` prefix would have slipped past while
+  breaking every downstream caller / log scraper. Refactored each
+  loop to capture the error, break out, then assert
+  `GeneralError { message: starts_with "runner thread gone: ",
+  backend: None }` — full variant, prefix, and absent backend tag.
 * **Pin `backend: None` on remaining `GeneralError` test patterns.**
   Four call sites destructured `GeneralError { message, .. }` with a
   wildcard for the `backend` field:

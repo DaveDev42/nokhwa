@@ -1763,24 +1763,43 @@ fn runner_spawn_stream_worker_exits_on_dropped_frames_receiver() {
     // worker dropped `cmd_rx`. Poll until that flips, with a 3-second
     // deadline. If the test hangs, the worker is leaking — exactly the
     // regression this test is here to catch.
+    //
+    // `set_control` (`src/runner.rs:517-520`) maps the `SendError` through
+    // `NokhwaError::general(format!("runner thread gone: {e}"))`. Pin
+    // both the variant and the `"runner thread gone: "` prefix so a
+    // future refactor that swapped the wrapping (e.g. to
+    // `OpenStreamError`, `StreamShutdownError`, or stripped the prefix)
+    // would fail this test instead of being absorbed by `is_err()`.
     let deadline = Instant::now() + Duration::from_secs(3);
-    while Instant::now() < deadline {
-        if runner
-            .set_control(
-                KnownCameraControl::Brightness,
-                ControlValueSetter::Integer(0),
-            )
-            .is_err()
-        {
-            return;
+    let err = loop {
+        if Instant::now() >= deadline {
+            panic!(
+                "stream worker did not exit after dropping frames receiver — \
+                 src/runner.rs:305-307 receiver-drop policy regressed \
+                 (set_control still routes to a live worker after 3s)"
+            );
         }
-        std::thread::sleep(Duration::from_millis(20));
+        match runner.set_control(
+            KnownCameraControl::Brightness,
+            ControlValueSetter::Integer(0),
+        ) {
+            Ok(()) => std::thread::sleep(Duration::from_millis(20)),
+            Err(e) => break e,
+        }
+    };
+    match err {
+        NokhwaError::GeneralError { message, backend } => {
+            assert!(
+                message.starts_with("runner thread gone: "),
+                "expected message starting with 'runner thread gone: ', got {message:?}"
+            );
+            assert!(
+                backend.is_none(),
+                "expected no backend tag, got {backend:?}"
+            );
+        }
+        other => panic!("expected GeneralError, got {other:?}"),
     }
-    panic!(
-        "stream worker did not exit after dropping frames receiver — \
-         src/runner.rs:305-307 receiver-drop policy regressed (set_control \
-         still routes to a live worker after 3s)"
-    );
 }
 
 // ──────── spawn_hybrid worker exits on dropped frames receiver ────────
@@ -1917,25 +1936,38 @@ fn runner_spawn_hybrid_worker_exits_on_dropped_frames_receiver() {
 
     // Once the worker exits, `cmd_rx` drops; subsequent `cmd.send(...)`
     // returns `SendError`, flipping `set_control` to `Err`. 3-second
-    // deadline catches a leaked hybrid worker.
+    // deadline catches a leaked hybrid worker. See the stream sibling
+    // for the rationale on pinning the `"runner thread gone: "` prefix.
     let deadline = Instant::now() + Duration::from_secs(3);
-    while Instant::now() < deadline {
-        if runner
-            .set_control(
-                KnownCameraControl::Brightness,
-                ControlValueSetter::Integer(0),
-            )
-            .is_err()
-        {
-            return;
+    let err = loop {
+        if Instant::now() >= deadline {
+            panic!(
+                "hybrid worker did not exit after dropping frames receiver — \
+                 src/runner.rs:449-451 receiver-drop policy regressed \
+                 (set_control still routes to a live worker after 3s)"
+            );
         }
-        std::thread::sleep(Duration::from_millis(20));
+        match runner.set_control(
+            KnownCameraControl::Brightness,
+            ControlValueSetter::Integer(0),
+        ) {
+            Ok(()) => std::thread::sleep(Duration::from_millis(20)),
+            Err(e) => break e,
+        }
+    };
+    match err {
+        NokhwaError::GeneralError { message, backend } => {
+            assert!(
+                message.starts_with("runner thread gone: "),
+                "expected message starting with 'runner thread gone: ', got {message:?}"
+            );
+            assert!(
+                backend.is_none(),
+                "expected no backend tag, got {backend:?}"
+            );
+        }
+        other => panic!("expected GeneralError, got {other:?}"),
     }
-    panic!(
-        "hybrid worker did not exit after dropping frames receiver — \
-         src/runner.rs:449-451 receiver-drop policy regressed (set_control \
-         still routes to a live worker after 3s)"
-    );
 }
 
 // ─────── spawn_shutter worker exits on dropped pictures receiver ──────
@@ -2032,25 +2064,38 @@ fn runner_spawn_shutter_worker_exits_on_dropped_pictures_receiver() {
 
     // Once the worker exits, `cmd_rx` drops; subsequent `cmd.send(...)`
     // returns `SendError`, flipping `set_control` to `Err`. 3-second
-    // deadline catches a leaked shutter worker.
+    // deadline catches a leaked shutter worker. See the stream sibling
+    // for the rationale on pinning the `"runner thread gone: "` prefix.
     let deadline = Instant::now() + Duration::from_secs(3);
-    while Instant::now() < deadline {
-        if runner
-            .set_control(
-                KnownCameraControl::Brightness,
-                ControlValueSetter::Integer(0),
-            )
-            .is_err()
-        {
-            return;
+    let err = loop {
+        if Instant::now() >= deadline {
+            panic!(
+                "shutter worker did not exit after dropping pictures receiver — \
+                 src/runner.rs:340-342 receiver-drop policy regressed \
+                 (set_control still routes to a live worker after 3s)"
+            );
         }
-        std::thread::sleep(Duration::from_millis(20));
+        match runner.set_control(
+            KnownCameraControl::Brightness,
+            ControlValueSetter::Integer(0),
+        ) {
+            Ok(()) => std::thread::sleep(Duration::from_millis(20)),
+            Err(e) => break e,
+        }
+    };
+    match err {
+        NokhwaError::GeneralError { message, backend } => {
+            assert!(
+                message.starts_with("runner thread gone: "),
+                "expected message starting with 'runner thread gone: ', got {message:?}"
+            );
+            assert!(
+                backend.is_none(),
+                "expected no backend tag, got {backend:?}"
+            );
+        }
+        other => panic!("expected GeneralError, got {other:?}"),
     }
-    panic!(
-        "shutter worker did not exit after dropping pictures receiver — \
-         src/runner.rs:340-342 receiver-drop policy regressed (set_control \
-         still routes to a live worker after 3s)"
-    );
 }
 
 // ────────── shutdown ordering: relay must not deadlock on close ──────
