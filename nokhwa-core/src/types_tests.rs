@@ -702,6 +702,88 @@ fn fulfill_decoder_filter_applies_across_variants() {
     assert_eq!(result.resolution(), Resolution::new(640, 480));
 }
 
+// --- RequestedFormat::new::<F>() (typed constructor) coverage ---
+//
+// `RequestedFormat::new::<F: CaptureFormat>(...)` derives the FrameFormat
+// constraint from `F::FRAME_FORMAT` via constant promotion. Every other
+// `RequestedFormat` test goes through `with_formats`; nothing pinned the
+// typed-constructor path. A regression that wired the wrong constant or
+// broke the trait bound on `wanted_decoder` would slip past the rest of
+// the suite.
+
+#[test]
+fn requested_format_new_constrains_to_marker_format_mjpeg() {
+    use crate::format_types::Mjpeg;
+    let req = RequestedFormat::new::<Mjpeg>(RequestedFormatType::AbsoluteHighestResolution);
+    assert_eq!(
+        req.requested_format_type(),
+        RequestedFormatType::AbsoluteHighestResolution
+    );
+    let available = vec![
+        CameraFormat::new_from(1920, 1080, FrameFormat::NV12, 30),
+        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30),
+    ];
+    let result = req
+        .fulfill(&available)
+        .expect("MJPEG marker must filter to the MJPEG entry");
+    assert_eq!(
+        result.format(),
+        FrameFormat::MJPEG,
+        "RequestedFormat::new::<Mjpeg> must reject non-MJPEG candidates"
+    );
+    assert_eq!(result.resolution(), Resolution::new(640, 480));
+}
+
+#[test]
+fn requested_format_new_returns_none_when_no_compatible_format() {
+    use crate::format_types::RawRgb;
+    let req = RequestedFormat::new::<RawRgb>(RequestedFormatType::AbsoluteHighestResolution);
+    let available = vec![CameraFormat::new_from(1920, 1080, FrameFormat::MJPEG, 30)];
+    assert!(
+        req.fulfill(&available).is_none(),
+        "RequestedFormat::new::<RawRgb> must not accept an MJPEG-only device"
+    );
+}
+
+#[test]
+fn requested_format_new_yuyv_marker_filters_to_yuyv() {
+    use crate::format_types::Yuyv;
+    let req = RequestedFormat::new::<Yuyv>(RequestedFormatType::AbsoluteHighestFrameRate);
+    let available = vec![
+        CameraFormat::new_from(1920, 1080, FrameFormat::MJPEG, 60),
+        CameraFormat::new_from(1280, 720, FrameFormat::YUYV, 30),
+        CameraFormat::new_from(640, 480, FrameFormat::YUYV, 60),
+    ];
+    let result = req.fulfill(&available).expect("YUYV marker must match");
+    assert_eq!(result.format(), FrameFormat::YUYV);
+    assert_eq!(
+        result.frame_rate(),
+        60,
+        "AbsoluteHighestFrameRate over the YUYV-filtered subset is 60 fps"
+    );
+    assert_eq!(result.resolution(), Resolution::new(640, 480));
+}
+
+#[test]
+fn requested_format_type_getter_round_trips_stored_variant() {
+    let req = RequestedFormat::with_formats(
+        RequestedFormatType::AbsoluteHighestFrameRate,
+        &[FrameFormat::YUYV],
+    );
+    assert_eq!(
+        req.requested_format_type(),
+        RequestedFormatType::AbsoluteHighestFrameRate
+    );
+
+    let exact = CameraFormat::new_from(1280, 720, FrameFormat::MJPEG, 30);
+    let req2 =
+        RequestedFormat::with_formats(RequestedFormatType::Exact(exact), &[FrameFormat::MJPEG]);
+    assert_eq!(
+        req2.requested_format_type(),
+        RequestedFormatType::Exact(exact)
+    );
+}
+
 // --- ControlValueDescription::verify_setter() coverage ---
 
 #[test]
