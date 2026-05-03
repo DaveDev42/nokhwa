@@ -365,6 +365,17 @@ fn overflow_derives_copy_eq() {
     assert_ne!(Overflow::DropNewest, Overflow::Block);
 }
 
+// `Overflow` derives `Debug`, so renaming a variant in `src/runner.rs:46-63`
+// would silently change the diagnostic string emitted by panic messages,
+// `dbg!()`, and any user-facing log line. Pin the literal variant names
+// here so a rename forces a deliberate, reviewer-visible test update.
+#[test]
+fn overflow_debug_variant_names() {
+    assert_eq!(format!("{:?}", Overflow::DropNewest), "DropNewest");
+    assert_eq!(format!("{:?}", Overflow::DropOldest), "DropOldest");
+    assert_eq!(format!("{:?}", Overflow::Block), "Block");
+}
+
 #[test]
 fn runner_config_default_pins_field_values() {
     let cfg = RunnerConfig::default();
