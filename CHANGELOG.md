@@ -1459,6 +1459,17 @@
 
 ### Infrastructure
 
+* **Run `nokhwa-bindings-windows-msmf` unit tests on a Windows
+  host.** The previous PR ran the crate's tests on `ubuntu-latest`
+  to exercise the off-Windows `stub` module, but the 9 GUID/parser
+  tests in `wmf::tests` are gated on `#[cfg(all(windows, not(feature
+  = "docs-only")))]` and stayed unexecuted in CI even after that
+  step landed. Added a dedicated `test-msmf-windows` job in
+  `Test Core & Features` that runs `cargo test
+  -p nokhwa-bindings-windows-msmf` on `windows-latest`. No device
+  needed — the tests are pure GUID arithmetic and `IMFMediaType`
+  parser branches that don't touch the device enumeration path.
+  Closes the gap left by the prior Linux-only step.
 * **Run `nokhwa-bindings-windows-msmf` unit tests in CI.** No CI
   job ever invoked `cargo test -p nokhwa-bindings-windows-msmf`,
   so the off-Windows `stub` module had no test coverage and the
