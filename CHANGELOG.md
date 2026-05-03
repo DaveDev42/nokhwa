@@ -232,6 +232,14 @@
 
 ### Testing
 
+* **Pin `Overflow` `Debug` variant names.** `Overflow` derives
+  `Debug`, so its `Debug` output (`"DropNewest"`, `"DropOldest"`,
+  `"Block"`) ends up in panic messages, `dbg!()` traces, and any
+  user-visible log line that formats a `RunnerConfig`. A rename
+  inside `src/runner.rs:46-63` would silently change those strings
+  without any test failure today. Pinned the literal variant names
+  with `overflow_debug_variant_names` in `tests/runner.rs` so a
+  rename forces a deliberate, reviewer-visible test update.
 * **Pin `FrameFormat::from_fourcc` / `to_fourcc` named-literal
   table.** The pre-existing `frame_format_fourcc_roundtrip` test only
   asserts that `from_fourcc(fmt.to_fourcc()) == Some(fmt)` for every
