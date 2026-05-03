@@ -181,6 +181,30 @@ pub mod wmf {
         frame_rates: Vec<u32>,
     }
 
+    /// Decode an MSMF frame-rate `UINT64` attribute
+    /// (`MF_MT_FRAME_RATE`, `..._RANGE_MIN`, `..._RANGE_MAX`) into a
+    /// whole-frame integer fps, or `None` if the value cannot be
+    /// expressed that way.
+    ///
+    /// Layout: top 32 bits = numerator, bottom 32 bits = denominator.
+    /// We currently only consume rates whose denominator is exactly 1
+    /// — anything else (e.g. `30000 / 1001` for NTSC's 29.97 fps) is
+    /// dropped because the [`CameraFormat`] surface stores fps as a
+    /// `u32`, and silently rounding a fractional rate would produce
+    /// a value the device cannot honour. A nonzero whole-fps rate is
+    /// returned as `Some(numerator)`.
+    fn parse_frame_rate_fraction(fraction_u64: u64) -> Option<u32> {
+        let numerator = (fraction_u64 >> 32) as u32;
+        let denominator = fraction_u64 as u32;
+        if denominator != 1 {
+            return None;
+        }
+        if numerator == 0 {
+            return None;
+        }
+        Some(numerator)
+    }
+
     fn parse_native_media_types(
         source_reader: &IMFSourceReader,
     ) -> Result<Vec<ParsedMediaType>, NokhwaError> {
@@ -228,13 +252,8 @@ pub mod wmf {
                     &MF_MT_FRAME_RATE_RANGE_MIN,
                 ] {
                     if let Ok(fraction_u64) = unsafe { media_type.GetUINT64(attr) } {
-                        let mut numerator = (fraction_u64 >> 32) as u32;
-                        let denominator = fraction_u64 as u32;
-                        if denominator != 1 {
-                            numerator = 0;
-                        }
-                        if numerator != 0 {
-                            rates.push(numerator);
+                        if let Some(rate) = parse_frame_rate_fraction(fraction_u64) {
+                            rates.push(rate);
                         }
                     }
                 }
@@ -1357,6 +1376,58 @@ pub mod wmf {
             // `control` can report `UnsupportedOperationError`.
             let other = KnownCameraControl::Other(0xDEAD_BEEF);
             assert_eq!(kcc_to_i32(other), None);
+        }
+
+        // `parse_frame_rate_fraction` decodes MSMF's `UINT64`
+        // numerator/denominator layout. The contract: only whole-fps
+        // rates with denominator == 1 survive; fractional rates
+        // (denominator != 1, e.g. NTSC's 30000/1001) are dropped
+        // because `CameraFormat` stores fps as `u32` and rounding
+        // produces a value the device cannot honour. Pin all four
+        // branches so a future "should we accept N/M for some N/M?"
+        // refactor is caught here rather than at runtime.
+
+        /// Numerator in the top 32 bits, denominator == 1 in the
+        /// bottom 32 bits, both nonzero → `Some(numerator)`.
+        #[test]
+        fn parse_frame_rate_fraction_30_over_1_returns_30() {
+            let fraction = (30_u64 << 32) | 1_u64;
+            assert_eq!(parse_frame_rate_fraction(fraction), Some(30));
+        }
+
+        /// Denominator != 1 → `None` regardless of numerator. NTSC's
+        /// 30000/1001 (29.97 fps) is the canonical real-world case.
+        #[test]
+        fn parse_frame_rate_fraction_30000_over_1001_returns_none() {
+            let fraction = (30_000_u64 << 32) | 0x3E9_u64; // 1001
+            assert_eq!(parse_frame_rate_fraction(fraction), None);
+        }
+
+        /// Numerator == 0 (denominator == 1) → `None`. A legitimate
+        /// "no rate advertised" sentinel from the device.
+        #[test]
+        fn parse_frame_rate_fraction_zero_numerator_returns_none() {
+            let fraction: u64 = 1;
+            assert_eq!(parse_frame_rate_fraction(fraction), None);
+        }
+
+        /// Denominator == 0 → `None` (no division-by-zero risk: we
+        /// short-circuit on `denominator != 1` first, but zero is
+        /// still a `denominator != 1` value).
+        #[test]
+        fn parse_frame_rate_fraction_zero_denominator_returns_none() {
+            let fraction: u64 = 30_u64 << 32;
+            assert_eq!(parse_frame_rate_fraction(fraction), None);
+        }
+
+        /// Numerator at the upper edge of `u32` (`0xFFFF_FFFF`) with
+        /// denominator == 1 round-trips intact. Pins that the
+        /// `(u64 >> 32) as u32` cast in the helper does not lose the
+        /// high bit.
+        #[test]
+        fn parse_frame_rate_fraction_max_numerator_round_trips() {
+            let fraction = (u64::from(u32::MAX) << 32) | 1_u64;
+            assert_eq!(parse_frame_rate_fraction(fraction), Some(u32::MAX));
         }
     }
 }
