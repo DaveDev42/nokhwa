@@ -142,13 +142,24 @@ mod tests {
 
     #[test]
     fn yuyv_rejects_odd_width() {
+        // The `error` field carries the offending width so callers can
+        // log / surface what got rejected. The previous test
+        // destructured `..` and ignored the message; a regression that
+        // dropped the actual width from the diagnostic
+        // (e.g. "YUYV requires even width") would still satisfy the
+        // variant + src + destination check while making the error
+        // useless for triage. Pin the exact format string including
+        // the bad value.
         let err = raw_texture_layout(FrameFormat::YUYV, Resolution::new(641, 480)).unwrap_err();
         match err {
             NokhwaError::ProcessFrameError {
-                src, destination, ..
+                src,
+                destination,
+                error,
             } => {
                 assert_eq!(src, FrameFormat::YUYV);
                 assert_eq!(destination, "RawTextureData");
+                assert_eq!(error, "YUYV requires even width, got 641");
             }
             other => panic!("expected ProcessFrameError, got {other:?}"),
         }
@@ -166,9 +177,30 @@ mod tests {
 
     #[test]
     fn nv12_rejects_odd_dimensions() {
-        assert!(raw_texture_layout(FrameFormat::NV12, Resolution::new(641, 480)).is_err());
-        assert!(raw_texture_layout(FrameFormat::NV12, Resolution::new(640, 481)).is_err());
-        assert!(raw_texture_layout(FrameFormat::NV12, Resolution::new(641, 481)).is_err());
+        // Previously `is_err()`-only across three resolutions; a
+        // regression that returned a different error variant
+        // (e.g. `NokhwaError::general` instead of
+        // `ProcessFrameError`) — making the NV12 path inconsistent
+        // with the YUYV path that callers may switch on by variant —
+        // would have passed. Pin the variant, src, destination, and
+        // exact error string for every odd-dim case so each width /
+        // height combination is verified to surface the offending
+        // dimensions verbatim in the message.
+        for (w, h) in [(641u32, 480u32), (640, 481), (641, 481)] {
+            let err = raw_texture_layout(FrameFormat::NV12, Resolution::new(w, h)).unwrap_err();
+            match err {
+                NokhwaError::ProcessFrameError {
+                    src,
+                    destination,
+                    error,
+                } => {
+                    assert_eq!(src, FrameFormat::NV12, "{w}x{h}");
+                    assert_eq!(destination, "RawTextureData", "{w}x{h}");
+                    assert_eq!(error, format!("NV12 requires even dimensions, got {w}x{h}"));
+                }
+                other => panic!("expected ProcessFrameError for {w}x{h}, got {other:?}"),
+            }
+        }
     }
 
     #[test]
@@ -200,11 +232,24 @@ mod tests {
 
     #[test]
     fn mjpeg_is_rejected_with_general_error() {
+        // Hardened from two contains-only checks. The diagnostic
+        // points users from `frame_texture_raw()` to `frame_texture()`
+        // — a fixed user-facing message. A regression that subtly
+        // changed the wording (e.g. dropping the parens after
+        // `frame_texture` or changing "cannot be used" to "is not
+        // supported") would slip past `.contains("MJPEG")` /
+        // `.contains("frame_texture()")` while breaking any
+        // documentation or downstream test that quotes the exact
+        // string. Pin the full message verbatim, matching the source
+        // at `wgpu.rs:121`.
         let err = raw_texture_layout(FrameFormat::MJPEG, Resolution::new(640, 480)).unwrap_err();
         match err {
             NokhwaError::GeneralError { message, .. } => {
-                assert!(message.contains("MJPEG"));
-                assert!(message.contains("frame_texture()"));
+                assert_eq!(
+                    message,
+                    "frame_texture_raw() cannot be used with MJPEG sources; \
+                     use frame_texture() instead"
+                );
             }
             other => panic!("expected GeneralError, got {other:?}"),
         }

@@ -232,6 +232,29 @@
 
 ### Testing
 
+* **Tighten `raw_texture_layout` error-path pins.** Three narrow-
+  contract gaps in `nokhwa-core/src/wgpu.rs::tests`:
+  (1) `yuyv_rejects_odd_width` destructured `..` and discarded the
+  `error` field of `NokhwaError::ProcessFrameError` — a regression
+  that dropped the offending width from the diagnostic ("YUYV
+  requires even width" with no value) would still satisfy the
+  variant + src + destination check while making the error useless
+  for triage.
+  (2) `nv12_rejects_odd_dimensions` was `is_err()`-only across three
+  resolutions — a regression that returned `NokhwaError::general`
+  for NV12 odd-dim cases (making the NV12 path inconsistent with
+  the YUYV path that callers may switch on by variant) would have
+  passed.
+  (3) `mjpeg_is_rejected_with_general_error` used two contains-only
+  checks — subtle wording tweaks ("cannot be used" → "is not
+  supported", dropping the `()` after `frame_texture`) would have
+  passed while breaking any docs or downstream tests that quote
+  the exact string. Pinned the exact error string in each case:
+  `"YUYV requires even width, got 641"` for (1),
+  `"NV12 requires even dimensions, got {w}x{h}"` for each odd-dim
+  case in (2), and the full
+  `"frame_texture_raw() cannot be used with MJPEG sources; use
+  frame_texture() instead"` message for (3).
 * **Pin `HotplugEvent` + `CameraEvent` derived-`Debug` exact
   format.** `hotplug_event_debug_includes_variant_and_camera_info`
   and `camera_event_debug_includes_variant_name`
