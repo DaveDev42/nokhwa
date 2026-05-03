@@ -232,6 +232,28 @@
 
 ### Testing
 
+* **Pin `RequestedFormat::fulfill` decoder-filter exclusion for
+  `HighestResolution` / `HighestFrameRate`.** Both narrow variants at
+  `nokhwa-core/src/types.rs:204-219` and `220-235` filter candidates
+  by *both* dimension match and `wanted_decoder.contains(&fmt.format())`
+  before `max_by_key`, then rely on `?` to short-circuit `None` if the
+  filter yields nothing. Existing `fulfill_decoder_filter_applies_across_variants`
+  covered only `AbsoluteHighestResolution`; existing
+  `fulfill_highest_resolution_no_match` and
+  `fulfill_highest_framerate_returns_none_when_no_candidate_at_fps`
+  covered the dimension-mismatch case but not the case where the
+  requested resolution / fps *is* present and only the decoder
+  filter excludes it. A regression that dropped the decoder filter
+  from one narrow variant (e.g. while refactoring the two arms to
+  share helper code) would surface there: the wrong-decoder candidate
+  would be silently selected and downstream `Buffer::typed::<F>()`
+  would fail with a confusing format-mismatch error far from the
+  root cause. New tests
+  `fulfill_highest_resolution_returns_none_when_only_match_has_wrong_decoder`
+  and `fulfill_highest_framerate_returns_none_when_only_match_has_wrong_decoder`
+  pin both arms with a single-candidate-at-target-dimension list whose
+  format is excluded by `wanted_decoder`. Pure logic, microsecond
+  runtime.
 * **Pin `CameraRunner::spawn_{stream,hybrid}` open()-error
   propagation.** `src/runner.rs:288` and `src/runner.rs:367` both
   start with `cam.open()?` before doing any thread / channel setup.
