@@ -226,4 +226,76 @@ mod tests {
         bgr_to_rgb_simd(&bgr, &mut rgb);
         assert!(rgb.is_empty());
     }
+
+    /// Pin SIMD/scalar parity directly: every other module in
+    /// `nokhwa-core::simd` (`rgb_to_rgba`, `rgb_to_luma`,
+    /// `yuyv_to_rgb`, `yuyv_extract_luma`, `nv12_to_rgb`) has a
+    /// `_matches_scalar` test that pseudo-randomly fills the input
+    /// and asserts SIMD output == scalar output. `bgr_to_rgb` had
+    /// only swap-correctness checks over arithmetically-progressive
+    /// inputs, which can mask shuffle off-by-one bugs that happen
+    /// to be self-consistent under that pattern. Use 100 pixels
+    /// (300 bytes) which exercises the AVX2 30-byte main loop, the
+    /// SSSE3 15-byte main loop, and the NEON 24-byte main loop,
+    /// with a non-trivial scalar tail in each case.
+    #[test]
+    fn bgr_to_rgb_matches_scalar() {
+        let bgr: Vec<u8> = (0..300).map(|i| (i * 7 % 256) as u8).collect();
+        let mut simd_out = vec![0u8; bgr.len()];
+        let mut scalar_out = vec![0u8; bgr.len()];
+
+        bgr_to_rgb_simd(&bgr, &mut simd_out);
+        bgr_to_rgb_scalar(&bgr, &mut scalar_out);
+
+        assert_eq!(simd_out, scalar_out, "BGR→RGB: SIMD and scalar must match");
+    }
+
+    /// Boundary-aligned input: exactly one AVX2 iteration (30 bytes =
+    /// 10 pixels) and exactly one NEON iteration (24 bytes = 8 pixels)
+    /// with no tail. A regression where the SIMD main loop overruns or
+    /// underruns by one pixel (e.g. `<= simd_end` vs `< simd_end`)
+    /// would still pass the existing 100/103-pixel tests because the
+    /// scalar tail picks up the slack — this test isolates the main
+    /// loop on its own.
+    #[test]
+    fn bgr_to_rgb_simd_loop_boundary_no_tail() {
+        // 24 bytes = 8 pixels, exactly one NEON iter. AVX2's main-loop
+        // condition is `idx < len - 30`, so 24 bytes goes entirely
+        // through the scalar tail on x86_64 — the scalar path still
+        // has to produce the right answer.
+        let bgr_24: Vec<u8> = (0..24).map(|i| (i * 11 % 256) as u8).collect();
+        let mut out_24 = vec![0u8; 24];
+        bgr_to_rgb_simd(&bgr_24, &mut out_24);
+        for i in 0..8 {
+            let si = i * 3;
+            assert_eq!(out_24[si], bgr_24[si + 2], "R mismatch at px {i}");
+            assert_eq!(out_24[si + 1], bgr_24[si + 1], "G mismatch at px {i}");
+            assert_eq!(out_24[si + 2], bgr_24[si], "B mismatch at px {i}");
+        }
+
+        // 60 bytes = 20 pixels, exactly two AVX2 iterations (2 * 30)
+        // and exactly two-and-a-half NEON iterations (60 / 24 = 2.5).
+        let bgr_60: Vec<u8> = (0..60).map(|i| (i * 13 % 256) as u8).collect();
+        let mut out_60 = vec![0u8; 60];
+        bgr_to_rgb_simd(&bgr_60, &mut out_60);
+        for i in 0..20 {
+            let si = i * 3;
+            assert_eq!(out_60[si], bgr_60[si + 2], "R mismatch at px {i}");
+            assert_eq!(out_60[si + 1], bgr_60[si + 1], "G mismatch at px {i}");
+            assert_eq!(out_60[si + 2], bgr_60[si], "B mismatch at px {i}");
+        }
+    }
+
+    /// Single-pixel input (3 bytes). Sub-SIMD-block size on every
+    /// architecture, so the entire conversion goes through the scalar
+    /// tail. Pins that the tail-only path is correct in isolation —
+    /// every existing test has at least 3 pixels and runs the loop
+    /// arithmetic at least once.
+    #[test]
+    fn bgr_to_rgb_single_pixel_tail_only() {
+        let bgr = vec![10u8, 20, 30];
+        let mut rgb = vec![0u8; 3];
+        bgr_to_rgb_simd(&bgr, &mut rgb);
+        assert_eq!(rgb, vec![30, 20, 10]);
+    }
 }
