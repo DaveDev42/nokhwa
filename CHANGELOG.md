@@ -232,6 +232,22 @@
 
 ### Testing
 
+* **Pin `FrameFormat::Display` exact strings for all six variants.**
+  The pre-existing `frame_format_display_roundtrip` is symmetry-only
+  (parses Display back via `FromStr` and checks equality), so it
+  passes even if every variant emitted the same string or two variants
+  swapped their Display strings (as long as `FromStr` swapped to
+  match). Only `RAWBGR` had a standalone exact pin; `MJPEG` + `YUYV`
+  are exact-pinned indirectly via `CameraFormat::Display`'s embedded
+  `"{format} Format"` rendering, but `GRAY`, `RAWRGB`, and `NV12` were
+  not exact-pinned anywhere. The Display strings surface in
+  `NokhwaError::ProcessFrameError` (`"... frame {src} to {destination} ..."`)
+  and `ReadFrameError` (`"... (format {f}) ..."`) — both user-visible.
+  A refactor that renamed `RAWRGB` to `"RGB"` or `"RAW_RGB"` would
+  survive the roundtrip but break embedded renderings. Added
+  `frame_format_display_exact_strings` pinning every variant verbatim
+  (`"MJPEG"`, `"YUYV"`, `"GRAY"`, `"RAWRGB"`, `"RAWBGR"`, `"NV12"`).
+  Guards `nokhwa-core/src/types.rs:394-416`.
 * **Tighten `Resolution::Display` to an exact-format pin.** The
   pre-existing `resolution_display` test asserted only
   `s.contains("640")` and `s.contains("480")`, so a refactor that
