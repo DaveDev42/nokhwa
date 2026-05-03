@@ -232,6 +232,23 @@
 
 ### Testing
 
+* **Pin `CameraRunner::shutdown` ordering invariant for the
+  `Overflow::DropOldest` relay.** `src/runner.rs:206-220` documents the
+  ordering: `shutdown()` must drop the user-facing receivers *before*
+  joining the relay handle. The relay's producer-disconnect drain loop
+  blocks on `user_tx.send(front)` for each buffered item, so if the
+  receiver is still alive at join time and nothing is reading, the relay
+  deadlocks and `runner.stop()` hangs forever. The reverse-ordering
+  regression (join-then-drop, or never drop) would not be caught by
+  any existing test — every other shutdown test either uses
+  `Overflow::Block` or has a live drainer thread. New
+  `runner_shutdown_drops_receivers_before_joining_drop_oldest_relay`
+  spawns a runner with `frames_capacity = 1` + `Overflow::DropOldest`,
+  feeds the buffer with an `EndlessFrameSource` for 100ms, then calls
+  `runner.stop()` on a side thread under a 3-second deadline.
+  `stop()` returning within the deadline proves the relay drained
+  cleanly because the receivers were dropped first; a hang would
+  indicate the ordering invariant regressed.
 * **Pin `CameraRunner::spawn_shutter` worker exit on dropped pictures
   receiver.** Third member of the receiver-drop family alongside the
   stream and hybrid frames-drop pins. `src/runner.rs:340-342` wraps
