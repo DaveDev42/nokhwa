@@ -187,6 +187,27 @@
 
 ### Testing
 
+* **Pin `HotplugEvent` and `CameraEvent` derive contracts in
+  `nokhwa-core/src/traits_tests.rs`.** `HotplugEvent` derives
+  `Clone, PartialEq, Eq, Hash, Debug`; the trait docs explicitly
+  direct callers to dedup events via `HashSet` / hashmap keys and
+  to match Connected / Disconnected pairs by
+  `CameraInfo::index()` (since the human-readable name / desc /
+  misc fields are documented as best-effort and may drift between
+  arrival and removal). `CameraEvent` derives `Clone, Debug`. Both
+  enums had zero direct unit-test coverage. A regression that
+  drops or weakens any of the `HotplugEvent` derives — e.g.
+  removing `Hash` because no in-tree consumer obviously needs it
+  — would silently break dedup-by-event for every downstream
+  hotplug consumer. Eight new tests pin: structural equality
+  compares full `CameraInfo`; `Connected` and `Disconnected` with
+  the same `CameraInfo` are distinct; `Clone` round-trip preserves
+  variant + payload; `HashSet` dedup collapses duplicate
+  `Connected`s but keeps `Connected` vs `Disconnected` apart;
+  documented index-match-with-name-drift contract holds; `Debug`
+  output includes variant + payload for `HotplugEvent`,
+  `CameraEvent::Disconnected`, `CameraEvent::WillShutDown`, and
+  `CameraEvent::CaptureError { code, message }`.
 * **Cover `MockHybrid` dual-capability dispatch in
   `nokhwa-core/src/testing.rs`.** `MockHybrid` is a public testing
   helper (`pub` under the `testing` feature) that wraps a
