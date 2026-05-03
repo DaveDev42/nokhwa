@@ -187,6 +187,23 @@
 
 ### Testing
 
+* **Pin SIMD/scalar parity for `bgr_to_rgb` and add boundary-aligned
+  loop coverage.** Every other module in `nokhwa-core::simd`
+  (`rgb_to_rgba`, `rgb_to_luma`, `yuyv_to_rgb`, `yuyv_extract_luma`,
+  `nv12_to_rgb`) had a `_matches_scalar` test that fills the input
+  pseudo-randomly and asserts the SIMD path produces the same bytes
+  as the scalar fallback. `bgr_to_rgb` had only swap-correctness
+  checks over arithmetically-progressive inputs, which can mask
+  shuffle off-by-one bugs that happen to be self-consistent under
+  that pattern. Three new tests close the gap: (a) full SIMD/scalar
+  parity over 100 pixels (exercises AVX2's 30-byte main loop, SSSE3's
+  15-byte main loop, and NEON's 24-byte main loop with a non-trivial
+  scalar tail in each case); (b) exact-iteration sizes (24 and 60
+  bytes) to isolate the SIMD main loop from any tail compensation
+  that could hide a one-pixel overrun; (c) a single-pixel input that
+  goes entirely through the scalar tail. A future SIMD refactor that
+  miscomputes the shuffle table or the loop bound now fails fast.
+
 * **Pin `nokhwa-tokio::spawn_forwarder` edge-case behaviour.** The
   internal helper bridges a `std::sync::mpsc::Receiver<T>` to a
   `tokio::sync::mpsc::Receiver<T>` for each of frames / pictures /
