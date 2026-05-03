@@ -236,7 +236,7 @@ enum Command {
 
 /// Background-thread capture helper.
 ///
-/// `CameraRunner` owns an [`OpenedCamera`](crate::OpenedCamera) on a worker
+/// `CameraRunner` owns an [`OpenedCamera`] on a worker
 /// thread and delivers frames / pictures / events through
 /// [`std::sync::mpsc`] channels.
 ///

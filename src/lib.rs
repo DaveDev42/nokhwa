@@ -65,7 +65,7 @@
 //! [`std::sync::mpsc::Receiver`]s whose `recv()` blocks. That's fine from a
 //! non-async program, and it works from any async runtime if you wrap the
 //! blocking calls in the runtime's blocking-task helper (e.g.
-//! [`tokio::task::spawn_blocking`] or `async_std::task::spawn_blocking`).
+//! `tokio::task::spawn_blocking` or `async_std::task::spawn_blocking`).
 //!
 //! For tokio users, the companion workspace crate `nokhwa-tokio` ships
 //! `TokioCameraRunner`, an async wrapper whose receivers are
