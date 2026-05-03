@@ -187,6 +187,25 @@
 
 ### Testing
 
+* **Pin `RequestedFormat::new::<F: CaptureFormat>(...)` typed
+  constructor in `nokhwa-core/src/types_tests.rs`.** Every other
+  `RequestedFormat` test in the suite went through `with_formats`,
+  which takes a caller-provided `&[FrameFormat]`. The typed
+  constructor — the surface shown in every doc-example —
+  derives the `FrameFormat` constraint from `F::FRAME_FORMAT` via
+  constant promotion to a `&'static [FrameFormat; 1]` and was
+  unpinned. A regression that wired the wrong constant or broke
+  the trait-bound lookup would silently mis-filter compatible
+  formats: a `RequestedFormat::new::<Mjpeg>(...)` call would
+  accept an NV12-only device. New tests cover (1)
+  `Mjpeg`-marker filters out NV12 and selects the MJPEG entry,
+  (2) `RawRgb`-marker against an MJPEG-only device returns
+  `None` (no compatible format), (3) `Yuyv`-marker selects the
+  highest-frame-rate YUYV entry under
+  `AbsoluteHighestFrameRate`, and (4) `requested_format_type()`
+  getter round-trips both `AbsoluteHighestFrameRate` and
+  `Exact(CameraFormat)` variants — the accessor was previously
+  uncalled in the test suite.
 * **Pin `RequestedFormatType` Display rendering for the four
   remaining variants in `nokhwa-core/src/types_tests.rs`.** The
   existing `requested_format_type_display_matches_debug` covers
