@@ -239,6 +239,41 @@ fn enumerate_controls_and_formats() {
     }
 }
 
+/// Each `KnownCameraControl` ID must appear at most once in the
+/// `controls()` Vec — duplicates would silently break any caller
+/// that does `controls.iter().find(|c| c.control() == id)` (the
+/// pattern `control_set_get_round_trip` uses internally and that
+/// downstream UI picker code mirrors). MSMF iterates over
+/// `all_known_camera_controls()` so dedupe is structural there, but
+/// V4L2 walks driver-reported CIDs and translates them via
+/// `id_to_known_camera_control()`; if the V4L2 driver reports two
+/// CIDs that both map to the same `KnownCameraControl` (e.g. legacy
+/// `V4L2_CID_BRIGHTNESS` plus a newer extended-control alias) the
+/// translator would emit two `CameraControl { control: Brightness, .. }`
+/// entries and `find` would return the first one — which is not
+/// necessarily the active one. AVF builds the list from
+/// `device.get_controls()` which assembles per-feature; a refactor
+/// that double-counted, e.g., focus + auto-focus under the same
+/// `KnownCameraControl::Focus` would slip in invisibly.
+#[test]
+fn controls_have_unique_known_ids() {
+    use nokhwa::utils::KnownCameraControl;
+
+    let controls = match open_first() {
+        OpenedCamera::Stream(cam) => cam.controls().expect("StreamCamera::controls"),
+        OpenedCamera::Hybrid(cam) => cam.controls().expect("HybridCamera::controls"),
+        OpenedCamera::Shutter(cam) => cam.controls().expect("ShutterCamera::controls"),
+    };
+    let mut seen: std::collections::HashSet<KnownCameraControl> = std::collections::HashSet::new();
+    for c in &controls {
+        assert!(
+            seen.insert(c.control()),
+            "controls() returned duplicate KnownCameraControl {:?}; full list: {controls:?}",
+            c.control()
+        );
+    }
+}
+
 #[test]
 fn control_set_get_round_trip() {
     macro_rules! round_trip {

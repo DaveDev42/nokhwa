@@ -289,6 +289,20 @@
 
 ### Testing
 
+* **Pin `controls()` returns no duplicate `KnownCameraControl`
+  IDs in `tests/device_tests.rs`.** New `controls_have_unique_known_ids`
+  guards against two backend-specific failure modes that today's
+  tests would not catch: V4L2 walks driver-reported CIDs and
+  translates them via `id_to_known_camera_control()`, so two CIDs
+  that map to the same enum variant (e.g. legacy `V4L2_CID_BRIGHTNESS`
+  + a newer extended-control alias) would surface as two
+  `CameraControl { control: Brightness, .. }` entries; AVF builds
+  the list per-feature and a refactor that double-counted (e.g.
+  focus + auto-focus under `KnownCameraControl::Focus`) would slip
+  in. Either failure silently breaks `controls.iter().find(|c| c.control() == id)`
+  (the pattern that `control_set_get_round_trip` itself uses) by
+  returning the wrong entry. MSMF dedupes structurally via
+  `all_known_camera_controls()`. Pinned via a `HashSet` insert loop.
 * **Pin `query()` returns `CameraInfo` entries with unique
   `CameraIndex` values in `tests/device_tests.rs`.** The new
   `query_indices_are_unique` test guards against backend
