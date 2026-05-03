@@ -30,7 +30,14 @@ use std::borrow::Cow;
 ///
 /// Note: This requires Windows 7 or newer to work.
 /// # Quirks
-/// - This does build on non-windows platforms, however when you do the backend will be empty and will return an error for any given operation.
+/// - Off Windows the type still resolves so cross-platform code and
+///   `cargo doc --features docs-only,docs-nolink` builds compile, but
+///   it comes from a separate stub module (see the off-Windows
+///   `mod stub` block in this crate's `lib.rs`): `new()` returns
+///   [`NokhwaError::NotImplementedError`] and infallible methods
+///   `unreachable!()` panic — they cannot be reached in practice
+///   because no `MediaFoundationCaptureDevice` value can be constructed
+///   off Windows.
 /// - Please check [`nokhwa-bindings-windows-msmf`](https://github.com/DaveDev42/nokhwa/tree/main/nokhwa-bindings-windows-msmf) source code to see the internal raw interface.
 /// - The symbolic link for the device is listed in the `misc` attribute of the [`CameraInfo`].
 /// - The names may contain invalid characters since they were converted from UTF16.
