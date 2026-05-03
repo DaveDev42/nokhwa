@@ -187,6 +187,27 @@
 
 ### Testing
 
+* **Pin documented `# Panics` contracts on
+  `OpenedCamera` / `StreamCamera` / `ShutterCamera` /
+  `HybridCamera::from_device`.** Each wrapper's `from_device` is
+  documented to panic on a capability mismatch — `OpenedCamera`
+  on `(false, false)` (neither `CAP_FRAME` nor `CAP_SHUTTER`),
+  `StreamCamera` without `CAP_FRAME`, `ShutterCamera` without
+  `CAP_SHUTTER`, `HybridCamera` without both — but no
+  `#[should_panic]` test pinned the message strings, so a future
+  refactor that swallowed the assertion (e.g. fell through to the
+  `unreachable!()` placeholder inside `nokhwa_backend!`'s no-cap
+  arm and produced a less-actionable panic) could regress the
+  documented diagnostic without breaking any test. Five new
+  integration tests in `tests/session.rs` pin each panic with its
+  exact `#[should_panic(expected = …)]` substring. The zero-cap
+  case uses a hand-rolled `NoCaps` `AnyDevice` impl that returns
+  `0` from `capabilities()` (since the `nokhwa_backend!` macro
+  requires at least one capability and cannot generate a zero-cap
+  shim); the wrong-cap cases reuse the existing `FrameOnly` /
+  `ShutterOnly` newtype fixtures and rely on the assertion firing
+  before the `unreachable!()` downcast can be reached.
+
 * **Pin `MockEventfulFrameSource` `FrameSource` passthrough.**
   `MockEventfulFrameSource` wraps a `MockFrameSource` and adds an
   `EventSource` impl. The `EventSource::take_events` half was
