@@ -144,6 +144,14 @@
 
 ### Cleanup
 
+* **Bump `examples/threaded-capture` to Rust edition 2021.** It was
+  the only example still pinned to `edition = "2018"`; every other
+  example (`captesting`, `capture`, `decoder_test`, `live_view`,
+  `setting`) is on `2021`, matching the workspace. `cargo fix
+  --edition` reports the migration is a no-op for the existing
+  source — there is no 2018-only syntax to rewrite — so this is a
+  one-line manifest bump that just keeps all examples on the same
+  edition. Standalone-workspace `cargo check` still passes.
 * **Drop dead `image = "0.25"` deps from `examples/decoder_test` and
   `examples/capture` (`nokhwactl`).** Same pattern as the prior
   `setting` / `threaded-capture` cleanup, but on the version-aligned
