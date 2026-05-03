@@ -174,6 +174,24 @@
 
 ### Testing
 
+* **Pin `Frame<RawBgr>::into_rgb().write_to(...)` end-to-end with 2
+  unit tests in `nokhwa-core/src/frame_tests.rs`.** The materialize
+  counterpart is pinned by `rawbgr_into_rgb_swaps_channels`, but the
+  `write_to` integration — which routes through the
+  `FrameFormat::RAWBGR => buf_bgr_to_rgb(...)` arm of
+  `convert_to_rgb_buffer` (`frame.rs:431`) and exposes
+  `buf_bgr_to_rgb`'s output-size guard — was uncovered. A
+  regression in the dispatcher wiring (e.g. accidentally routing
+  RAWBGR through the no-op RAWRGB `data.to_vec()` arm) would
+  silently produce blue-tinted "RGB" output, and `write_to`
+  callers would not catch it. New tests pin: (1) `write_to` happy
+  path with per-pixel-distinct B/G/R values produces correctly
+  channel-swapped RGB (loud failure if the swap stops happening);
+  (2) an 11-byte dest for a 12-byte expected output hits
+  `buf_bgr_to_rgb`'s `"bad output buffer size"` guard with
+  `FrameFormat::RAWBGR` as the source, proving the dispatcher
+  passes through the underlying error rather than synthesizing
+  its own.
 * **Pin `Frame<Nv12>::into_luma().write_to(...)` end-to-end with 3
   unit tests in `nokhwa-core/src/frame_tests.rs`.** The NV12 luma
   `materialize()` path is pinned by `nv12_into_luma_extracts_y_plane`,
