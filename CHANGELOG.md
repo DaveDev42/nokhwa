@@ -289,6 +289,23 @@
 
 ### Testing
 
+* **Pin `SetPropertyError` variant + value/error fields on
+  `v4l2_cid_value_rejects_unsupported_setters`.** The test at
+  `nokhwa-bindings-gstreamer/src/controls.rs:410` only checked
+  `Display::contains("focus_absolute")` for each rejected setter
+  variant. That contract is too loose: a future refactor that
+  swapped the variant to `GeneralError` / `StructureError`, dropped
+  the rejected `value` field, or rephrased the canonical "unsupported
+  ControlValueSetter variant for V4L2 CID" string would still pass —
+  while breaking callers pattern-matching on `SetPropertyError`
+  (which exists specifically so `set_control` mishandling can be
+  surfaced with the offending CID + setter). Tightened to a `match
+  NokhwaError::SetPropertyError { property, value, error }` block
+  per setter, asserting `property == cid`,
+  `value == setter.to_string()` (so the `value` field is contracted
+  to round-trip the setter's `Display`), and the canonical error
+  string verbatim. Same pattern as the prior six narrow-contract
+  pins (#343-#348).
 * **Pin `TimeoutError(Duration::ZERO)` on six wildcard sites for
   consistency with sibling tests.** Existing tighter pins at
   `nokhwa-core/src/testing.rs:412,477,492,627,780` already verify the
