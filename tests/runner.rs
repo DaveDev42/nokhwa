@@ -1426,3 +1426,186 @@ fn runner_spawn_hybrid_swallows_take_events_error() {
         .recv_timeout(Duration::from_millis(500))
         .expect("frame must arrive after take_events Err was swallowed");
 }
+
+// ───── spawn_stream / spawn_hybrid: open() error propagates ──────────
+//
+// `src/runner.rs:288` (`spawn_stream`) and `src/runner.rs:367`
+// (`spawn_hybrid`) both start with `cam.open()?` before doing any
+// channel / thread setup. The contract is: if the backend's `open()`
+// returns `Err`, `CameraRunner::spawn` must propagate that error to the
+// caller — no thread is spawned, no `Ok(runner)` is returned.
+//
+// A regression that silenced this (e.g. `let _ = cam.open();` or
+// reordering thread spawn before `open()`) would produce a "healthy"
+// runner whose frames channel never delivers anything, since the
+// worker thread loops calling `cam.frame()` on an unopened device that
+// errors every iteration. The user would see no error at spawn time
+// and only notice silence on the receiver — a particularly nasty
+// debugging experience.
+//
+// `spawn_shutter` does NOT call `open()` (shutter backends are
+// triggered, not streamed), so the open-error contract is
+// stream/hybrid-only.
+
+/// `FrameSource` that always returns `Err` from `open()`. Other methods
+/// would never be called in the open-failure path; we error them too so
+/// any regression that swallowed the open error and proceeded into the
+/// worker loop would still be observable as a stuck runner.
+struct FailingOpenFrame {
+    info: CameraInfo,
+}
+
+impl CameraDevice for FailingOpenFrame {
+    fn backend(&self) -> ApiBackend {
+        ApiBackend::Browser
+    }
+    fn info(&self) -> &CameraInfo {
+        &self.info
+    }
+    fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        Ok(vec![])
+    }
+    fn set_control(
+        &mut self,
+        _id: KnownCameraControl,
+        _v: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+}
+impl FrameSource for FailingOpenFrame {
+    fn negotiated_format(&self) -> CameraFormat {
+        CameraFormat::default()
+    }
+    fn set_format(&mut self, _f: CameraFormat) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+    fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+        Ok(vec![])
+    }
+    fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
+        Ok(vec![])
+    }
+    fn open(&mut self) -> Result<(), NokhwaError> {
+        Err(NokhwaError::open_stream("simulated open() failure"))
+    }
+    fn is_open(&self) -> bool {
+        false
+    }
+    fn frame(&mut self) -> Result<Buffer, NokhwaError> {
+        Err(NokhwaError::read_frame("not open"))
+    }
+    fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
+        Err(NokhwaError::read_frame("not open"))
+    }
+    fn close(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+}
+
+nokhwa_backend!(FailingOpenFrame: FrameSource);
+
+#[test]
+fn runner_spawn_stream_propagates_open_error() {
+    let dev = FailingOpenFrame {
+        info: CameraInfo::new(
+            "FailingOpenFrame",
+            "test",
+            "test",
+            nokhwa_core::types::CameraIndex::Index(0),
+        ),
+    };
+    let opened = OpenedCamera::from_device(Box::new(dev));
+    let result = CameraRunner::spawn(opened, RunnerConfig::default());
+
+    let err = result.expect_err(
+        "spawn_stream must propagate open() error rather than return Ok with a stuck worker",
+    );
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("simulated open() failure"),
+        "expected open() error to surface unchanged; got: {msg}"
+    );
+}
+
+/// Hybrid that always returns `Err` from `FrameSource::open()`. Built
+/// over a `MockHybrid` so the rest of the trait surface is realistic.
+struct FailingOpenHybrid {
+    inner: MockHybrid,
+}
+
+impl CameraDevice for FailingOpenHybrid {
+    fn backend(&self) -> ApiBackend {
+        self.inner.backend()
+    }
+    fn info(&self) -> &CameraInfo {
+        self.inner.info()
+    }
+    fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        self.inner.controls()
+    }
+    fn set_control(
+        &mut self,
+        id: KnownCameraControl,
+        value: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        self.inner.set_control(id, value)
+    }
+}
+impl FrameSource for FailingOpenHybrid {
+    fn negotiated_format(&self) -> CameraFormat {
+        self.inner.negotiated_format()
+    }
+    fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
+        self.inner.set_format(f)
+    }
+    fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+        self.inner.compatible_formats()
+    }
+    fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
+        self.inner.compatible_fourcc()
+    }
+    fn open(&mut self) -> Result<(), NokhwaError> {
+        Err(NokhwaError::open_stream("simulated hybrid open() failure"))
+    }
+    fn is_open(&self) -> bool {
+        false
+    }
+    fn frame(&mut self) -> Result<Buffer, NokhwaError> {
+        Err(NokhwaError::read_frame("not open"))
+    }
+    fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
+        Err(NokhwaError::read_frame("not open"))
+    }
+    fn close(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+}
+impl ShutterCapture for FailingOpenHybrid {
+    fn trigger(&mut self) -> Result<(), NokhwaError> {
+        self.inner.trigger()
+    }
+    fn take_picture(&mut self, t: Duration) -> Result<Buffer, NokhwaError> {
+        self.inner.take_picture(t)
+    }
+}
+
+nokhwa_backend!(FailingOpenHybrid: FrameSource, ShutterCapture);
+
+#[test]
+fn runner_spawn_hybrid_propagates_open_error() {
+    let dev = FailingOpenHybrid {
+        inner: MockHybrid::new(0, vec![mock_frame(4, 4, FrameFormat::MJPEG)]),
+    };
+    let opened = OpenedCamera::from_device(Box::new(dev));
+    let result = CameraRunner::spawn(opened, RunnerConfig::default());
+
+    let err = result.expect_err(
+        "spawn_hybrid must propagate open() error rather than return Ok with a stuck worker",
+    );
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("simulated hybrid open() failure"),
+        "expected open() error to surface unchanged; got: {msg}"
+    );
+}
