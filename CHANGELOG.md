@@ -233,6 +233,21 @@
 
 ### Documentation
 
+* **Fix stale off-Windows-stub Quirks bullet on
+  `MediaFoundationCaptureDevice` in
+  `nokhwa-bindings-windows-msmf/src/capture.rs`.** The first Quirks
+  bullet claimed "this does build on non-windows platforms, however
+  when you do the backend will be empty and will return an error for
+  any given operation." That predated the stub refactor: `capture.rs`
+  is now Windows-only (`#[cfg(all(windows, not(feature =
+  "docs-only")))]`) and the off-Windows surface comes from a separate
+  `mod stub` block in the crate's `lib.rs`, where `new()` returns
+  `NotImplementedError` but every infallible trait method
+  `unreachable!()`-panics by design (no value of the stub type can be
+  produced because `new()` always errors). Replaced the bullet with
+  an accurate description that points at the stub module and notes
+  the unreachable-panic shape — matching the pattern documented on
+  the V4L and AVFoundation off-platform stubs.
 * **Mark OpenCV backend as removed (not just disabled) in
   `MIGRATING-0.13.md`.** The "Disabled in 0.13.0" section listed
   `input-opencv` as "pending migration" with the feature definition
