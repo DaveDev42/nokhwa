@@ -1884,8 +1884,23 @@ fn camera_index_try_from_u32_numeric_string() {
 
 #[test]
 fn camera_index_try_from_u32_non_numeric_string_errs() {
-    let result: Result<u32, _> = u32::try_from(CameraIndex::String("/dev/video0".to_string()));
-    assert!(result.is_err());
+    // `CameraIndex::as_index` (used by `TryFrom<CameraIndex> for u32` at
+    // `types.rs:361`) maps `ParseIntError` through `NokhwaError::general`,
+    // producing `GeneralError { backend: None, message: <ParseIntError> }`.
+    // Pinning the variant + message guards against silent reroutes (e.g.
+    // someone changing the helper to `StructureError`) and against drift in
+    // the `ParseIntError` text we forward verbatim to callers.
+    let err = u32::try_from(CameraIndex::String("/dev/video0".to_string())).unwrap_err();
+    match err {
+        NokhwaError::GeneralError { message, backend } => {
+            assert_eq!(message, "invalid digit found in string");
+            assert!(
+                backend.is_none(),
+                "expected no backend tag, got {backend:?}"
+            );
+        }
+        other => panic!("expected GeneralError, got {other:?}"),
+    }
 }
 
 #[test]
@@ -1902,8 +1917,20 @@ fn camera_index_try_from_usize_numeric_string() {
 
 #[test]
 fn camera_index_try_from_usize_non_numeric_string_errs() {
-    let result: Result<usize, _> = usize::try_from(CameraIndex::String("abc".to_string()));
-    assert!(result.is_err());
+    // `TryFrom<CameraIndex> for usize` at `types.rs:369` delegates to
+    // `as_index` and casts on success, so the error path is identical to
+    // the u32 case: `GeneralError` carrying the verbatim `ParseIntError`.
+    let err = usize::try_from(CameraIndex::String("abc".to_string())).unwrap_err();
+    match err {
+        NokhwaError::GeneralError { message, backend } => {
+            assert_eq!(message, "invalid digit found in string");
+            assert!(
+                backend.is_none(),
+                "expected no backend tag, got {backend:?}"
+            );
+        }
+        other => panic!("expected GeneralError, got {other:?}"),
+    }
 }
 
 // --- ControlValueSetter additional accessors ---
