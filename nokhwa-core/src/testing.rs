@@ -498,4 +498,66 @@ mod tests {
         assert_eq!(buf.buffer().len(), 0);
         assert_eq!(buf.resolution(), Resolution::new(0, 0));
     }
+
+    // ─────────────── MockHybrid: dual-capability dispatch ───────────────
+
+    #[test]
+    fn mock_hybrid_frame_path_returns_pushed_frames_in_order() {
+        let mut h = MockHybrid::new(0, vec![mock_frame(2, 2, FrameFormat::MJPEG)]);
+        h.push_frame(mock_frame(4, 4, FrameFormat::YUYV));
+        h.push_frame(mock_frame(8, 8, FrameFormat::YUYV));
+        h.open().unwrap();
+        let a = h.frame().unwrap();
+        let b = h.frame().unwrap();
+        assert_eq!(a.resolution(), Resolution::new(4, 4));
+        assert_eq!(b.resolution(), Resolution::new(8, 8));
+        assert_eq!(a.source_frame_format(), FrameFormat::YUYV);
+        assert!(matches!(
+            h.frame(),
+            Err(NokhwaError::TimeoutError(d)) if d == Duration::ZERO
+        ));
+    }
+
+    #[test]
+    fn mock_hybrid_shutter_path_independent_of_frame_queue() {
+        let mut h = MockHybrid::new(0, vec![mock_frame(2, 2, FrameFormat::MJPEG)]);
+        h.push_frame(mock_frame(8, 8, FrameFormat::YUYV));
+        // Trigger the shutter, then take_picture: routes to inner MockShutter.
+        // The queued frame stays in the frames queue (no cross-talk).
+        h.trigger().unwrap();
+        let pic = h.take_picture(Duration::from_millis(10)).unwrap();
+        assert_eq!(pic.resolution(), Resolution::new(2, 2));
+        assert_eq!(pic.source_frame_format(), FrameFormat::MJPEG);
+        h.open().unwrap();
+        let frame = h.frame().unwrap();
+        assert_eq!(frame.resolution(), Resolution::new(8, 8));
+        assert_eq!(frame.source_frame_format(), FrameFormat::YUYV);
+    }
+
+    #[test]
+    fn mock_hybrid_take_picture_without_trigger_times_out() {
+        let mut h = MockHybrid::new(0, vec![mock_frame(2, 2, FrameFormat::MJPEG)]);
+        assert!(matches!(
+            h.take_picture(Duration::ZERO),
+            Err(NokhwaError::TimeoutError(_))
+        ));
+    }
+
+    #[test]
+    fn mock_hybrid_open_close_state_routes_to_frame_source() {
+        let mut h = MockHybrid::new(0, vec![]);
+        assert!(!h.is_open());
+        h.open().unwrap();
+        assert!(h.is_open());
+        h.close().unwrap();
+        assert!(!h.is_open());
+    }
+
+    #[test]
+    fn mock_hybrid_camera_device_metadata_routes_to_frame_source() {
+        let h = MockHybrid::new(7, vec![]);
+        assert_eq!(h.info().index(), &CameraIndex::Index(7));
+        assert_eq!(h.backend(), MockFrameSource::new(0).backend());
+        assert_eq!(h.controls().unwrap(), Vec::<CameraControl>::new());
+    }
 }
