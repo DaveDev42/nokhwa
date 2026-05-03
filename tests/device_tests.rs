@@ -781,8 +781,9 @@ fn frame_metadata_matches_negotiated_format() {
 // compiles only when both features are enabled.
 #[cfg(feature = "runner")]
 mod runner_tests {
-    use super::{open, CameraIndex, OpenRequest};
-    use nokhwa::{CameraRunner, RunnerConfig};
+    use super::{open, CameraIndex, ControlValueSetter, OpenRequest};
+    use nokhwa::utils::KnownCameraControl;
+    use nokhwa::{CameraRunner, Overflow, RunnerConfig};
     use std::time::Duration;
 
     #[test]
@@ -798,6 +799,136 @@ mod runner_tests {
                 .unwrap_or_else(|e| panic!("recv frame {i}: {e}"));
             assert!(!buf.buffer().is_empty(), "runner frame {i} empty");
         }
+        runner.stop().expect("runner.stop()");
+    }
+
+    // The `DropOldest` policy spawns a relay thread that maintains a
+    // bounded `VecDeque` between the producer and the user-facing
+    // channel. The unit tests in `src/runner.rs` cover that thread
+    // with a fake producer; this one runs it under a real camera so
+    // the relay's full lifecycle (spawn → forward → join on
+    // shutdown) is exercised end-to-end. Capacity 2 with the camera
+    // running at >2 FPS guarantees overflow within a few hundred
+    // milliseconds, then we drain the channel and call `stop()`. A
+    // regression that left the relay thread orphaned (e.g. forgot to
+    // close the relay's input on shutdown) would surface here as
+    // `stop()` hanging or panicking on a dangling join handle.
+    #[test]
+    fn runner_drop_oldest_overflow_drains_relay_on_stop() {
+        let opened = open(CameraIndex::Index(0), OpenRequest::any())
+            .expect("open(CameraIndex::Index(0)) failed");
+        let cfg = RunnerConfig {
+            frames_capacity: 2,
+            overflow: Overflow::DropOldest,
+            ..RunnerConfig::default()
+        };
+        let runner = CameraRunner::spawn(opened, cfg).expect("CameraRunner::spawn");
+        let frames = runner.frames().expect("runner has no frames channel");
+        // Pull at least one frame so we know the relay is forwarding.
+        let buf = frames
+            .recv_timeout(Duration::from_secs(5))
+            .expect("first frame from drop-oldest runner");
+        assert!(!buf.buffer().is_empty(), "first frame empty");
+        // Let the producer outpace us on a small bounded channel so the
+        // relay's drop-oldest path actually fires.
+        std::thread::sleep(Duration::from_millis(300));
+        // Drain whatever the relay queued so `stop()` doesn't time out
+        // waiting for backpressure to clear.
+        while frames.try_recv().is_ok() {}
+        runner.stop().expect("runner.stop() with drop-oldest relay");
+    }
+
+    // `CameraRunner::Drop` must shut the worker thread down even when
+    // the user forgets to call `.stop()`. The `runner_produces_frames`
+    // test above always calls `.stop()`, so a regression that, e.g.,
+    // panicked in `Drop` because the channel was already half-closed
+    // would slip through. Spawn a runner, take one frame, then let
+    // it fall out of scope. If `Drop` deadlocks the worker we'd hang
+    // here; if it panics, the test fails.
+    #[test]
+    fn runner_drop_without_explicit_stop_cleans_up() {
+        let opened = open(CameraIndex::Index(0), OpenRequest::any())
+            .expect("open(CameraIndex::Index(0)) failed");
+        {
+            let runner =
+                CameraRunner::spawn(opened, RunnerConfig::default()).expect("CameraRunner::spawn");
+            let frames = runner.frames().expect("runner has no frames channel");
+            let buf = frames
+                .recv_timeout(Duration::from_secs(5))
+                .expect("first frame from implicit-drop runner");
+            assert!(!buf.buffer().is_empty(), "implicit-drop frame empty");
+        } // `runner` drops here; Drop must clean up the worker.
+          // If we got past Drop without panic / deadlock the test passes.
+    }
+
+    // `OpenRequest::any()` resolves to a stream-only camera on every
+    // hardware backend in this repo (V4L2 / MSMF / AVFoundation), so
+    // `runner.pictures()` must be `None` and `runner.events()` must
+    // be `None` (none of those native backends expose `EventSource`
+    // through the runner today). A regression that started wiring
+    // a `pictures` channel for stream-only backends would silently
+    // leak a relay thread for every `CameraRunner::spawn`.
+    #[test]
+    fn runner_stream_only_backend_yields_no_pictures_no_events() {
+        let opened = open(CameraIndex::Index(0), OpenRequest::any())
+            .expect("open(CameraIndex::Index(0)) failed");
+        let runner =
+            CameraRunner::spawn(opened, RunnerConfig::default()).expect("CameraRunner::spawn");
+        assert!(
+            runner.pictures().is_none(),
+            "stream-only runner must not have a pictures channel"
+        );
+        assert!(
+            runner.events().is_none(),
+            "stream-only runner must not have an events channel"
+        );
+        runner.stop().expect("runner.stop()");
+    }
+
+    // `set_control` on a running runner forwards the command to the
+    // worker thread, which applies it to the underlying camera. The
+    // synchronous `control_set_get_round_trip` test (above, outside
+    // this submodule) covers the direct path; this one pins the
+    // runner-mediated path. We don't assert the new value round-trips
+    // because not every backend reports a fresh `controls()` snapshot
+    // synchronously after `set_control`; we only assert the call
+    // succeeds (no `Err`) and that frame delivery survives the
+    // control change. A regression that made `set_control` return
+    // `Err` for any backend, or wedged the worker on a control
+    // command, would surface here.
+    #[test]
+    fn runner_set_control_does_not_disrupt_frame_delivery() {
+        let opened = open(CameraIndex::Index(0), OpenRequest::any())
+            .expect("open(CameraIndex::Index(0)) failed");
+        let runner =
+            CameraRunner::spawn(opened, RunnerConfig::default()).expect("CameraRunner::spawn");
+        let frames = runner.frames().expect("runner has no frames channel");
+
+        // Drain one frame to confirm the worker is steady-state before
+        // we send the control command.
+        frames
+            .recv_timeout(Duration::from_secs(5))
+            .expect("first frame before set_control");
+
+        // Brightness is the most universally-supported control across
+        // V4L / MSMF / AVF webcams. The integer 0 is a safe value:
+        // most backends accept it (some clamp to the supported range,
+        // which is fine — we're not asserting the value, only that
+        // the call doesn't panic the worker).
+        runner
+            .set_control(
+                KnownCameraControl::Brightness,
+                ControlValueSetter::Integer(0),
+            )
+            .expect("set_control(Brightness, 0) on running runner");
+
+        // Frame delivery must continue. A wedged worker would time
+        // out here.
+        let buf = frames
+            .recv_timeout(Duration::from_secs(5))
+            .expect("frame after set_control — worker may be wedged");
+        assert!(!buf.buffer().is_empty(), "post-set_control frame empty");
+
         runner.stop().expect("runner.stop()");
     }
 }
