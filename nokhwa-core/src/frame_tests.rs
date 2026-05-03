@@ -1344,19 +1344,55 @@ fn mjpeg_luma_write_to_accepts_oversized_dest() {
 #[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
 #[test]
 fn mjpeg_malformed_returns_error() {
-    // Starts with valid JPEG SOI marker but truncated
+    // Starts with valid JPEG SOI marker but truncated. The previous
+    // test only checked `is_err()`, so a regression that swapped the
+    // variant (e.g. wrapping the mozjpeg failure in `GeneralError`)
+    // or routed the error through a non-MJPEG `src` would have
+    // passed. Pin the variant + src + destination from `mjpeg_to_rgb`
+    // (`nokhwa-core/src/types.rs:1543-1593`); leave the inner `error`
+    // field unpinned because it is mozjpeg's own diagnostic text and
+    // can drift across mozjpeg versions — assert only that it is
+    // non-empty.
     let garbage = &[0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x00, 0x00];
     let buf = Buffer::new(Resolution::new(2, 2), garbage, FrameFormat::MJPEG);
     let frame: Frame<Mjpeg> = Frame::new(buf);
-    assert!(frame.into_rgb().materialize().is_err());
+    let err = frame.into_rgb().materialize().unwrap_err();
+    match err {
+        NokhwaError::ProcessFrameError {
+            src,
+            destination,
+            error,
+        } => {
+            assert_eq!(src, FrameFormat::MJPEG);
+            assert_eq!(destination, "RGB888");
+            assert!(!error.is_empty(), "mozjpeg error message must not be empty");
+        }
+        other => panic!("expected ProcessFrameError, got {other:?}"),
+    }
 }
 
 #[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
 #[test]
 fn mjpeg_empty_returns_error() {
+    // Mirror the malformed-input pin above for the empty-buffer path.
+    // Both fail at the `Decompress::new_mem` step in
+    // `mjpeg_to_rgb` (`nokhwa-core/src/types.rs:1546`), so the routed
+    // (src, destination) pair is the same.
     let buf = Buffer::new(Resolution::new(2, 2), &[], FrameFormat::MJPEG);
     let frame: Frame<Mjpeg> = Frame::new(buf);
-    assert!(frame.into_rgb().materialize().is_err());
+    let err = frame.into_rgb().materialize().unwrap_err();
+    match err {
+        NokhwaError::ProcessFrameError {
+            src,
+            destination,
+            error,
+        } => {
+            assert_eq!(src, FrameFormat::MJPEG);
+            assert_eq!(destination, "RGB888");
+            assert!(!error.is_empty(), "mozjpeg error message must not be empty");
+        }
+        other => panic!("expected ProcessFrameError, got {other:?}"),
+    }
 }
 
 // `RgbConversion::write_to` and `RgbaConversion::write_to` for

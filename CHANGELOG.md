@@ -232,6 +232,18 @@
 
 ### Testing
 
+* **Pin variant + src + destination on `mjpeg_malformed_returns_error`
+  and `mjpeg_empty_returns_error`.** Both tests at `frame_tests.rs:1346`
+  and `:1356` previously checked only `is_err()` — a regression that
+  wrapped the mozjpeg failure in `GeneralError`, routed it via
+  `NotImplementedError` from a feature-gate slip, or rerouted the `src`
+  to a non-MJPEG variant would have passed. Pin
+  `ProcessFrameError { src: MJPEG, destination: "RGB888", .. }` for both
+  paths (both fail at `Decompress::new_mem` in
+  `nokhwa-core/src/types.rs:1546` so the routed `(src, destination)`
+  pair is the same); the inner `error` field is asserted only as
+  non-empty since it is mozjpeg's own diagnostic text and may drift
+  across mozjpeg versions.
 * **Pin `runner_spawn_{stream,hybrid}_propagates_open_error` Display
   strings exactly.** `tests/runner.rs:1532` and `:1614` exercised the
   `cam.open()?` propagation in `CameraRunner::spawn_stream` /
