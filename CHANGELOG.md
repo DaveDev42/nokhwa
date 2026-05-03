@@ -187,6 +187,22 @@
 
 ### Testing
 
+* **Pin `nokhwa-tokio::spawn_forwarder` edge-case behaviour.** The
+  internal helper bridges a `std::sync::mpsc::Receiver<T>` to a
+  `tokio::sync::mpsc::Receiver<T>` for each of frames / pictures /
+  events inside `TokioCameraRunner::spawn`. Existing tests covered
+  `FORWARDER_CAPACITY`, in-order delivery, and producer-drop closure
+  on the single-stream happy path; nothing pinned (a) that calling
+  `spawn_forwarder` twice appends two distinct `JoinHandle`s and
+  routes streams independently, (b) that a forwarder for a
+  never-used channel still surfaces closure on the async side, or
+  (c) that the `Send + 'static` payload bound carries non-`Copy`
+  owned values like `String` / `Buffer` end-to-end. Four new tests
+  pin those contracts so a future refactor of the forwarder loop
+  (e.g. narrowing the bound, or accidentally returning early on the
+  first `Err` before the `Ok` branch flushes) fails fast instead of
+  silently dropping events or merging streams.
+
 * **Pin `HotplugEvent` and `CameraEvent` derive contracts in
   `nokhwa-core/src/traits_tests.rs`.** `HotplugEvent` derives
   `Clone, PartialEq, Eq, Hash, Debug`; the trait docs explicitly
