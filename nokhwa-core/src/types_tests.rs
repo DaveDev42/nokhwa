@@ -2325,14 +2325,36 @@ fn api_backend_derived_ord_is_declaration_order() {
 // All four Display impls in `types.rs` delegate to `{self:?}`. Pin the rendering
 // so a future move away from Debug-piping is a deliberate, reviewed change.
 
+// `KnownCameraControl::Display` delegates to `Debug`, but downstream
+// (UI / log dashboards / `CameraControl::Display`'s embedded
+// `"Control: {}, ..."` rendering) keys on the literal variant names.
+// `known_camera_control_all_variants_display_non_empty` exercises
+// every variant but only asserts `!is_empty()`, so a hand-written
+// `Display` impl that renamed even one variant
+// (e.g. `WhiteBalance` → `"WhiteBalanceTemp"`) would silently change
+// the rendering surfaced in `NokhwaError::SetPropertyError`'s
+// `{property}` slot. Pin every named variant verbatim plus a
+// representative `Other(_)` rendering. Guards
+// `nokhwa-core/src/types.rs:948-952`.
 #[test]
 fn known_camera_control_display_renders_variant_name() {
     assert_eq!(KnownCameraControl::Brightness.to_string(), "Brightness");
+    assert_eq!(KnownCameraControl::Contrast.to_string(), "Contrast");
+    assert_eq!(KnownCameraControl::Hue.to_string(), "Hue");
+    assert_eq!(KnownCameraControl::Saturation.to_string(), "Saturation");
+    assert_eq!(KnownCameraControl::Sharpness.to_string(), "Sharpness");
+    assert_eq!(KnownCameraControl::Gamma.to_string(), "Gamma");
     assert_eq!(KnownCameraControl::WhiteBalance.to_string(), "WhiteBalance");
     assert_eq!(
         KnownCameraControl::BacklightComp.to_string(),
         "BacklightComp"
     );
+    assert_eq!(KnownCameraControl::Gain.to_string(), "Gain");
+    assert_eq!(KnownCameraControl::Pan.to_string(), "Pan");
+    assert_eq!(KnownCameraControl::Tilt.to_string(), "Tilt");
+    assert_eq!(KnownCameraControl::Zoom.to_string(), "Zoom");
+    assert_eq!(KnownCameraControl::Exposure.to_string(), "Exposure");
+    assert_eq!(KnownCameraControl::Iris.to_string(), "Iris");
     assert_eq!(KnownCameraControl::Focus.to_string(), "Focus");
     assert_eq!(KnownCameraControl::Other(42).to_string(), "Other(42)");
 }
