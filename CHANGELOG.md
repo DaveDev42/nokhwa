@@ -232,6 +232,27 @@
 
 ### Testing
 
+* **Tighten `Frame::into_buffer` round-trip and pin
+  `NokhwaError` helper-constructor message-passthrough.**
+  `frame_into_buffer_roundtrip` only asserted the recovered
+  `Buffer`'s bytes equal the source; it never verified
+  `recovered.resolution()` or `recovered.source_frame_format()`.
+  A refactor that cloned the buffer bytes into a
+  freshly-constructed `Buffer::new(Resolution::default(), ...)`
+  would silently zero the resolution and drop the original
+  `FrameFormat` while still passing the bytes-only assertion.
+  Pinned both side-channel fields. Separately,
+  `helper_constructors_default_optional_context_to_none`
+  destructured `..` for the `message` field, pinning only the
+  variant identity and the `None`-ness of the optional context. A
+  regression in any of the four helpers
+  (`NokhwaError::general` / `open_stream` / `read_frame` /
+  `stream_shutdown`, `nokhwa-core/src/error.rs:79-110`) that
+  silently mutated the message — prefixed it, called `.trim()`,
+  uppercased it, or swapped two helpers' bodies — would have
+  slipped past. Added
+  `helper_constructors_pass_message_through_unchanged` asserting
+  `message == "sentinel"` verbatim across all four helpers.
 * **Pin `Buffer::PartialEq` structural contract.** `Buffer` derives
   `PartialEq` (`nokhwa-core/src/buffer.rs:48`), which is structural
   over all four fields including `capture_timestamp:

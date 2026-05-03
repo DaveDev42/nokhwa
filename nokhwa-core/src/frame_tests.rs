@@ -38,6 +38,16 @@ fn frame_into_buffer_roundtrip() {
     let frame: Frame<RawRgb> = Frame::new(buf);
     let recovered = frame.into_buffer();
     assert_eq!(recovered.buffer(), &data[..]);
+    // `Frame::into_buffer` is documented as "consumes the frame and
+    // returns the underlying [`Buffer`]" (`nokhwa-core/src/frame.rs:112-116`).
+    // The bytes-only check above would still pass after a refactor
+    // that cloned the buffer bytes into a freshly-constructed
+    // `Buffer::new(Resolution::default(), ...)` — silently zeroing
+    // the resolution and dropping the original `FrameFormat`. Pin
+    // both side-channel fields so the round-trip is whole-struct
+    // identity, not just data-identity.
+    assert_eq!(recovered.resolution(), Resolution::new(2, 2));
+    assert_eq!(recovered.source_frame_format(), FrameFormat::RAWRGB);
 }
 
 #[test]
