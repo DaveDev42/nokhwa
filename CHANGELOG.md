@@ -232,6 +232,21 @@
 
 ### Testing
 
+* **Pin `RequestedFormatType::default() == None` and
+  `Resolution::default() == (0, 0)`.** Both types carry `Default`
+  contracts that no existing test exercised: `RequestedFormatType`
+  has `#[default]` on its `None` variant
+  (`nokhwa-core/src/types.rs:34`) and `Resolution` derives `Default`
+  giving `(0, 0)` (`nokhwa-core/src/types.rs:520`). A refactor that
+  moved `#[default]` to e.g. `AbsoluteHighestResolution` (rationale:
+  "users probably want highest-res") or replaced the derived
+  `Resolution::default()` with a hand-written `640x480` sentinel
+  ("useful default") would silently change what callers using
+  `Default::default()` receive. Two new tests
+  (`requested_format_type_default_is_none`,
+  `resolution_default_is_zero_zero`) pin both contracts. The
+  Resolution pin also indirectly guards `CameraFormat::default()`,
+  which composes `Resolution::default()`.
 * **Pin `RequestedFormatType::HighestFrameRate(_)` exact-format and
   `ControlValueDescription::Enum` Display edge cases.** The existing
   `requested_format_type_display_matches_debug_all_remaining_variants`
