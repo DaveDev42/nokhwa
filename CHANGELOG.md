@@ -187,6 +187,34 @@
 
 ### Testing
 
+* **Pin `MockShutter` FIFO contract, default `lock_ui`/`unlock_ui`,
+  `capture()` convenience, and `MpscEventPoll: Send` bound.**
+  `nokhwa-core/src/testing.rs` had only one direct `MockShutter`
+  test (`shutter_triggers_and_takes_pictures`) doing a single
+  trigger+take, so the two-queue (`triggered → pending`) FIFO
+  dance was invisible — a regression that flipped the queues to
+  LIFO, collapsed them into one `VecDeque`, or started returning
+  `Err` on empty-pool `trigger()` would have slipped through.
+  `take_picture`'s timeout round-trip on the empty path was also
+  unverified: a refactor that hard-coded `Duration::ZERO` into
+  the `TimeoutError` would silently mislead callers about how
+  long they waited. The trait-default `lock_ui`/`unlock_ui`
+  inherited by both `MockShutter` and `MockHybrid` (and the
+  `capture()` convenience that chains them around `trigger` +
+  `take_picture`) had no test coverage on either mock. And
+  `EventPoll: Send` — the super-trait bound that lets pollers
+  cross thread boundaries via `Box<dyn EventPoll + Send>` —
+  wasn't pinned on `MpscEventPoll`, so a refactor that
+  introduced a non-`Send` field (e.g. `Rc`) would only fail at
+  the downstream boxing site rather than in this crate. Six
+  new tests in `nokhwa-core/src/testing.rs` close every gap:
+  multi-trigger FIFO drain across three pictures,
+  empty-pool-trigger silent no-op, exact-`Duration` round-trip
+  through `TimeoutError`, default `lock_ui`/`unlock_ui` + full
+  `capture()` sequence on `MockShutter`, same on `MockHybrid`,
+  and a generic `assert_send::<MpscEventPoll>()` shim that
+  fails to compile if the bound regresses.
+
 * **Replace `nokhwa-tokio` link-only integration test with
   end-to-end `TokioCameraRunner` coverage on a fake camera.**
   `nokhwa-tokio/tests/drop_semantics.rs` was a single 11-line
