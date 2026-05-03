@@ -316,6 +316,41 @@ fn camera_index_default_is_index_zero() {
     let idx = CameraIndex::default();
     assert!(idx.is_index());
     assert_eq!(idx.as_index().unwrap(), 0);
+    // Direct structural equality. The above checks would still pass
+    // if `Default::default()` returned a *different* `Index(_)` whose
+    // numeric value happened to coerce to 0 via some hypothetical
+    // future `as_index` path; pin the exact variant + payload.
+    assert_eq!(idx, CameraIndex::Index(0));
+}
+
+// `CameraIndex` derives `PartialEq` (`nokhwa-core/src/types.rs:304`),
+// which is *structural* — `Index(0)` and `String("0")` are distinct
+// even though `as_index()` resolves both to the same numeric value.
+// No existing test pins this. A plausible "fix" replacing the derive
+// with a hand-written impl that delegates to `as_index()` (rationale:
+// "the dual-form resolution logic should be transitive across
+// variants") would silently make `Index(3) == String("3")`,
+// breaking camera deduplication in device enumeration where
+// `Vec<CameraInfo>::contains` is used to filter duplicates between
+// numeric V4L indices and string-form GStreamer URIs that happen to
+// stringify to the same digit. Pin the structural contract.
+#[test]
+fn camera_index_partial_eq_is_structural_not_numeric() {
+    // Cross-variant inequality even when as_index() agrees.
+    assert_ne!(CameraIndex::Index(0), CameraIndex::String("0".into()));
+    assert_ne!(CameraIndex::Index(42), CameraIndex::String("42".into()));
+    // Same-variant equality (sanity).
+    assert_eq!(CameraIndex::Index(0), CameraIndex::Index(0));
+    assert_eq!(
+        CameraIndex::String("rtsp://cam.local/stream".into()),
+        CameraIndex::String("rtsp://cam.local/stream".into()),
+    );
+    // Same-variant inequality (sanity).
+    assert_ne!(CameraIndex::Index(0), CameraIndex::Index(1));
+    assert_ne!(
+        CameraIndex::String("a".into()),
+        CameraIndex::String("b".into()),
+    );
 }
 
 #[test]
