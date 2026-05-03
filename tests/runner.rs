@@ -2121,3 +2121,95 @@ fn runner_shutdown_drops_receivers_before_joining_drop_oldest_relay() {
     }
     stopper.join().unwrap().unwrap();
 }
+
+// ─── shutdown ordering: Block worker parked in SyncSender::send ──────
+//
+// Symmetric companion to
+// `runner_shutdown_drops_receivers_before_joining_drop_oldest_relay`.
+// `src/runner.rs:534-540` explicitly documents the contract for
+// `Overflow::Block`:
+//
+//     // Drop receivers first so any blocked relay `try_send` wakes up
+//     // and the relay threads can exit cleanly. For `Overflow::Block`
+//     // the worker may be parked inside `SyncSender::send` with `Die`
+//     // sitting unread in the command queue; the receiver-drop below is
+//     // what unblocks that send (via `SendError`), after which the
+//     // worker loop exits.
+//
+// Order in `shutdown()` (`src/runner.rs:532-558`):
+//   1. send `Command::Die` to worker
+//   2. drop user-facing receivers (frames / pictures / events)
+//   3. join the worker handle
+//   4. join each relay handle
+//
+// For `Overflow::Block`, `make_channel` returns the user `SyncSender`
+// directly to the worker (no relay), so the worker can park inside the
+// blocking `SyncSender::send` when the user-side channel is full. With
+// the channel full and no reader, the worker never observes the `Die`
+// command — it's just stuck in `send`. The only path out is dropping
+// the user-side `Receiver`, which makes `send` return `SendError` and
+// lets the worker fall through to the `Die` check.
+//
+// A regression that swapped the order — joining the worker before
+// dropping the receiver (move the `self.frames = None` line to after
+// `handle.join()`) — would leave `runner.stop()` (and `Drop`) hanging
+// forever the moment a Block-mode runner is shut down without a
+// drained channel. No existing test catches this:
+// `runner_overflow_block_delivers_every_frame_in_order` actively
+// drains the channel on the test thread, so the worker is never
+// parked when shutdown runs;
+// `runner_shutdown_drops_receivers_before_joining_drop_oldest_relay`
+// pins the same invariant for `DropOldest` but exercises the relay
+// thread, not the direct-`SyncSender::send` worker path.
+
+#[test]
+fn runner_shutdown_drops_receivers_before_joining_block_overflow_worker() {
+    use nokhwa_core::types::CameraIndex;
+    use std::time::Instant;
+
+    let src = EndlessFrameSource {
+        info: CameraInfo::new(
+            "endless-block",
+            "endless-block",
+            "endless-block",
+            CameraIndex::Index(0),
+        ),
+        format: CameraFormat::new(
+            nokhwa_core::types::Resolution::new(4, 4),
+            FrameFormat::YUYV,
+            30,
+        ),
+    };
+    let opened = OpenedCamera::from_device(Box::new(src));
+    let cfg = RunnerConfig {
+        // Capacity 1 + Block forces the worker to park inside
+        // `SyncSender::send` after the very first un-drained frame.
+        frames_capacity: 1,
+        overflow: Overflow::Block,
+        ..RunnerConfig::default()
+    };
+    let runner = CameraRunner::spawn(opened, cfg).unwrap();
+
+    // Let the worker push one frame and park on the next send. 100 ms
+    // at 10 ms `poll_interval` is ~10 iterations — way past saturation.
+    std::thread::sleep(Duration::from_millis(100));
+
+    // Drop without ever draining. If `shutdown()` reverses the
+    // documented ordering (joins the worker before dropping the
+    // receiver), the worker stays parked in `SyncSender::send`, the
+    // join never returns, and `runner.stop()` hangs forever.
+    let stopper = std::thread::spawn(move || runner.stop());
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !stopper.is_finished() {
+        if Instant::now() >= deadline {
+            panic!(
+                "runner.stop() hung; Block-overflow worker likely \
+                 parked in SyncSender::send because shutdown() joined \
+                 the worker before dropping the user-facing receiver \
+                 (src/runner.rs:534-540 ordering invariant regressed)"
+            );
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    stopper.join().unwrap().unwrap();
+}

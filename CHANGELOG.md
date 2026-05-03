@@ -233,6 +233,27 @@
 ### Testing
 
 * **Pin `CameraRunner::shutdown` ordering invariant for the
+  `Overflow::Block` worker.** Symmetric companion to the `DropOldest`
+  pin. `src/runner.rs:534-540` explicitly documents that for
+  `Overflow::Block` the worker may park inside `SyncSender::send` with
+  `Die` sitting unread in the command queue; dropping the user-facing
+  receiver is what unblocks the send (via `SendError`) and lets the
+  worker observe `Die`. A regression that swapped the order — joining
+  the worker before dropping the receiver (move `self.frames = None`
+  to after `handle.join()`) — would deadlock `runner.stop()` (and
+  `Drop`) any time a Block-mode runner is shut down without a drained
+  channel. No existing test caught this:
+  `runner_overflow_block_delivers_every_frame_in_order` actively
+  drains the channel on the test thread, so the worker is never parked
+  when shutdown runs;
+  `runner_shutdown_drops_receivers_before_joining_drop_oldest_relay`
+  pins the same invariant for `DropOldest` but exercises the relay
+  thread rather than the direct-`SyncSender::send` worker path. New
+  `runner_shutdown_drops_receivers_before_joining_block_overflow_worker`
+  spawns a runner with `frames_capacity = 1` + `Overflow::Block`, lets
+  an `EndlessFrameSource` fill the channel for 100ms, then calls
+  `runner.stop()` on a side thread under a 3-second deadline.
+* **Pin `CameraRunner::shutdown` ordering invariant for the
   `Overflow::DropOldest` relay.** `src/runner.rs:206-220` documents the
   ordering: `shutdown()` must drop the user-facing receivers *before*
   joining the relay handle. The relay's producer-disconnect drain loop
