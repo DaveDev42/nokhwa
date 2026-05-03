@@ -383,3 +383,97 @@ fn runner_config_is_copy() {
     let copied = cfg;
     assert_eq!(cfg.frames_capacity, copied.frames_capacity);
 }
+
+// ──────────────────── stop() and take_*() coverage ────────────────────
+
+#[test]
+fn runner_stop_returns_ok_on_stream_backend() {
+    let opened = OpenedCamera::from_device(Box::new(make_frame_only()));
+    let runner = CameraRunner::spawn(opened, RunnerConfig::default()).unwrap();
+    runner.stop().unwrap();
+}
+
+#[test]
+fn runner_stop_returns_ok_on_shutter_backend() {
+    let opened = OpenedCamera::from_device(Box::new(make_shutter_only()));
+    let runner = CameraRunner::spawn(opened, RunnerConfig::default()).unwrap();
+    runner.stop().unwrap();
+}
+
+#[test]
+fn runner_stop_returns_ok_on_hybrid_backend() {
+    let (hybrid, _tx) = make_hybrid_with_events();
+    let opened = OpenedCamera::from_device(Box::new(hybrid));
+    let runner = CameraRunner::spawn(opened, RunnerConfig::default()).unwrap();
+    runner.stop().unwrap();
+}
+
+#[test]
+fn runner_take_frames_idempotent_on_stream() {
+    let opened = OpenedCamera::from_device(Box::new(make_frame_only()));
+    let mut runner = CameraRunner::spawn(opened, RunnerConfig::default()).unwrap();
+    let rx = runner
+        .take_frames()
+        .expect("first take should yield receiver");
+    assert!(runner.take_frames().is_none(), "second take must be None");
+    assert!(
+        runner.frames().is_none(),
+        "frames() must be None after take_frames()"
+    );
+    let _buf = rx
+        .recv_timeout(Duration::from_millis(500))
+        .expect("owned receiver still delivers frames");
+}
+
+#[test]
+fn runner_take_pictures_idempotent_on_shutter() {
+    let opened = OpenedCamera::from_device(Box::new(make_shutter_only()));
+    let mut runner = CameraRunner::spawn(opened, RunnerConfig::default()).unwrap();
+    let rx = runner
+        .take_pictures()
+        .expect("first take should yield receiver");
+    assert!(runner.take_pictures().is_none(), "second take must be None");
+    assert!(
+        runner.pictures().is_none(),
+        "pictures() must be None after take_pictures()"
+    );
+    runner.trigger().unwrap();
+    let _buf = rx
+        .recv_timeout(Duration::from_millis(500))
+        .expect("owned receiver still delivers pictures after trigger");
+}
+
+#[test]
+fn runner_take_pictures_none_on_stream_backend() {
+    let opened = OpenedCamera::from_device(Box::new(make_frame_only()));
+    let mut runner = CameraRunner::spawn(opened, RunnerConfig::default()).unwrap();
+    assert!(runner.take_pictures().is_none());
+    assert!(runner.take_events().is_none());
+}
+
+#[test]
+fn runner_take_frames_none_on_shutter_backend() {
+    let opened = OpenedCamera::from_device(Box::new(make_shutter_only()));
+    let mut runner = CameraRunner::spawn(opened, RunnerConfig::default()).unwrap();
+    assert!(runner.take_frames().is_none());
+    assert!(runner.take_events().is_none());
+}
+
+#[test]
+fn runner_take_events_yields_receiver_on_event_hybrid() {
+    let (hybrid, tx) = make_hybrid_with_events();
+    tx.send(CameraEvent::Disconnected).unwrap();
+    let opened = OpenedCamera::from_device(Box::new(hybrid));
+    let mut runner = CameraRunner::spawn(opened, RunnerConfig::default()).unwrap();
+    let events_rx = runner
+        .take_events()
+        .expect("hybrid with EventSource should yield events receiver");
+    assert!(runner.take_events().is_none(), "second take must be None");
+    assert!(
+        runner.events().is_none(),
+        "events() must be None after take_events()"
+    );
+    let _ev = events_rx
+        .recv_timeout(Duration::from_millis(500))
+        .expect("owned events receiver still delivers");
+}
