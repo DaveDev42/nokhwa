@@ -232,6 +232,24 @@
 
 ### Testing
 
+* **Pin `CameraRunner::spawn_hybrid` worker exit on dropped frames
+  receiver.** Symmetric pin to the stream worker variant: the hybrid
+  worker at `src/runner.rs:449-451` also exits via
+  `if frame_tx.send(buf).is_err() { break }`. The
+  `runner_hybrid_dropped_pictures_receiver_keeps_frame_stream_alive`
+  test covered the *picture*-drop asymmetry (worker keeps streaming
+  on a dropped pictures receiver), but the frames-drop arm — where
+  the hybrid worker actually does shut down — was un-pinned. A
+  regression that mirrored the picture-drop policy on this arm
+  (`let _ = frame_tx.send(buf)`) would leak the hybrid worker
+  per-runner. New test `runner_spawn_hybrid_worker_exits_on_dropped_frames_receiver`
+  installs an `EndlessHybrid` (always returns `Ok` from `frame()`),
+  drops the frames receiver, and polls `runner.set_control(...)` with
+  a 3-second deadline; once the worker exits via the receiver-drop
+  branch and drops `cmd_rx`, the runner's `cmd.send(...)` returns
+  `SendError`, flipping `set_control` from `Ok` to `Err`. Indirectly
+  exercises the hybrid worker's "tear down event thread on exit" path
+  at `src/runner.rs:459-466`.
 * **Pin `CameraRunner::spawn_stream` worker exit on dropped frames
   receiver.** `src/runner.rs:305-307` documents the receiver-drop
   shutdown — `if frame_tx.send(buf).is_err() { break }` — for the

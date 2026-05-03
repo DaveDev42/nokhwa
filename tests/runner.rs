@@ -1760,3 +1760,158 @@ fn runner_spawn_stream_worker_exits_on_dropped_frames_receiver() {
          still routes to a live worker after 3s)"
     );
 }
+
+// ──────── spawn_hybrid worker exits on dropped frames receiver ────────
+//
+// Symmetric to `runner_spawn_stream_worker_exits_on_dropped_frames_receiver`
+// but for the hybrid worker at `src/runner.rs:449-451`:
+//
+//     match cam.frame() {
+//         Ok(buf) => {
+//             // Exit if the consumer dropped the frames receiver.
+//             if frame_tx.send(buf).is_err() {
+//                 break;
+//             }
+//         }
+//         ...
+//     }
+//
+// `runner_hybrid_dropped_pictures_receiver_keeps_frame_stream_alive`
+// covers the *picture*-drop asymmetry (worker keeps streaming on a
+// dropped pictures receiver). The frames-drop arm — where the hybrid
+// worker actually does shut down — was un-pinned. A regression that
+// mirrored the picture-drop policy on this arm (`let _ = frame_tx.send(buf)`)
+// would leak the hybrid worker per-runner, with the same invisible
+// failure mode as the stream worker.
+//
+// The hybrid worker also signals the event thread to stop via
+// `ev_cmd_tx.send(())` after the main loop breaks (`src/runner.rs:459-466`),
+// so this test indirectly exercises that "frames-drop tears down both
+// threads cleanly" path too.
+
+/// Hybrid backend that always returns `Ok` from `frame()` (so the worker
+/// is always on the send path) and `Ok` from `trigger`/`take_picture`
+/// (the test never triggers, but the trait must be implementable).
+/// Mirrors `EndlessFrameSource` for the hybrid case.
+struct EndlessHybrid {
+    info: CameraInfo,
+    format: CameraFormat,
+}
+
+impl CameraDevice for EndlessHybrid {
+    fn backend(&self) -> ApiBackend {
+        ApiBackend::Browser
+    }
+    fn info(&self) -> &CameraInfo {
+        &self.info
+    }
+    fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        Ok(vec![])
+    }
+    fn set_control(
+        &mut self,
+        _id: KnownCameraControl,
+        _v: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+}
+
+impl FrameSource for EndlessHybrid {
+    fn negotiated_format(&self) -> CameraFormat {
+        self.format
+    }
+    fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
+        self.format = f;
+        Ok(())
+    }
+    fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+        Ok(vec![self.format])
+    }
+    fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
+        Ok(vec![self.format.format()])
+    }
+    fn open(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+    fn is_open(&self) -> bool {
+        true
+    }
+    fn frame(&mut self) -> Result<Buffer, NokhwaError> {
+        Ok(mock_frame(4, 4, self.format.format()))
+    }
+    fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
+        Ok(Cow::Owned(
+            mock_frame(4, 4, self.format.format()).buffer().to_vec(),
+        ))
+    }
+    fn close(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+}
+
+impl ShutterCapture for EndlessHybrid {
+    fn trigger(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+    fn take_picture(&mut self, _t: Duration) -> Result<Buffer, NokhwaError> {
+        Ok(mock_frame(4, 4, self.format.format()))
+    }
+}
+
+nokhwa_backend!(EndlessHybrid: FrameSource, ShutterCapture);
+
+#[test]
+fn runner_spawn_hybrid_worker_exits_on_dropped_frames_receiver() {
+    use nokhwa_core::types::CameraIndex;
+    use std::time::Instant;
+
+    let dev = EndlessHybrid {
+        info: CameraInfo::new(
+            "endless-hybrid",
+            "endless-hybrid",
+            "endless-hybrid",
+            CameraIndex::Index(0),
+        ),
+        format: CameraFormat::new(
+            nokhwa_core::types::Resolution::new(4, 4),
+            FrameFormat::YUYV,
+            30,
+        ),
+    };
+    let opened = OpenedCamera::from_device(Box::new(dev));
+    let mut runner = CameraRunner::spawn(opened, RunnerConfig::default()).unwrap();
+
+    // Drain one frame to confirm the worker is on the send path.
+    let rx = runner
+        .take_frames()
+        .expect("hybrid runner has frames channel");
+    rx.recv_timeout(Duration::from_millis(500))
+        .expect("hybrid frame stream not producing before frames-drop");
+
+    // Drop the frames receiver. The next iteration of the worker loop
+    // hits `frame_tx.send(buf).is_err()` and breaks.
+    drop(rx);
+
+    // Once the worker exits, `cmd_rx` drops; subsequent `cmd.send(...)`
+    // returns `SendError`, flipping `set_control` to `Err`. 3-second
+    // deadline catches a leaked hybrid worker.
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < deadline {
+        if runner
+            .set_control(
+                KnownCameraControl::Brightness,
+                ControlValueSetter::Integer(0),
+            )
+            .is_err()
+        {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    panic!(
+        "hybrid worker did not exit after dropping frames receiver — \
+         src/runner.rs:449-451 receiver-drop policy regressed (set_control \
+         still routes to a live worker after 3s)"
+    );
+}
