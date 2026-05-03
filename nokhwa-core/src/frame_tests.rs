@@ -482,6 +482,105 @@ fn yuyv_into_rgba_appends_opaque_alpha() {
     }
 }
 
+// `RgbConversion::write_to` and `RgbaConversion::write_to` are the
+// zero-copy production path — streaming pipelines that pre-allocate
+// once and reuse the buffer take this branch instead of `materialize`.
+// The `materialize` path for NV12 / YUYV is pinned just above; the
+// `write_to` path goes through `convert_to_rgb_buffer` /
+// `convert_to_rgba_buffer`, separate functions with their own
+// dest-size guard. Without these tests, a regression in the buffer
+// branch (wrong stride, wrong dest length, or quietly falling back
+// to a no-op) would slip past the materialize-only suite and silently
+// corrupt every NV12 / YUYV streaming consumer.
+
+#[test]
+fn nv12_into_rgb_write_to_neutral_chroma_produces_gray() {
+    let mut data = vec![100u8; 4];
+    data.extend_from_slice(&[128, 128]);
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::NV12);
+    let frame: Frame<Nv12> = Frame::new(buf);
+    let mut dest = vec![0u8; 2 * 2 * 3];
+    frame
+        .into_rgb()
+        .write_to(&mut dest)
+        .expect("NV12 write_to RGB");
+    for px in dest.chunks_exact(3) {
+        assert_eq!(
+            px[0], px[1],
+            "NV12 write_to RGB neutral-chroma R must equal G, got R={} G={}",
+            px[0], px[1]
+        );
+        assert_eq!(
+            px[1], px[2],
+            "NV12 write_to RGB neutral-chroma G must equal B, got G={} B={}",
+            px[1], px[2]
+        );
+    }
+}
+
+#[test]
+fn nv12_into_rgba_write_to_appends_opaque_alpha() {
+    let mut data = vec![128u8; 4];
+    data.extend_from_slice(&[128, 128]);
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::NV12);
+    let frame: Frame<Nv12> = Frame::new(buf);
+    let mut dest = vec![0u8; 2 * 2 * 4];
+    frame
+        .into_rgba()
+        .write_to(&mut dest)
+        .expect("NV12 write_to RGBA");
+    for px in dest.chunks_exact(4) {
+        assert_eq!(
+            px[3], 255,
+            "NV12 write_to RGBA alpha must be 255, got {}",
+            px[3]
+        );
+    }
+}
+
+#[test]
+fn yuyv_into_rgb_write_to_neutral_chroma_produces_gray() {
+    let data = vec![100u8, 128, 100, 128, 100, 128, 100, 128];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::YUYV);
+    let frame: Frame<Yuyv> = Frame::new(buf);
+    let mut dest = vec![0u8; 2 * 2 * 3];
+    frame
+        .into_rgb()
+        .write_to(&mut dest)
+        .expect("YUYV write_to RGB");
+    for px in dest.chunks_exact(3) {
+        assert_eq!(
+            px[0], px[1],
+            "YUYV write_to RGB neutral-chroma R must equal G, got R={} G={}",
+            px[0], px[1]
+        );
+        assert_eq!(
+            px[1], px[2],
+            "YUYV write_to RGB neutral-chroma G must equal B, got G={} B={}",
+            px[1], px[2]
+        );
+    }
+}
+
+#[test]
+fn yuyv_into_rgba_write_to_appends_opaque_alpha() {
+    let data = vec![128u8; 8];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::YUYV);
+    let frame: Frame<Yuyv> = Frame::new(buf);
+    let mut dest = vec![0u8; 2 * 2 * 4];
+    frame
+        .into_rgba()
+        .write_to(&mut dest)
+        .expect("YUYV write_to RGBA");
+    for px in dest.chunks_exact(4) {
+        assert_eq!(
+            px[3], 255,
+            "YUYV write_to RGBA alpha must be 255, got {}",
+            px[3]
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Luma conversion
 // ---------------------------------------------------------------------------
