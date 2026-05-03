@@ -122,11 +122,21 @@ declared capabilities.
   `shutter_timeout = Duration::from_millis(200)` explicitly.
 
 The vestigial `frames_capacity` / `pictures_capacity` / `events_capacity`
-/ `overflow` fields (and the `Overflow` enum) were removed because the
-underlying `std::sync::mpsc::channel` is unbounded; bounded channels +
-overflow policy are planned for 0.14. If you were constructing a
-`RunnerConfig` manually, use the `Default` impl or the three remaining
-fields.
+/ `overflow` fields (and the `Overflow` enum) were removed in 0.13.0
+because the underlying `std::sync::mpsc::channel` is unbounded.
+
+> **0.14 update.** Bounded channels and overflow policy were
+> re-introduced in 0.14.0; the four fields and the `Overflow` enum are
+> back on `RunnerConfig` with `frames_capacity = 4`,
+> `pictures_capacity = 8`, `events_capacity = 32`, and
+> `overflow = Overflow::DropNewest` as defaults. Set any capacity to
+> `0` to opt back into 0.13-style unbounded behaviour. See
+> [MIGRATING-0.14.md](./MIGRATING-0.14.md#bounded-runner-channels) for
+> details.
+
+If you were constructing a `RunnerConfig` manually under 0.13.0, use
+the `Default` impl or the three remaining fields above; the additional
+0.14 fields also default sensibly.
 
 ## Opening a camera (post-0.13.0 cleanup)
 
