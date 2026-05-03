@@ -232,6 +232,20 @@
 
 ### Testing
 
+* **Pin `backend: None` on remaining `GeneralError` test patterns.**
+  Four call sites destructured `GeneralError { message, .. }` with a
+  wildcard for the `backend` field:
+  `nokhwa-core/src/wgpu.rs:247` (`mjpeg_is_rejected_with_general_error`)
+  and three sibling shutter-capture failure-mode tests at
+  `nokhwa-core/src/traits_tests.rs:255,274,296`. Every error in these
+  sites is built via `NokhwaError::general(...)`
+  (`nokhwa-core/src/error.rs:81-86`, `wgpu.rs:121`,
+  `traits_tests.rs:209,223,230`), which always sets `backend: None`. A
+  refactor that re-routes through a backend-tagged constructor (e.g.
+  `GeneralError { backend: Some(ApiBackend::Wgpu), .. }`) would
+  silently change the public-API error shape and the log-grep target,
+  but the wildcard `..` would let it slip past. Pin all four to the
+  full `{ message, backend: None }` shape.
 * **Pin hotplug second-take variant + payload across MSMF / V4L /
   AVFoundation device tests; remove redundant `is_err()`-only frame
   test.** Three sibling integration tests at

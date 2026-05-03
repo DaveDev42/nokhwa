@@ -251,9 +251,20 @@ fn shutter_capture_lock_failure_short_circuits_before_trigger_and_unlock() {
         ..Default::default()
     });
     let r = s.capture(Duration::ZERO);
+    // The `Scripted` fake at `traits_tests.rs:209` produces the error via
+    // `NokhwaError::general("lock-failed")`, which always sets
+    // `backend: None`. Pin both the message AND the absent backend so a
+    // future refactor that reroutes through a backend-tagged constructor
+    // (e.g. `GeneralError { backend: Some(...), .. }`) — silently changing
+    // the public API shape and the log-grep target — is caught instead of
+    // slipping past the `..` wildcard.
     assert!(
-        matches!(&r, Err(NokhwaError::GeneralError { message, .. }) if message == "lock-failed"),
-        "expected the lock-failed error to bubble out, got {r:?}",
+        matches!(
+            &r,
+            Err(NokhwaError::GeneralError { message, backend })
+                if message == "lock-failed" && backend.is_none()
+        ),
+        "expected GeneralError {{ message: \"lock-failed\", backend: None }}, got {r:?}",
     );
     let log = s.script.log.borrow();
     assert_eq!(
@@ -271,8 +282,12 @@ fn shutter_capture_trigger_failure_skips_take_but_still_runs_unlock() {
     });
     let r = s.capture(Duration::ZERO);
     assert!(
-        matches!(&r, Err(NokhwaError::GeneralError { message, .. }) if message == "trigger-failed"),
-        "expected the trigger-failed error to bubble out, got {r:?}",
+        matches!(
+            &r,
+            Err(NokhwaError::GeneralError { message, backend })
+                if message == "trigger-failed" && backend.is_none()
+        ),
+        "expected GeneralError {{ message: \"trigger-failed\", backend: None }}, got {r:?}",
     );
     let log = s.script.log.borrow();
     assert_eq!(
@@ -293,9 +308,14 @@ fn shutter_capture_take_failure_returns_take_error_and_runs_unlock() {
     });
     let r = s.capture(Duration::ZERO);
     assert!(
-        matches!(&r, Err(NokhwaError::GeneralError { message, .. }) if message == "take-failed"),
-        "take_picture's error must be the one returned, never \
-         unlock_ui's; got {r:?}",
+        matches!(
+            &r,
+            Err(NokhwaError::GeneralError { message, backend })
+                if message == "take-failed" && backend.is_none()
+        ),
+        "expected GeneralError {{ message: \"take-failed\", backend: None }}; \
+         take_picture's error must be the one returned, never unlock_ui's; \
+         got {r:?}",
     );
     let log = s.script.log.borrow();
     assert_eq!(
