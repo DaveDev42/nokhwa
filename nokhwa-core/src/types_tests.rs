@@ -11,6 +11,20 @@ fn resolution_new() {
     assert_eq!(res.height_y, 1080);
 }
 
+// `Resolution` derives `Default`, which initialises both fields to
+// `0` (`u32::default()`). No test currently exercises this — a
+// hand-written `impl Default for Resolution` introduced later with
+// a tempting "useful default" like `640x480` would silently change
+// the value seen by any consumer pre-allocating metadata before the
+// first frame arrives (and by `CameraFormat::default()`, which
+// composes `Resolution::default()`). Pin the contract.
+#[test]
+fn resolution_default_is_zero_zero() {
+    let r = Resolution::default();
+    assert_eq!(r.width(), 0);
+    assert_eq!(r.height(), 0);
+}
+
 // `Resolution::Display` emits `"{w}x{h}"` (e.g. `"640x480"`).
 // Previously this test used `contains("640")` + `contains("480")`,
 // which would silently pass after a refactor that flipped the
@@ -2410,6 +2424,25 @@ fn requested_format_type_display_matches_debug_all_remaining_variants() {
     let closest =
         RequestedFormatType::Closest(CameraFormat::new_from(1280, 720, FrameFormat::YUYV, 30));
     assert_eq!(closest.to_string(), format!("{closest:?}"));
+}
+
+// `RequestedFormatType` carries a `#[default]` attribute on the
+// `None` variant (`nokhwa-core/src/types.rs:34`). No test currently
+// constructs `RequestedFormatType::default()` and asserts the chosen
+// variant — every existing usage names the variant explicitly. A
+// well-meaning refactor that moved `#[default]` to e.g.
+// `AbsoluteHighestResolution` (under the rationale "users probably
+// want highest-res by default") would silently change what
+// `RequestedFormat::new::<F>(Default::default())` returns, breaking
+// any downstream code that relied on the no-op None default to mean
+// "negotiate later". Pin the chosen default variant.
+#[test]
+fn requested_format_type_default_is_none() {
+    assert_eq!(
+        RequestedFormatType::default(),
+        RequestedFormatType::None,
+        "#[default] must remain on the None variant"
+    );
 }
 
 // `requested_format_type_display_matches_debug_all_remaining_variants`
