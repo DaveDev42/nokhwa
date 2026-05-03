@@ -114,6 +114,25 @@
 
 ### Refactoring
 
+* **V4L `get_device_format` extracts a pure
+  `interval_to_fps(v4l::Fraction) -> Result<u32, NokhwaError>`
+  helper and drops a dead branch.** The inline
+  `params.interval` → fps decode in
+  `nokhwa-bindings-linux-v4l/src/lib.rs::get_device_format` carried
+  a contradictory pair of clauses: the upstream guard
+  `numerator != 1 || denominator % numerator != 0` rejected
+  everything except `numerator == 1`, but the inner `if
+  params.interval.numerator == 1 { … } else { denom / num }`
+  branched on a condition that was already proven true — the
+  `else` body was unreachable. Centralised into a pure
+  `interval_to_fps` helper, dropped the dead `else`, and pinned
+  5 branches: `{1, 30}` happy path, `{1, 60}` orientation lock
+  (returns the *denominator*, not the numerator — opposite of
+  MSMF/AVF), `{1001, 30000}` NTSC fractional rejection, `{2, 60}`
+  unreduced-form rejection (regression-test against accidental
+  resurrection of the dead branch), `{0, 30}` zero-numerator
+  rejection (no modulo-by-zero risk). Tests run on the `Core unit
+  tests` Linux CI job via `cargo test -p nokhwa-bindings-linux-v4l`.
 * **MSMF `MF_MT_FRAME_SIZE` decode centralised in a pure
   `parse_frame_size(packed: u64) -> (u32, u32)` helper.** The two
   call sites — `parse_native_media_types` and `format_refreshed` —

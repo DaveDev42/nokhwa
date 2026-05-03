@@ -201,25 +201,7 @@ mod internal {
                     })?;
 
                 let fps = match device.params() {
-                    Ok(params) => {
-                        if params.interval.numerator != 1
-                            || params.interval.denominator % params.interval.numerator != 0
-                        {
-                            return Err(NokhwaError::GetPropertyError {
-                                property: "V4L2 FrameRate".to_string(),
-                                error: format!(
-                                    "Framerate not whole number: {} / {}",
-                                    params.interval.denominator, params.interval.numerator
-                                ),
-                            });
-                        }
-
-                        if params.interval.numerator == 1 {
-                            params.interval.denominator
-                        } else {
-                            params.interval.denominator / params.interval.numerator
-                        }
-                    }
+                    Ok(params) => interval_to_fps(params.interval)?,
                     Err(why) => {
                         return Err(NokhwaError::GetPropertyError {
                             property: "V4L2 FrameRate".to_string(),
@@ -1008,6 +990,35 @@ mod internal {
         push_unique(out, Resolution::new(max_w, max_h));
     }
 
+    /// Decode a V4L2 `Fraction` representing *seconds per frame* into
+    /// integer frames per second.
+    ///
+    /// V4L2's `v4l2_fract` (`StreamParams::interval`) carries the
+    /// frame interval (period) as `numerator / denominator` seconds.
+    /// 30 fps is therefore the standard form `{1, 30}`. We accept
+    /// only `numerator == 1` and return the denominator as `u32`
+    /// fps. Anything else — fractional rates the [`CameraFormat`]
+    /// surface cannot represent (e.g. `{1001, 30000}` for NTSC's
+    /// 29.97 fps), or unreduced forms like `{2, 60}` — surfaces as
+    /// `Err(NokhwaError::GetPropertyError)`.
+    ///
+    /// Split out from [`get_device_format`] so the contract can be
+    /// pinned without a real `v4l::Device`. The previous inline
+    /// shape carried a dead `else` branch that the upstream
+    /// `numerator != 1` guard made unreachable.
+    fn interval_to_fps(interval: v4l::Fraction) -> Result<u32, NokhwaError> {
+        if interval.numerator != 1 {
+            return Err(NokhwaError::GetPropertyError {
+                property: "V4L2 FrameRate".to_string(),
+                error: format!(
+                    "Framerate not whole number: {} / {}",
+                    interval.denominator, interval.numerator
+                ),
+            });
+        }
+        Ok(interval.denominator)
+    }
+
     /// Convert a V4L2 `CLOCK_MONOTONIC` timestamp to a wallclock Duration since `UNIX_EPOCH`.
     fn monotonic_to_wallclock(ts: v4l::Timestamp) -> Option<std::time::Duration> {
         let frame_mono = std::time::Duration::from(ts);
@@ -1040,8 +1051,8 @@ mod internal {
     mod tests {
         use super::{
             expand_stepwise_resolutions, fourcc_to_frameformat, frameformat_to_fourcc,
-            id_to_known_camera_control, known_camera_control_to_id, monotonic_to_wallclock,
-            FrameFormat, KnownCameraControl, Resolution, V4L2_CONTROL_IDS,
+            id_to_known_camera_control, interval_to_fps, known_camera_control_to_id,
+            monotonic_to_wallclock, FrameFormat, KnownCameraControl, Resolution, V4L2_CONTROL_IDS,
         };
         use v4l::v4l_sys::{
             V4L2_CID_BACKLIGHT_COMPENSATION, V4L2_CID_BRIGHTNESS, V4L2_CID_CONTRAST,
@@ -1319,6 +1330,66 @@ mod internal {
             }
             // Spot-check the FrameFormat import is what we expect.
             let _ = FrameFormat::MJPEG;
+        }
+
+        /// Canonical V4L2 standard form: `numerator == 1` →
+        /// `denominator` is the integer fps. Pin the happy path
+        /// (`{1, 30}` → 30) so a future "round to nearest fps" tweak
+        /// cannot silently smuggle in fractional rates that
+        /// `CameraFormat`'s `u32` fps cannot honour.
+        #[test]
+        fn interval_to_fps_one_over_thirty_returns_thirty() {
+            let interval = v4l::Fraction::new(1, 30);
+            assert_eq!(interval_to_fps(interval).unwrap(), 30);
+        }
+
+        /// V4L2 reports `time-per-frame`, so `{1, 60}` → 60 fps.
+        /// Pin a second whole-fps form to lock that the helper
+        /// returns the *denominator*, not the numerator (the
+        /// MSMF/AVF frame-rate helpers go the other way). A
+        /// regression of this orientation would surface every
+        /// camera as 1 fps.
+        #[test]
+        fn interval_to_fps_one_over_sixty_returns_sixty() {
+            let interval = v4l::Fraction::new(1, 60);
+            assert_eq!(interval_to_fps(interval).unwrap(), 60);
+        }
+
+        /// `{1001, 30000}` is the V4L2 form of NTSC's 29.97 fps.
+        /// `CameraFormat` cannot represent fractional rates as
+        /// `u32`, so the helper rejects rather than silently
+        /// rounding to 30 fps. Mirrors the same policy
+        /// `parse_frame_rate_fraction` enforces in MSMF and
+        /// `fraction_to_fps` enforces in `GStreamer`.
+        #[test]
+        fn interval_to_fps_ntsc_fractional_form_errors() {
+            let interval = v4l::Fraction::new(1001, 30_000);
+            assert!(interval_to_fps(interval).is_err());
+        }
+
+        /// Unreduced whole-fps form `{2, 60}` (= 30 fps) is still
+        /// rejected. V4L2 drivers normalise to numerator==1 in
+        /// practice, and the previous inline shape carried a dead
+        /// `{2, 60} → 30` branch that the upstream guard kept
+        /// unreachable. Pin the rejection so a future relaxation
+        /// is a deliberate API change rather than an accidental
+        /// resurrection of the dead branch.
+        #[test]
+        fn interval_to_fps_unreduced_form_errors() {
+            let interval = v4l::Fraction::new(2, 60);
+            assert!(interval_to_fps(interval).is_err());
+        }
+
+        /// `numerator == 0` (degenerate driver output) must error
+        /// rather than panicking via `denominator % 0` (which the
+        /// previous inline shape's second clause would have done
+        /// if the OR's left operand had not short-circuited).
+        /// Helper hits the `numerator != 1` arm first, so no
+        /// modulo-by-zero risk exists, but pin it explicitly.
+        #[test]
+        fn interval_to_fps_zero_numerator_errors() {
+            let interval = v4l::Fraction::new(0, 30);
+            assert!(interval_to_fps(interval).is_err());
         }
     }
 }
