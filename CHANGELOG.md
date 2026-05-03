@@ -220,6 +220,28 @@
 
 ### Testing
 
+* **Pin `CameraRunner` end-to-end `Overflow` policy wiring.**
+  `make_channel(capacity, policy)` is unit-tested directly in
+  `src/runner.rs`, but the full path from `CameraRunner::spawn(opened,
+  RunnerConfig { overflow, frames_capacity, .. })` through the worker
+  thread to the user-facing `Receiver<Buffer>` had no E2E coverage. A
+  regression that hard-coded a single policy in `spawn`, swapped a
+  pair of capacity / policy arguments, or forgot to wire the relay
+  thread for `DropOldest` would silently degrade the policy without
+  failing any test. Added a `make_sequenced_frame_source(count)`
+  helper that pushes finite sequenced frames (first byte = sequence
+  number) into a `MockFrameSource`, plus two tests:
+  - `runner_overflow_block_delivers_every_frame_in_order` — pins the
+    `Block` policy: with `frames_capacity = 1` and 4 finite frames,
+    every frame must arrive in `[0,1,2,3]` order. A regression that
+    swapped Block for DropOldest / DropNewest loses frames.
+  - `runner_overflow_drop_oldest_preserves_order_and_keeps_latest_frame`
+    — pins two `DropOldest` invariants: (a) strictly monotonic
+    sequence numbers in the receiver (DropOldest never reorders), and
+    (b) the highest-sequence frame is always observable at the tail
+    (DropOldest evicts the front to make room for newer items).
+    Doesn't depend on exact survivor counts, only on the ordering +
+    last-frame contract — robust against worker-thread timing jitter.
 * **Pin `HybridCamera::from_device` `EventSource` init-failure
   normalisation.** `src/session.rs:447–460` swallows
   `EventSource::take_events` errors during construction and surfaces
