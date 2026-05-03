@@ -232,6 +232,21 @@
 
 ### Testing
 
+* **Pin variant + message on `camera_index_try_from_{u32,usize}_non_numeric_string_errs`.**
+  Both tests at `nokhwa-core/src/types_tests.rs:1885` and `:1903`
+  exercised `TryFrom<CameraIndex> for u32` / `for usize`
+  (`types.rs:361,369`), which delegate to `CameraIndex::as_index`
+  (`types.rs:315-322`) and forward `ParseIntError` through
+  `NokhwaError::general` — but the assertions were `is_err()` only.
+  A regression that rerouted the helper to `StructureError`,
+  attached an `ApiBackend` tag where there should be `None`, or
+  wrapped the inner `ParseIntError` in extra prose would have
+  silently passed while breaking any downstream log scraper or
+  caller that pattern-matches on the `GeneralError` variant. Pin
+  both to `GeneralError { message: "invalid digit found in string",
+  backend: None }`. Both call paths share the same constructor so
+  the pinned shape is identical; the message is `ParseIntError`'s
+  stable libstd Display string forwarded verbatim.
 * **Pin variant + src + destination on `mjpeg_malformed_returns_error`
   and `mjpeg_empty_returns_error`.** Both tests at `frame_tests.rs:1346`
   and `:1356` previously checked only `is_err()` — a regression that
