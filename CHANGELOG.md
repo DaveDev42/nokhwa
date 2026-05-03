@@ -187,6 +187,24 @@
 
 ### Testing
 
+* **Cover `CameraRunner::stop()` and the `take_*` channel-handoff
+  methods in `tests/runner.rs`.** `stop()` is the graceful-shutdown
+  path — it sends `Command::Die`, drops all channel receivers, and
+  joins the worker + relay threads. The `take_frames()` /
+  `take_pictures()` / `take_events()` methods transfer channel
+  ownership out of the runner so a caller can hold the receiver past
+  the runner's lifetime. Both surfaces appeared only in example code
+  and one hardware-gated `#![cfg(feature = "device-test")]` test, so
+  they were entirely uncovered under mock/unit testing. A regression
+  in `stop()` (e.g. a refactor that no-ops the `Die` send or drops
+  channels in the wrong order, deadlocking `Overflow::Block`) would
+  leak threads silently. Eight new tests pin: `stop()` returns
+  `Ok(())` on stream / shutter / hybrid backends; `take_*` returns
+  `Some` on first call and `None` on the second; `take_*` returns
+  `None` when the corresponding capability is missing
+  (`take_frames` on shutter-only, `take_pictures` on stream-only,
+  `take_events` on non-event hybrids); the owned receiver still
+  delivers data after the take.
 * **Pin `RunnerConfig::default()` and `Overflow::default()` field
   values in `tests/runner.rs`.** The seven public defaults
   (`poll_interval=10ms`, `event_tick=50ms`, `shutter_timeout=5s`,
