@@ -703,6 +703,39 @@ fn stream_camera_reopen_after_close() {
     cam.close().expect("second StreamCamera::close");
 }
 
+/// Calling `close()` twice in a row must be a safe no-op on the
+/// second call: every native backend handles this differently
+/// internally — V4L2 drops a `Some(stream_handle)` to `None` on the
+/// first call and then short-circuits on the next, MSMF calls
+/// `stop_stream()` (already a fire-and-forget sink), and
+/// AVFoundation explicitly guards with `if !self.is_open() { return
+/// Ok(()); }`. A regression in any one of those guards would surface
+/// as a panic, an `Err` from a freshly-released session, or an
+/// `is_open()` that flips back to `true` after the second close.
+/// Pin all three observable invariants here.
+#[test]
+fn stream_camera_double_close_is_idempotent() {
+    let OpenedCamera::Stream(mut cam) = open_first() else {
+        eprintln!(
+            "stream_camera_double_close_is_idempotent: backend is not Stream-capable; skipping."
+        );
+        return;
+    };
+    cam.open().expect("StreamCamera::open");
+    let _ = cam.frame().expect("frame() before first close");
+    cam.close().expect("first StreamCamera::close");
+    assert!(
+        !cam.is_open(),
+        "is_open() must be false after the first close()"
+    );
+    cam.close()
+        .expect("second StreamCamera::close must be Ok (idempotent contract)");
+    assert!(
+        !cam.is_open(),
+        "is_open() must remain false after a redundant close()"
+    );
+}
+
 /// `compatible_formats()` must not duplicate entries. The
 /// per-backend enumerators sometimes emit the same `(resolution,
 /// frame_format, frame_rate)` tuple twice when the underlying API

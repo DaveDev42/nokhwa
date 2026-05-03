@@ -289,6 +289,20 @@
 
 ### Testing
 
+* **Pin double-`close()` idempotency contract in
+  `tests/device_tests.rs`.** New
+  `stream_camera_double_close_is_idempotent` verifies the contract
+  every native backend already silently honors but no test was
+  enforcing: a redundant second `close()` returns `Ok(())` and
+  `is_open()` stays `false`. The three native backends each rely on a
+  different guard (V4L2 short-circuits on the second call once
+  `stream_handle` is `None`, MSMF leans on `stop_stream()` being a
+  no-op when called twice, AVFoundation explicitly does
+  `if !self.is_open() { return Ok(()); }`), so a regression in any
+  one of them would surface as a panic, a spurious `Err`, or an
+  `is_open()` that flips back to `true` after the second close. Pins
+  all three observable invariants. Compile-verified under
+  `input-v4l`; runtime verification gated on `device-test`.
 * **Pin `Display` strings on two `nokhwa-bindings-gstreamer` stub /
   unsupported tests.** `stub_query_errors_cleanly`
   (`nokhwa-bindings-gstreamer/src/lib.rs:648`) and
