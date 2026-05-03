@@ -376,13 +376,21 @@ mod tests {
 
     #[test]
     fn resolve_format_empty_candidates_errors_with_open_device() {
+        // Pin the error string verbatim. Previously this used
+        // `.contains("no compatible formats")` which would still pass
+        // if a future refactor expanded the message to include extra
+        // context (e.g. `"no compatible formats; got 0 candidates"`)
+        // — that drift would silently invalidate downstream tests
+        // that quote the canonical wording, and would diverge the
+        // GStreamer message from the V4L / MSMF / AVFoundation paths
+        // that callers may switch on by string content.
         let req =
             RequestedFormat::with_formats(RequestedFormatType::AbsoluteHighestResolution, &[]);
         let err = resolve_format(&[], &req).unwrap_err();
         match err {
             NokhwaError::OpenDeviceError { device, error } => {
                 assert_eq!(device, "GStreamer device");
-                assert!(error.contains("no compatible formats"));
+                assert_eq!(error, "no compatible formats");
             }
             other => panic!("expected OpenDeviceError, got {other:?}"),
         }
@@ -392,7 +400,26 @@ mod tests {
     fn resolve_format_no_matching_format_errors() {
         // Candidates only carry MJPEG, but the request only accepts YUYV
         // — `fulfill` returns None and `resolve_format` must surface an
-        // OpenDeviceError mentioning the candidates.
+        // OpenDeviceError that includes the candidate list verbatim.
+        //
+        // The previous version checked
+        // `error.contains("no format in the device's caps satisfied the
+        // request")` and `error.contains("MJPEG")`. Both could pass
+        // even after meaningful regressions:
+        //   - rewording "satisfied the request" → "matched the request"
+        //     (or any subtler tweak) would only break consumers who
+        //     quote the canonical phrase, and `contains("MJPEG")`
+        //     still trivially holds because every candidate prints its
+        //     `FrameFormat` Debug;
+        //   - swapping the `{candidates:?}` interpolation for a
+        //     summary like `"{} candidates"`.len()` (a refactor that
+        //     would superficially "shorten the message") would still
+        //     drop the user's diagnostic — but `contains("MJPEG")`
+        //     would fire only if the count format was lucky.
+        // Pin the exact prefix `"no format in the device's caps
+        // satisfied the request: "` and verify the suffix is the
+        // `Debug` form of the `candidates` slice — that's the
+        // documented contract: `format!("…: {candidates:?}")`.
         let candidates = [
             fmt(640, 480, FrameFormat::MJPEG, 30),
             fmt(1280, 720, FrameFormat::MJPEG, 30),
@@ -405,13 +432,9 @@ mod tests {
         match err {
             NokhwaError::OpenDeviceError { device, error } => {
                 assert_eq!(device, "GStreamer device");
-                assert!(
-                    error.contains("no format in the device's caps satisfied the request"),
-                    "wrong message: {error}"
-                );
-                // Both candidates appear in the error so the user can
-                // diagnose the mismatch without re-querying the device.
-                assert!(error.contains("MJPEG"), "candidates missing: {error}");
+                let expected =
+                    format!("no format in the device's caps satisfied the request: {candidates:?}");
+                assert_eq!(error, expected);
             }
             other => panic!("expected OpenDeviceError, got {other:?}"),
         }
