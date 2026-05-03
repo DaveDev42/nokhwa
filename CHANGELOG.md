@@ -301,6 +301,20 @@
 
 ### Testing
 
+* **Pin every `query()` result has a non-empty `human_name()` in
+  `tests/device_tests.rs`.** New `query_results_have_non_empty_human_names`
+  walks the entire enumeration result and asserts `human_name()` is
+  non-empty for each entry. The single-opened-camera path is already
+  pinned (`opened_camera_info_and_backend_reflect_request` and
+  `open_info_matches_query_for_same_index`), but those only cover
+  the device that gets opened — a regression in any backend's
+  enumerator that emitted a blank name for a *different* (un-opened)
+  entry (V4L2 reading an empty `card` field, MSMF
+  `IMFAttributes::MF_FRIENDLY_NAME` returning an empty BSTR for a
+  freshly-plugged device, AVFoundation's `localizedName` racing the
+  device-add notification) would slip past every existing test and
+  surface as a confusing blank row in `nokhwactl list-devices` and
+  downstream UI pickers.
 * **Pin `OpenedCamera::info()` matches `query()` for the same
   index in `tests/device_tests.rs`.** New
   `open_info_matches_query_for_same_index` asserts both `index()`
