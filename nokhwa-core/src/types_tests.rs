@@ -1801,9 +1801,26 @@ fn control_value_description_value_extraction_all_variants() {
 
 #[test]
 fn frame_format_parse_invalid_returns_error() {
-    assert!("INVALID".parse::<FrameFormat>().is_err());
-    assert!("".parse::<FrameFormat>().is_err());
-    assert!("mjpeg".parse::<FrameFormat>().is_err()); // case-sensitive
+    // `FrameFormat::FromStr` (`types.rs:418-435`) emits
+    // `StructureError { structure: "FrameFormat", error: "No match for {s}" }`
+    // on every reject path — including the empty-string and
+    // wrong-case branches. The previous `is_err()` triplet would
+    // pass even if the variant changed (e.g. to `GeneralError`)
+    // or the prefix dropped (`{s}` vs `"No match for {s}"`),
+    // both of which would silently break log scrapers and any
+    // caller pattern-matching the `StructureError` variant.
+    for token in ["INVALID", "", "mjpeg"] {
+        let err = token
+            .parse::<FrameFormat>()
+            .expect_err("invalid token must err");
+        match err {
+            NokhwaError::StructureError { structure, error } => {
+                assert_eq!(structure, "FrameFormat");
+                assert_eq!(error, format!("No match for {token}"));
+            }
+            other => panic!("expected StructureError for {token:?}, got {other:?}"),
+        }
+    }
 }
 
 #[test]
@@ -1819,8 +1836,24 @@ fn frame_format_rawbgr_display_parse() {
 
 #[test]
 fn camera_index_as_index_returns_err_for_string() {
+    // `CameraIndex::as_index` (`types.rs:315-322`) maps `ParseIntError`
+    // through `NokhwaError::general`, producing `GeneralError` with no
+    // backend tag and a message that's the verbatim libstd
+    // `ParseIntError::Display`. Pin both — drift on either would slip
+    // past `is_err()` but break any caller pattern-matching the
+    // variant or scraping the message.
     let idx = CameraIndex::String("test".to_string());
-    assert!(idx.as_index().is_err());
+    let err = idx.as_index().expect_err("non-numeric String should err");
+    match err {
+        NokhwaError::GeneralError { message, backend } => {
+            assert_eq!(message, "invalid digit found in string");
+            assert!(
+                backend.is_none(),
+                "expected no backend tag, got {backend:?}"
+            );
+        }
+        other => panic!("expected GeneralError, got {other:?}"),
+    }
 }
 
 // `CameraIndex::Display` delegates to `as_string()`, which emits the
@@ -2095,11 +2128,23 @@ fn frame_format_from_str_unknown_returns_structure_error() {
 
 #[test]
 fn frame_format_from_str_is_case_sensitive() {
-    // "mjpeg" (lowercase) must NOT parse — pin this so a future
-    // "be lenient" tweak is a deliberate, reviewed change rather
-    // than silent surface drift.
-    assert!("mjpeg".parse::<FrameFormat>().is_err());
-    assert!("Mjpeg".parse::<FrameFormat>().is_err());
+    // "mjpeg" / "Mjpeg" (any non-uppercase) must NOT parse — pin this
+    // so a future "be lenient" tweak is a deliberate, reviewed change
+    // rather than silent surface drift. Pin the full variant so a
+    // regression that swapped to `GeneralError` (or split the case-
+    // sensitivity branch into a separate error type) is also caught.
+    for token in ["mjpeg", "Mjpeg"] {
+        let err = token
+            .parse::<FrameFormat>()
+            .expect_err("non-uppercase must err");
+        match err {
+            NokhwaError::StructureError { structure, error } => {
+                assert_eq!(structure, "FrameFormat");
+                assert_eq!(error, format!("No match for {token}"));
+            }
+            other => panic!("expected StructureError for {token:?}, got {other:?}"),
+        }
+    }
 }
 
 #[test]
@@ -2107,7 +2152,20 @@ fn frame_format_from_str_distinguished_from_fourcc() {
     // "MJPG" is a valid FourCC but NOT a valid FromStr token, and
     // "MJPEG" is a valid FromStr token but NOT a valid FourCC.
     // Pin the asymmetry to catch a future merge of the two tables.
-    assert!("MJPG".parse::<FrameFormat>().is_err());
+    // For the FromStr-rejects "MJPG" pin the full variant so a regression
+    // that quietly merges the two parse tables is caught at the variant
+    // level (an empty `Ok(MJPEG)` would obviously fail; a reroute of
+    // the error to a different variant would slip past `is_err()`).
+    let err = "MJPG"
+        .parse::<FrameFormat>()
+        .expect_err("MJPG must NOT FromStr-parse");
+    match err {
+        NokhwaError::StructureError { structure, error } => {
+            assert_eq!(structure, "FrameFormat");
+            assert_eq!(error, "No match for MJPG");
+        }
+        other => panic!("expected StructureError, got {other:?}"),
+    }
     assert_eq!(FrameFormat::from_fourcc("MJPEG"), None);
     assert_eq!(
         "MJPEG".parse::<FrameFormat>().ok(),

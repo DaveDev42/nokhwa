@@ -232,6 +232,27 @@
 
 ### Testing
 
+* **Pin `FrameFormat::FromStr` error variant on every remaining
+  `is_err()`-only test.** Four call sites in
+  `nokhwa-core/src/types_tests.rs`
+  (`frame_format_parse_invalid_returns_error:1803`,
+  `camera_index_as_index_returns_err_for_string:1821`,
+  `frame_format_from_str_is_case_sensitive:2097`, and the
+  `MJPG`-rejects branch of
+  `frame_format_from_str_distinguished_from_fourcc:2110`) plus
+  `tests/format_tests.rs:32` (the public-API re-export sanity check)
+  exercised the `FromStr` reject path or `CameraIndex::as_index` on a
+  non-numeric `String`, but only verified `is_err()`. The `FromStr`
+  impl (`types.rs:418-435`) emits `StructureError { structure:
+  "FrameFormat", error: "No match for {s}" }`; `as_index`
+  (`types.rs:315-322`) emits `GeneralError { message: <ParseIntError>,
+  backend: None }`. A regression that rerouted either to a different
+  variant, dropped the `"No match for "` prefix, or attached a
+  spurious `ApiBackend` tag would slip past `is_err()` while breaking
+  every downstream log scraper. Pin all five sites to the full
+  variant + field shape (the `MJPG` case explicitly pins the
+  cross-table separation with `FromStr` failing while `from_fourcc`
+  succeeds). Net 0 test-count delta — pure tightening.
 * **Pin variant + message on `camera_index_try_from_{u32,usize}_non_numeric_string_errs`.**
   Both tests at `nokhwa-core/src/types_tests.rs:1885` and `:1903`
   exercised `TryFrom<CameraIndex> for u32` / `for usize`
