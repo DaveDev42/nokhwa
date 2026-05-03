@@ -187,6 +187,30 @@
 
 ### Testing
 
+* **Replace `nokhwa-tokio` link-only integration test with
+  end-to-end `TokioCameraRunner` coverage on a fake camera.**
+  `nokhwa-tokio/tests/drop_semantics.rs` was a single 11-line
+  link-check with a `// True drop semantics need a
+  cross-platform fake OpenedCamera, which does not exist yet`
+  comment. That comment is now stale —
+  `nokhwa_core::testing::MockFrameSource` plus the
+  `nokhwa_backend!` macro provide exactly that fixture. Five new
+  `#[tokio::test(flavor = "current_thread")]` integration tests
+  drive `TokioCameraRunner::spawn` end-to-end against a
+  cross-platform `FrameOnly(MockFrameSource)` newtype: (a) a
+  stream-only camera yields frames through the async receiver
+  with `pictures_mut()` / `events_mut()` returning `None`; (b)
+  `stop().await` on an idle runner returns `Ok`; (c) `Drop`
+  after explicit `stop` is a no-op (catches a regression that
+  unwraps `inner` instead of `take`-ing); (d) `Drop` *without*
+  explicit `stop` inside a tokio runtime queues
+  `spawn_blocking` and yields without deadlocking; (e)
+  `trigger()` and `set_control()` are documented no-op-`Ok` on
+  a stream-only backend. Existing `library_links_under_tokio_runtime`
+  retained as a build-only canary. The local `FrameOnly`
+  newtype mirrors the orphan-rule shim used in
+  `nokhwa/tests/session.rs`.
+
 * **Pin derive surface and `CaptureFormat` super-trait bound on
   every marker ZST in `nokhwa-core::format_types`.** The six
   marker ZSTs (`Yuyv`, `Nv12`, `Mjpeg`, `Gray`, `RawRgb`,
