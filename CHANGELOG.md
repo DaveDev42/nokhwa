@@ -203,6 +203,27 @@
 
 ### Testing
 
+* **Pin the off-Linux V4L stub contract.** Mirror PR for the V4L
+  binding crate. The non-Linux compile-shim impls of `CameraDevice`
+  / `FrameSource` for `V4LCaptureDevice` (in
+  `nokhwa-bindings-linux-v4l/src/lib.rs::internal`) had no test
+  coverage — exactly the gap that the off-Windows MSMF stub had
+  before its companion PR pinned it. The earlier bug fix that
+  replaced `todo!()` panics on every method (CHANGELOG entry
+  "V4L non-Linux stub `V4LCaptureDevice` panicked via `todo!()` on
+  every trait method") was only enforced by code review. Added a
+  `#[cfg(test)] mod tests` inside the `internal` module with 9
+  unit tests pinning each branch of the contract: `new()` errors,
+  `force_refresh_camera_format()` errors, `is_open() == false`,
+  `backend() == ApiBackend::Video4Linux`,
+  `known_camera_control_to_id() == 0` /
+  `id_to_known_camera_control(id) == Other(id)`, every fallible
+  `CameraDevice` / `FrameSource` method returns
+  `NotImplementedError`, and `info()` / `negotiated_format()`
+  panic via `stub_unreachable()` (locked in with
+  `#[should_panic(expected = ...)]`). Compiles only off-Linux;
+  exercised in the new `Test Core & Features → V4L stub unit
+  tests` matrix on `windows-latest` and `macos-latest`.
 * **Pin the off-Windows MSMF stub contract.** The non-Windows compile-
   shim impls of `CameraDevice` / `FrameSource` for
   `MediaFoundationCaptureDevice` (in
@@ -1459,6 +1480,17 @@
 
 ### Infrastructure
 
+* **Run `nokhwa-bindings-linux-v4l` unit tests on non-Linux hosts.**
+  The off-Linux `internal` stub module (`#[cfg(not(target_os =
+  "linux"))]`) compiled but stayed untested everywhere — the V4L
+  test step in `Core unit tests` runs on `ubuntu-latest`, where
+  the real V4L2 path is active and the stub block is gated out.
+  Added a `test-v4l-non-linux` matrix job in `Test Core &
+  Features` that runs `cargo test -p nokhwa-bindings-linux-v4l`
+  on `windows-latest` and `macos-latest` so the stub contract
+  tests added in this release actually execute. Cross-checked
+  locally with `cargo check --target x86_64-pc-windows-msvc` to
+  catch path issues before CI.
 * **Run `nokhwa-bindings-windows-msmf` unit tests on a Windows
   host.** The previous PR ran the crate's tests on `ubuntu-latest`
   to exercise the off-Windows `stub` module, but the 9 GUID/parser

@@ -56,6 +56,27 @@ jobs:
       # ship to `main`.
       - run: cargo test -p nokhwa-bindings-windows-msmf
 
+  # Runs `nokhwa-bindings-linux-v4l` unit tests on non-Linux hosts so the
+  # off-Linux `internal` stub module — gated on `#[cfg(not(target_os =
+  # "linux"))]` — actually executes its 9 contract tests. Linux is where
+  # the real V4L2 path is active, so the Linux step in `test-core` doesn't
+  # exercise the stub. Without this matrix the V4L stub ships untested on
+  # macOS and Windows, mirroring the gap that previously let `todo!()`
+  # panics ride to `main`. No device required (pure error-shape +
+  # `should_panic` assertions).
+  test-v4l-non-linux:
+    name: V4L stub unit tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p nokhwa-bindings-linux-v4l
+
   # Runs `nokhwa-bindings-windows-msmf` unit tests on a Windows host so
   # the 9 GUID/parser tests gated on `#[cfg(all(windows, not(feature =
   # "docs-only")))]` actually execute. The Linux step in `test-core`
