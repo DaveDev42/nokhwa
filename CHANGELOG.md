@@ -187,6 +187,18 @@
 
 ### Testing
 
+* **Pin `RunnerConfig::default()` and `Overflow::default()` field
+  values in `tests/runner.rs`.** The seven public defaults
+  (`poll_interval=10ms`, `event_tick=50ms`, `shutter_timeout=5s`,
+  `frames_capacity=4`, `pictures_capacity=8`, `events_capacity=32`,
+  `overflow=DropNewest`) plus the standalone `Overflow::default()`
+  contract were entirely uncovered. A silent change to any of these
+  values is a behavior change for every `CameraRunner::spawn(opened,
+  RunnerConfig::default())` call site downstream — frames-channel
+  capacity in particular gates how many frames buffer before the
+  drop policy kicks in. Four new tests pin every default field, the
+  `Overflow::default() == DropNewest` invariant, and that both
+  `Overflow` and `RunnerConfig` derive `Copy` (compile-checked).
 * **Pin happy-path `write_to` for the four remaining
   `RawRgb` / `RawBgr` / `Gray` conversion paths in
   `nokhwa-core/src/frame_tests.rs`.** The mismatched-dest

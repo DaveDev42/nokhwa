@@ -23,7 +23,7 @@ use std::sync::mpsc::{channel, Sender};
 use std::time::Duration;
 
 use nokhwa::nokhwa_backend;
-use nokhwa::{CameraRunner, OpenedCamera, RunnerConfig};
+use nokhwa::{CameraRunner, OpenedCamera, Overflow, RunnerConfig};
 use nokhwa_core::buffer::Buffer;
 use nokhwa_core::error::NokhwaError;
 use nokhwa_core::testing::{mock_frame, MockFrameSource, MockHybrid, MockShutter, MpscEventPoll};
@@ -348,4 +348,38 @@ fn runner_shutter_timeout_is_forwarded() {
         .recv_timeout(Duration::from_secs(1))
         .expect("picture timed out");
     assert_eq!(observed.load(Ordering::SeqCst), 1234);
+}
+
+// ──────────────────── public-API default-value pins ───────────────────
+
+#[test]
+fn overflow_default_is_drop_newest() {
+    assert_eq!(Overflow::default(), Overflow::DropNewest);
+}
+
+#[test]
+fn overflow_derives_copy_eq() {
+    let a = Overflow::DropOldest;
+    let b = a;
+    assert_eq!(a, b);
+    assert_ne!(Overflow::DropNewest, Overflow::Block);
+}
+
+#[test]
+fn runner_config_default_pins_field_values() {
+    let cfg = RunnerConfig::default();
+    assert_eq!(cfg.poll_interval, Duration::from_millis(10));
+    assert_eq!(cfg.event_tick, Duration::from_millis(50));
+    assert_eq!(cfg.shutter_timeout, Duration::from_secs(5));
+    assert_eq!(cfg.frames_capacity, 4);
+    assert_eq!(cfg.pictures_capacity, 8);
+    assert_eq!(cfg.events_capacity, 32);
+    assert_eq!(cfg.overflow, Overflow::DropNewest);
+}
+
+#[test]
+fn runner_config_is_copy() {
+    let cfg = RunnerConfig::default();
+    let copied = cfg;
+    assert_eq!(cfg.frames_capacity, copied.frames_capacity);
 }
