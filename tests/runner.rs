@@ -804,3 +804,360 @@ fn runner_stream_worker_survives_transient_frame_errors() {
         "worker must continue delivering after a stretch of frame() errors; got {after:?}"
     );
 }
+
+// ──────────────── set_control E2E forwarding (all 3 workers) ──────────
+//
+// `CameraRunner::set_control` is documented as queuing
+// `Command::SetControl(id, value)` onto the worker's command channel,
+// which the worker then forwards to the backend's
+// `CameraDevice::set_control`. The path
+//   user → cmd channel → worker match arm → backend.set_control
+// has no E2E pin. A regression that:
+//   (a) routes `Command::SetControl` into the `Trigger` / `Empty` no-op
+//       arms by accident (e.g. during a refactor that re-orders the
+//       match), or
+//   (b) drops the worker arm entirely for one of the three variants
+// would silently turn `runner.set_control(...)` into a no-op without
+// any test failing.
+//
+// Strategy: use an `Arc<Mutex<Vec<(KnownCameraControl, ControlValueSetter)>>>`
+// probe shared with each variant's mock; assert the recorded calls
+// match the user's `runner.set_control(...)` invocations.
+
+type SetControlLog =
+    std::sync::Arc<std::sync::Mutex<Vec<(KnownCameraControl, ControlValueSetter)>>>;
+
+fn poll_log_until<F: Fn(&[(KnownCameraControl, ControlValueSetter)]) -> bool>(
+    log: &SetControlLog,
+    pred: F,
+    timeout: Duration,
+) -> Vec<(KnownCameraControl, ControlValueSetter)> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        let snapshot = log.lock().unwrap().clone();
+        if pred(&snapshot) {
+            return snapshot;
+        }
+        if std::time::Instant::now() >= deadline {
+            return snapshot;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+/// Stream-only probe.
+struct ControlProbeStream {
+    info: CameraInfo,
+    format: CameraFormat,
+    log: SetControlLog,
+}
+impl CameraDevice for ControlProbeStream {
+    fn backend(&self) -> ApiBackend {
+        ApiBackend::Browser
+    }
+    fn info(&self) -> &CameraInfo {
+        &self.info
+    }
+    fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        Ok(vec![])
+    }
+    fn set_control(
+        &mut self,
+        id: KnownCameraControl,
+        v: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        self.log.lock().unwrap().push((id, v));
+        Ok(())
+    }
+}
+impl FrameSource for ControlProbeStream {
+    fn negotiated_format(&self) -> CameraFormat {
+        self.format
+    }
+    fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
+        self.format = f;
+        Ok(())
+    }
+    fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+        Ok(vec![self.format])
+    }
+    fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
+        Ok(vec![self.format.format()])
+    }
+    fn open(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+    fn is_open(&self) -> bool {
+        true
+    }
+    fn frame(&mut self) -> Result<Buffer, NokhwaError> {
+        Err(NokhwaError::TimeoutError(Duration::ZERO))
+    }
+    fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
+        Err(NokhwaError::TimeoutError(Duration::ZERO))
+    }
+    fn close(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+}
+nokhwa_backend!(ControlProbeStream: FrameSource);
+
+/// Shutter-only probe.
+struct ControlProbeShutter {
+    info: CameraInfo,
+    log: SetControlLog,
+}
+impl CameraDevice for ControlProbeShutter {
+    fn backend(&self) -> ApiBackend {
+        ApiBackend::Browser
+    }
+    fn info(&self) -> &CameraInfo {
+        &self.info
+    }
+    fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        Ok(vec![])
+    }
+    fn set_control(
+        &mut self,
+        id: KnownCameraControl,
+        v: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        self.log.lock().unwrap().push((id, v));
+        Ok(())
+    }
+}
+impl ShutterCapture for ControlProbeShutter {
+    fn trigger(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+    fn take_picture(&mut self, _t: Duration) -> Result<Buffer, NokhwaError> {
+        Ok(mock_frame(4, 4, FrameFormat::MJPEG))
+    }
+}
+nokhwa_backend!(ControlProbeShutter: ShutterCapture);
+
+/// Hybrid probe — frames + shutter, no events.
+struct ControlProbeHybrid {
+    info: CameraInfo,
+    format: CameraFormat,
+    log: SetControlLog,
+}
+impl CameraDevice for ControlProbeHybrid {
+    fn backend(&self) -> ApiBackend {
+        ApiBackend::Browser
+    }
+    fn info(&self) -> &CameraInfo {
+        &self.info
+    }
+    fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        Ok(vec![])
+    }
+    fn set_control(
+        &mut self,
+        id: KnownCameraControl,
+        v: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        self.log.lock().unwrap().push((id, v));
+        Ok(())
+    }
+}
+impl FrameSource for ControlProbeHybrid {
+    fn negotiated_format(&self) -> CameraFormat {
+        self.format
+    }
+    fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
+        self.format = f;
+        Ok(())
+    }
+    fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+        Ok(vec![self.format])
+    }
+    fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
+        Ok(vec![self.format.format()])
+    }
+    fn open(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+    fn is_open(&self) -> bool {
+        true
+    }
+    fn frame(&mut self) -> Result<Buffer, NokhwaError> {
+        Err(NokhwaError::TimeoutError(Duration::ZERO))
+    }
+    fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
+        Err(NokhwaError::TimeoutError(Duration::ZERO))
+    }
+    fn close(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+}
+impl ShutterCapture for ControlProbeHybrid {
+    fn trigger(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+    fn take_picture(&mut self, _t: Duration) -> Result<Buffer, NokhwaError> {
+        Ok(mock_frame(4, 4, FrameFormat::MJPEG))
+    }
+}
+nokhwa_backend!(ControlProbeHybrid: FrameSource, ShutterCapture);
+
+fn make_probe_info() -> CameraInfo {
+    CameraInfo::new(
+        "probe",
+        "probe",
+        "probe",
+        nokhwa_core::types::CameraIndex::Index(0),
+    )
+}
+
+fn make_probe_format() -> CameraFormat {
+    CameraFormat::new(
+        nokhwa_core::types::Resolution::new(4, 4),
+        FrameFormat::GRAY,
+        30,
+    )
+}
+
+#[test]
+fn runner_set_control_forwards_to_stream_worker() {
+    let log: SetControlLog = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let probe = ControlProbeStream {
+        info: make_probe_info(),
+        format: make_probe_format(),
+        log: SetControlLog::clone(&log),
+    };
+    let opened = OpenedCamera::from_device(Box::new(probe));
+    let runner = CameraRunner::spawn(opened, RunnerConfig::default()).unwrap();
+    runner
+        .set_control(
+            KnownCameraControl::Brightness,
+            ControlValueSetter::Float(0.5),
+        )
+        .unwrap();
+    runner
+        .set_control(KnownCameraControl::Contrast, ControlValueSetter::Integer(7))
+        .unwrap();
+    let snapshot = poll_log_until(&log, |s| s.len() >= 2, Duration::from_millis(500));
+    assert_eq!(
+        snapshot,
+        vec![
+            (
+                KnownCameraControl::Brightness,
+                ControlValueSetter::Float(0.5)
+            ),
+            (KnownCameraControl::Contrast, ControlValueSetter::Integer(7)),
+        ],
+        "stream worker must forward Command::SetControl to backend.set_control"
+    );
+}
+
+#[test]
+fn runner_set_control_forwards_to_shutter_worker() {
+    let log: SetControlLog = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let probe = ControlProbeShutter {
+        info: make_probe_info(),
+        log: SetControlLog::clone(&log),
+    };
+    let opened = OpenedCamera::from_device(Box::new(probe));
+    let runner = CameraRunner::spawn(opened, RunnerConfig::default()).unwrap();
+    runner
+        .set_control(
+            KnownCameraControl::Saturation,
+            ControlValueSetter::Boolean(true),
+        )
+        .unwrap();
+    let snapshot = poll_log_until(&log, |s| !s.is_empty(), Duration::from_millis(500));
+    assert_eq!(
+        snapshot,
+        vec![(
+            KnownCameraControl::Saturation,
+            ControlValueSetter::Boolean(true)
+        )],
+        "shutter worker must forward Command::SetControl to backend.set_control"
+    );
+}
+
+#[test]
+fn runner_set_control_forwards_to_hybrid_worker() {
+    let log: SetControlLog = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let probe = ControlProbeHybrid {
+        info: make_probe_info(),
+        format: make_probe_format(),
+        log: SetControlLog::clone(&log),
+    };
+    let opened = OpenedCamera::from_device(Box::new(probe));
+    let runner = CameraRunner::spawn(opened, RunnerConfig::default()).unwrap();
+    runner
+        .set_control(KnownCameraControl::Hue, ControlValueSetter::Integer(42))
+        .unwrap();
+    runner
+        .set_control(KnownCameraControl::Gamma, ControlValueSetter::Float(2.2))
+        .unwrap();
+    let snapshot = poll_log_until(&log, |s| s.len() >= 2, Duration::from_millis(500));
+    assert_eq!(
+        snapshot,
+        vec![
+            (KnownCameraControl::Hue, ControlValueSetter::Integer(42)),
+            (KnownCameraControl::Gamma, ControlValueSetter::Float(2.2)),
+        ],
+        "hybrid worker must forward Command::SetControl to backend.set_control"
+    );
+}
+
+// ───────── hybrid: dropped pictures receiver keeps frame stream alive ─
+//
+// `src/runner.rs:432-437` documents an explicit asymmetry: a dropped
+// *frames* receiver exits the hybrid worker (line 449-451), but a
+// dropped *pictures* receiver is silently swallowed
+// (`let _ = pic_tx.send(pic)`), keeping the frame stream alive. This
+// "one-shot photo while streaming" use case has no test pin. A
+// regression that mirrored the frames path here (`if pic_tx.send(...)
+// .is_err() { break }`) would silently kill the frame stream whenever
+// a caller triggers a shot and then drops the picture receiver.
+
+#[test]
+fn runner_hybrid_dropped_pictures_receiver_keeps_frame_stream_alive() {
+    // Use a hybrid that always has frames and at least one picture
+    // queued so trigger() actually causes a `pic_tx.send(pic)` call.
+    let mut h = MockHybrid::new(0, vec![mock_frame(4, 4, FrameFormat::MJPEG)]);
+    for _ in 0..32 {
+        h.push_frame(mock_frame(8, 8, FrameFormat::YUYV));
+    }
+    let opened = OpenedCamera::from_device(Box::new(HybridWithEvents::new(
+        h,
+        Box::new(MpscEventPoll::new(channel().1)),
+    )));
+    let mut runner = CameraRunner::spawn(opened, RunnerConfig::default()).unwrap();
+
+    // Drain one frame to confirm the stream is producing.
+    let _ = runner
+        .frames()
+        .unwrap()
+        .recv_timeout(Duration::from_millis(500))
+        .expect("frame stream not producing before pictures-drop");
+
+    // Take the pictures receiver and drop it immediately — the worker
+    // now has a closed pictures channel.
+    let pic_rx = runner.take_pictures().expect("hybrid has pictures channel");
+    drop(pic_rx);
+
+    // Trigger a shot. The worker must NOT exit just because pic_tx.send
+    // fails — that's the documented policy.
+    runner.trigger().unwrap();
+
+    // Frames must continue arriving after the trigger that landed on a
+    // closed pictures channel. Pull at least 3 frames to guard against
+    // the worker being mid-cycle when we triggered.
+    for i in 0..3 {
+        runner
+            .frames()
+            .unwrap()
+            .recv_timeout(Duration::from_millis(1000))
+            .unwrap_or_else(|_| {
+                panic!(
+                    "hybrid worker exited after dropped pictures receiver \
+                     (frame {i} timed out); src/runner.rs:432-437 policy regressed"
+                )
+            });
+    }
+}
