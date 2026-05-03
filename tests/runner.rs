@@ -1915,3 +1915,118 @@ fn runner_spawn_hybrid_worker_exits_on_dropped_frames_receiver() {
          still routes to a live worker after 3s)"
     );
 }
+
+// ─────── spawn_shutter worker exits on dropped pictures receiver ──────
+//
+// Third member of the receiver-drop family. `src/runner.rs:340-342`
+// inside `spawn_shutter`:
+//
+//     if cam.trigger().is_ok() {
+//         if let Ok(pic) = cam.take_picture(shutter_timeout) {
+//             if pic_tx.send(pic).is_err() {
+//                 break;
+//             }
+//         }
+//     }
+//
+// The shutter worker is event-driven: it sleeps inside
+// `cmd_rx.recv_timeout(poll_interval)` and only attempts `pic_tx.send`
+// after a successful `Command::Trigger`. So the test must (a) drop the
+// pictures receiver, (b) issue a trigger, and (c) wait for the worker
+// to exit via the `is_err() { break }` arm.
+//
+// A regression that swapped to `let _ = pic_tx.send(pic)` would leak
+// the shutter worker, same invisible failure mode as the stream/hybrid
+// frames-drop counterparts (PRs #304, #305).
+
+/// `ShutterCapture` that always succeeds. Required so `trigger()` →
+/// `take_picture` reliably reaches the `pic_tx.send` call after we drop
+/// the receiver — a finite `MockShutter` runs out and short-circuits via
+/// the `take_picture` `TimeoutError` arm before reaching `pic_tx.send`.
+struct EndlessShutter {
+    info: CameraInfo,
+}
+
+impl CameraDevice for EndlessShutter {
+    fn backend(&self) -> ApiBackend {
+        ApiBackend::Browser
+    }
+    fn info(&self) -> &CameraInfo {
+        &self.info
+    }
+    fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        Ok(vec![])
+    }
+    fn set_control(
+        &mut self,
+        _id: KnownCameraControl,
+        _v: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+}
+
+impl ShutterCapture for EndlessShutter {
+    fn trigger(&mut self) -> Result<(), NokhwaError> {
+        Ok(())
+    }
+    fn take_picture(&mut self, _t: Duration) -> Result<Buffer, NokhwaError> {
+        Ok(mock_frame(4, 4, FrameFormat::MJPEG))
+    }
+}
+
+nokhwa_backend!(EndlessShutter: ShutterCapture);
+
+#[test]
+fn runner_spawn_shutter_worker_exits_on_dropped_pictures_receiver() {
+    use nokhwa_core::types::CameraIndex;
+    use std::time::Instant;
+
+    let dev = EndlessShutter {
+        info: CameraInfo::new(
+            "endless-shutter",
+            "endless-shutter",
+            "endless-shutter",
+            CameraIndex::Index(0),
+        ),
+    };
+    let opened = OpenedCamera::from_device(Box::new(dev));
+    let mut runner = CameraRunner::spawn(opened, RunnerConfig::default()).unwrap();
+
+    // Trigger once and drain a picture to confirm the worker is live and
+    // on the send path before we drop the receiver. Without this, a
+    // regression that exited the worker at startup could pass spuriously.
+    runner.trigger().unwrap();
+    let rx = runner
+        .take_pictures()
+        .expect("shutter runner has pictures channel");
+    rx.recv_timeout(Duration::from_millis(500))
+        .expect("shutter pictures not arriving before pictures-drop");
+
+    // Drop the pictures receiver. The next trigger causes the worker to
+    // hit `pic_tx.send(pic).is_err()` and break.
+    drop(rx);
+    runner.trigger().unwrap();
+
+    // Once the worker exits, `cmd_rx` drops; subsequent `cmd.send(...)`
+    // returns `SendError`, flipping `set_control` to `Err`. 3-second
+    // deadline catches a leaked shutter worker.
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while Instant::now() < deadline {
+        if runner
+            .set_control(
+                KnownCameraControl::Brightness,
+                ControlValueSetter::Integer(0),
+            )
+            .is_err()
+        {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    panic!(
+        "shutter worker did not exit after dropping pictures receiver — \
+         src/runner.rs:340-342 receiver-drop policy regressed (set_control \
+         still routes to a live worker after 3s)"
+    );
+}

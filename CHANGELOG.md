@@ -232,6 +232,21 @@
 
 ### Testing
 
+* **Pin `CameraRunner::spawn_shutter` worker exit on dropped pictures
+  receiver.** Third member of the receiver-drop family alongside the
+  stream and hybrid frames-drop pins. `src/runner.rs:340-342` wraps
+  `pic_tx.send(pic)` in `if … .is_err() { break }`. The shutter worker
+  is event-driven: it only attempts to send a picture after a successful
+  `Command::Trigger`, so the test must drop pic_rx, issue a trigger,
+  and then observe worker exit. New `EndlessShutter` (always returns
+  `Ok` from `trigger` / `take_picture`) keeps the worker reliably on
+  the send path — a finite `MockShutter` would short-circuit via
+  `take_picture`'s `TimeoutError` arm before reaching `pic_tx.send`.
+  Test triggers once and drains a picture (liveness gate), drops
+  pic_rx, triggers again, then polls `runner.set_control(...)` with a
+  3-second deadline; worker exit drops `cmd_rx`, flipping `set_control`
+  from `Ok` to `Err`. A regression that swapped to `let _ = pic_tx.send(pic)`
+  would leak the shutter worker per-runner.
 * **Pin `CameraRunner::spawn_hybrid` worker exit on dropped frames
   receiver.** Symmetric pin to the stream worker variant: the hybrid
   worker at `src/runner.rs:449-451` also exits via
