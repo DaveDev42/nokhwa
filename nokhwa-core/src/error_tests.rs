@@ -194,6 +194,105 @@ fn not_implemented_error_display_includes_message() {
     assert!(s.contains("hotplug on browser"));
 }
 
+// ───────────────────── Clone / Debug / source() ──────────────────────
+
+#[test]
+fn clone_unit_variant_round_trips_display() {
+    let e = NokhwaError::UninitializedError;
+    let cloned = e.clone();
+    assert_eq!(format!("{e}"), format!("{cloned}"));
+}
+
+#[test]
+fn clone_struct_variant_preserves_fields() {
+    let e = NokhwaError::ProcessFrameError {
+        src: FrameFormat::MJPEG,
+        destination: "RGB".to_string(),
+        error: "boom".to_string(),
+    };
+    let cloned = e.clone();
+    if let NokhwaError::ProcessFrameError {
+        src,
+        destination,
+        error,
+    } = cloned
+    {
+        assert_eq!(src, FrameFormat::MJPEG);
+        assert_eq!(destination, "RGB");
+        assert_eq!(error, "boom");
+    } else {
+        panic!("clone changed variant");
+    }
+}
+
+#[test]
+fn clone_optional_backend_field_preserves_some() {
+    let e = NokhwaError::GeneralError {
+        message: "x".to_string(),
+        backend: Some(ApiBackend::Video4Linux),
+    };
+    let cloned = e.clone();
+    if let NokhwaError::GeneralError { backend, .. } = cloned {
+        assert_eq!(backend, Some(ApiBackend::Video4Linux));
+    } else {
+        panic!("clone changed variant");
+    }
+}
+
+#[test]
+fn debug_format_includes_variant_name() {
+    let e = NokhwaError::UninitializedError;
+    let s = format!("{e:?}");
+    assert!(s.contains("UninitializedError"), "got: {s}");
+}
+
+#[test]
+fn debug_format_for_timeout_includes_variant_and_duration() {
+    let e = NokhwaError::TimeoutError(Duration::from_secs(2));
+    let s = format!("{e:?}");
+    assert!(s.contains("TimeoutError"), "got: {s}");
+    assert!(s.contains('2'), "duration not in debug output: {s}");
+}
+
+#[test]
+fn debug_format_for_struct_variant_includes_field_names() {
+    let e = NokhwaError::OpenDeviceError {
+        device: "cam0".to_string(),
+        error: "ENOENT".to_string(),
+    };
+    let s = format!("{e:?}");
+    assert!(s.contains("OpenDeviceError"), "got: {s}");
+    assert!(s.contains("device"), "missing field name 'device': {s}");
+    assert!(s.contains("cam0"), "missing field value: {s}");
+    assert!(s.contains("ENOENT"), "missing field value: {s}");
+}
+
+#[test]
+fn error_source_is_none_for_all_variants() {
+    use std::error::Error;
+    let cases: Vec<NokhwaError> = vec![
+        NokhwaError::UninitializedError,
+        NokhwaError::general("x"),
+        NokhwaError::open_stream("y"),
+        NokhwaError::read_frame("z"),
+        NokhwaError::stream_shutdown("w"),
+        NokhwaError::TimeoutError(Duration::from_millis(1)),
+        NokhwaError::UnsupportedOperationError(ApiBackend::Browser),
+        NokhwaError::NotImplementedError("nope".to_string()),
+        NokhwaError::ProcessFrameError {
+            src: FrameFormat::YUYV,
+            destination: "RGB".to_string(),
+            error: "e".to_string(),
+        },
+    ];
+    for case in cases {
+        assert!(
+            case.source().is_none(),
+            "expected source() == None for {case:?}"
+        );
+    }
+}
+
 #[test]
 fn helper_constructors_default_optional_context_to_none() {
     if let NokhwaError::GeneralError { backend, .. } = NokhwaError::general("x") {
