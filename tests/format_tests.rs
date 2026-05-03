@@ -2,6 +2,7 @@
 //! These verify that public API re-exports are accessible from outside the crate.
 
 use nokhwa::utils::*;
+use nokhwa::NokhwaError;
 
 #[test]
 fn requested_format_creation_with_formats() {
@@ -29,7 +30,24 @@ fn camera_index_from_string() {
     assert!(idx.is_string());
     assert_eq!(idx.as_string(), "/dev/video0");
     assert!(!idx.is_index());
-    assert!(idx.as_index().is_err());
+    // `as_index` (`nokhwa-core/src/types.rs:315-322`) wraps `ParseIntError`
+    // through `NokhwaError::general` → `GeneralError { backend: None, .. }`.
+    // Pin the variant + libstd's `ParseIntError` Display string so a
+    // regression that reroutes the helper or attaches a backend tag is
+    // caught at the public API surface (this is a non-device integration
+    // test that re-exports the type, so the pin doubles as a re-export
+    // sanity check).
+    let err = idx.as_index().expect_err("non-numeric String should err");
+    match err {
+        NokhwaError::GeneralError { message, backend } => {
+            assert_eq!(message, "invalid digit found in string");
+            assert!(
+                backend.is_none(),
+                "expected no backend tag, got {backend:?}"
+            );
+        }
+        other => panic!("expected GeneralError, got {other:?}"),
+    }
 }
 
 #[test]
