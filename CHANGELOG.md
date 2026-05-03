@@ -232,6 +232,22 @@
 
 ### Testing
 
+* **Pin NV12 `into_rgb()` / `into_rgba()` `write_to()` size-guard
+  rejections.** Symmetric to the YUYV RGB/RGBA rejection pins.
+  `buf_nv12_to_rgb` (`nokhwa-core/src/types.rs:1795-1834`) has three
+  distinct guards before dispatching into
+  `crate::simd::nv12_to_rgb_simd`: (1) resolution divisibility — both
+  width and height must be even (NV12's UV plane is half-resolution
+  in both dimensions), (2) `data.len() == w * h * 3 / 2`, and (3)
+  `out.len() == pxsize * w * h`. Happy paths were pinned; rejection
+  paths were unpinned for both variants. A regression that dropped
+  any guard (e.g. a refactor that folded NV12 + YUYV into a shared
+  helper and lost the resolution parity check) would surface as a
+  SIMD out-of-bounds panic or silent garbage output rather than a
+  clean `ProcessFrameError`. Six new tests
+  (`nv12_into_rgb_write_to_rejects_{odd_resolution,wrong_input_size,mismatched_dest}`
+  and the RGBA mirror) cover all three guards on both variants via
+  `assert_process_frame_err`.
 * **Pin YUYV `into_rgb()` / `into_rgba()` `write_to()` size-guard
   rejections.** `buf_yuyv422_to_rgb`
   (`nokhwa-core/src/types.rs:1712-1740`) guards both the input
