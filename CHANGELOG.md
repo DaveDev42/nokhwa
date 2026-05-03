@@ -187,6 +187,25 @@
 
 ### Testing
 
+* **Pin `MockEventfulFrameSource` `FrameSource` passthrough.**
+  `MockEventfulFrameSource` wraps a `MockFrameSource` and adds an
+  `EventSource` impl. The `EventSource::take_events` half was
+  covered by `eventful_source_hands_out_poll_once`, but every
+  `FrameSource` and `CameraDevice` method on the eventful wrapper
+  was a thin forward to the inner mock with zero direct test
+  coverage. A copy-paste regression that returned
+  `Default::default()` instead of `inner.negotiated_format()` (or
+  silently dropped pushed frames, or routed `is_open` to a stale
+  bool) would have slipped through. Five new tests pin: open /
+  close routing, `push_frame` → `frame()` FIFO drainage, default
+  format and `set_format` round-trip with `compatible_formats` /
+  `compatible_fourcc` reflecting the new format, `CameraDevice`
+  metadata passthrough (info / backend / controls), and
+  `frame_raw()` returning the pushed bytes plus the empty-queue
+  timeout error. The wrapper is the fixture every event-aware
+  runner test depends on, so pinning these guarantees
+  independently of the runner integration matters.
+
 * **Pin SIMD/scalar parity for `bgr_to_rgb` and add boundary-aligned
   loop coverage.** Every other module in `nokhwa-core::simd`
   (`rgb_to_rgba`, `rgb_to_luma`, `yuyv_to_rgb`, `yuyv_extract_luma`,

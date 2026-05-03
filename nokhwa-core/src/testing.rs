@@ -560,4 +560,87 @@ mod tests {
         assert_eq!(h.backend(), MockFrameSource::new(0).backend());
         assert_eq!(h.controls().unwrap(), Vec::<CameraControl>::new());
     }
+
+    // ─────── MockEventfulFrameSource FrameSource passthrough ───────
+    //
+    // `MockEventfulFrameSource` wraps a `MockFrameSource` and adds an
+    // `EventSource` impl. Its `EventSource::take_events` is covered by
+    // `eventful_source_hands_out_poll_once`, but every `FrameSource`
+    // method on it is a thin forward to the inner mock — and a
+    // regression where one of those forwards goes to the wrong field
+    // (e.g. a copy-paste bug returning `Default::default()` instead
+    // of `inner.negotiated_format()`) would slip through that single
+    // existing test. These tests pin the passthrough contract on
+    // each `FrameSource` method individually.
+
+    #[test]
+    fn mock_eventful_frame_source_open_close_routes_to_inner() {
+        let (_tx, rx) = channel();
+        let poll: Box<dyn EventPoll + Send> = Box::new(MpscEventPoll::new(rx));
+        let mut src = MockEventfulFrameSource::new(0, poll);
+        assert!(!src.is_open(), "starts closed");
+        src.open().unwrap();
+        assert!(src.is_open(), "open() flips inner.is_open");
+        src.close().unwrap();
+        assert!(!src.is_open(), "close() flips inner.is_open back");
+    }
+
+    #[test]
+    fn mock_eventful_frame_source_push_frame_drains_via_frame() {
+        let (_tx, rx) = channel();
+        let poll: Box<dyn EventPoll + Send> = Box::new(MpscEventPoll::new(rx));
+        let mut src = MockEventfulFrameSource::new(0, poll);
+        src.open().unwrap();
+        src.push_frame(mock_frame(4, 4, FrameFormat::YUYV));
+        src.push_frame(mock_frame(2, 2, FrameFormat::MJPEG));
+        let first = src.frame().unwrap();
+        assert_eq!(first.resolution(), Resolution::new(4, 4));
+        assert_eq!(first.source_frame_format(), FrameFormat::YUYV);
+        let second = src.frame().unwrap();
+        assert_eq!(second.resolution(), Resolution::new(2, 2));
+        assert_eq!(second.source_frame_format(), FrameFormat::MJPEG);
+        assert!(matches!(src.frame(), Err(NokhwaError::TimeoutError(_))));
+    }
+
+    #[test]
+    fn mock_eventful_frame_source_set_and_negotiated_format() {
+        let (_tx, rx) = channel();
+        let poll: Box<dyn EventPoll + Send> = Box::new(MpscEventPoll::new(rx));
+        let mut src = MockEventfulFrameSource::new(0, poll);
+        // Default mirrors `MockFrameSource`'s default (640x480 YUYV @ 30).
+        let default_fmt = src.negotiated_format();
+        assert_eq!(default_fmt.resolution(), Resolution::new(640, 480));
+        assert_eq!(default_fmt.format(), FrameFormat::YUYV);
+        assert_eq!(default_fmt.frame_rate(), 30);
+
+        let new_fmt = CameraFormat::new(Resolution::new(1920, 1080), FrameFormat::MJPEG, 60);
+        src.set_format(new_fmt).unwrap();
+        assert_eq!(src.negotiated_format(), new_fmt);
+        assert_eq!(src.compatible_formats().unwrap(), vec![new_fmt]);
+        assert_eq!(src.compatible_fourcc().unwrap(), vec![FrameFormat::MJPEG],);
+    }
+
+    #[test]
+    fn mock_eventful_frame_source_camera_device_metadata_passthrough() {
+        let (_tx, rx) = channel();
+        let poll: Box<dyn EventPoll + Send> = Box::new(MpscEventPoll::new(rx));
+        let src = MockEventfulFrameSource::new(11, poll);
+        assert_eq!(src.info().index(), &CameraIndex::Index(11));
+        assert_eq!(src.backend(), ApiBackend::Browser);
+        assert_eq!(src.controls().unwrap(), Vec::<CameraControl>::new());
+    }
+
+    #[test]
+    fn mock_eventful_frame_source_frame_raw_returns_pushed_bytes() {
+        let (_tx, rx) = channel();
+        let poll: Box<dyn EventPoll + Send> = Box::new(MpscEventPoll::new(rx));
+        let mut src = MockEventfulFrameSource::new(0, poll);
+        src.open().unwrap();
+        let pushed = mock_frame(4, 4, FrameFormat::RAWRGB);
+        let expected = pushed.buffer().to_vec();
+        src.push_frame(pushed);
+        let raw = src.frame_raw().unwrap();
+        assert_eq!(&*raw, &expected[..]);
+        assert!(matches!(src.frame_raw(), Err(NokhwaError::TimeoutError(_))));
+    }
 }
