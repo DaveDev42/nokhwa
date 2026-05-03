@@ -232,6 +232,29 @@
 
 ### Testing
 
+* **Pin `Buffer::PartialEq` structural contract.** `Buffer` derives
+  `PartialEq` (`nokhwa-core/src/buffer.rs:48`), which is structural
+  over all four fields including `capture_timestamp:
+  Option<(Duration, TimestampKind)>`. The existing tests in
+  `buffer_tests.rs` only ever did field-by-field equality checks
+  through accessors (`assert_eq!(buf_a.resolution(),
+  buf_b.resolution())` etc.); none called `assert_eq!(buf_a, buf_b)`
+  on the whole struct, so the derive's contract was untested.
+  Three new pins: (1) extended `buffer_from_vec_equivalent_to_new`
+  with a direct `assert_eq!(buf_copy, buf_zero)` to guard against
+  hand-written `PartialEq` impls that drop a field, (2) added
+  `buffer_partial_eq_distinguishes_capture_timestamp` asserting
+  `assert_ne!` on buffers with different `Duration`s and on
+  `Some(_)` vs `None`, plus `assert_eq!` on duplicates, (3) added
+  `buffer_partial_eq_distinguishes_timestamp_kind` asserting
+  `assert_ne!` on buffers with the same `Duration` but different
+  `TimestampKind` discriminators (`Capture` vs `Presentation`).
+  These would catch a regression introducing a hand-written
+  `impl PartialEq` that ignored timestamps under a "two buffers
+  carrying the same pixels are equal" rationale, which would
+  silently make timestamped frames look like duplicates and break
+  any deduplication or frame-cache logic that relies on
+  timestamp-distinct buffers comparing unequal.
 * **Tighten `CameraFormat::new_from` and `CameraInfo::set_index`
   accessor coverage.** `camera_format_new_from` only pinned
   `width()`/`height()`/`format()`/`frame_rate()` individually; it
