@@ -204,6 +204,18 @@ fn camera_format_new_from() {
     assert_eq!(fmt.height(), 480);
     assert_eq!(fmt.format(), FrameFormat::YUYV);
     assert_eq!(fmt.frame_rate(), 15);
+    // `new_from` constructs `Resolution` directly via field literals
+    // (`Resolution { width_x: res_x, height_y: res_y }`,
+    // `nokhwa-core/src/types.rs:617-621`) rather than via
+    // `Resolution::new`. The width/height accessor pins above
+    // already catch x/y swaps, but they don't catch a regression
+    // where the inner `Resolution` is built with a private
+    // invariant field that `Resolution::new` would set but
+    // `new_from`'s field-literal construction would skip — the
+    // resulting `Resolution` would compare unequal to one made via
+    // `Resolution::new(640, 480)` even though `width()`/`height()`
+    // round-trip the same. Pin the structural equality contract.
+    assert_eq!(fmt.resolution(), Resolution::new(640, 480));
 }
 
 #[test]
@@ -377,6 +389,20 @@ fn camera_info_getters_setters() {
 
     info.set_index(CameraIndex::Index(1));
     assert_eq!(info.index(), &CameraIndex::Index(1));
+
+    // `set_index` is the only path the `CameraIndex::String(_)`
+    // variant takes through `CameraInfo` after construction (e.g.
+    // when a GStreamer backend rewrites a numeric V4L index to a
+    // `rtsp://` URL after device discovery). The original test
+    // only exercised `Index(_)`, so a regression that silently
+    // dropped or coerced the `String` arm — e.g. `_ => self.index =
+    // CameraIndex::Index(0)` left from a refactor — would slip
+    // past. Round-trip the string arm too.
+    info.set_index(CameraIndex::String("rtsp://cam.local/stream".into()));
+    assert_eq!(
+        info.index(),
+        &CameraIndex::String("rtsp://cam.local/stream".into())
+    );
 }
 
 #[test]
