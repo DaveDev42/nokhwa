@@ -350,6 +350,37 @@
 
 ### Testing
 
+* **Pin `element_err` and `caps_for` in
+  `nokhwa-bindings-gstreamer/src/pipeline.rs`.** Both helpers had
+  zero direct coverage even though `element_err` is invoked by 9
+  call sites in `PipelineHandle::start` (every `Pipeline::add(_)` /
+  `Element::link(_)` failure routes through it) and `caps_for`
+  builds the `capsfilter`-driven negotiation Caps for every started
+  pipeline. Added four new tests:
+  (1) `element_err_uses_open_stream_with_gstreamer_backend` pins
+  the variant + the `Some(ApiBackend::GStreamer)` backend tag + the
+  canonical `"{what}: {why}"` interpolation across two
+  representative `what` strings — a refactor that dropped the
+  backend tag, swapped the variant for `GeneralError`, or trimmed
+  the `what` prefix would slip past every existing test;
+  (2) `element_err_display_form_pins_backend_parenthetical` pins
+  the full `OpenStreamError` `Display` string with the documented
+  `(backend GStreamer)` parenthetical (mirror of
+  `unsupported_returns_unsupported_operation_error` in
+  `controls.rs`);
+  (3) `caps_for_emits_video_x_raw_with_all_four_fields` reads back
+  the `Caps`'s `video/x-raw` structure and verifies all four
+  documented fields (`format` / `width` / `height` / `framerate`)
+  are present with the expected values for a `(YUYV, 1920x1080,
+  30 FPS)` input — a regression that dropped the framerate field
+  would underconstrain `capsfilter` and silently let the source
+  pick whatever framerate it liked;
+  (4) `caps_for_forwards_each_input_field_independently` pins a
+  second shape (`MJPEG, 640x480, 60 FPS`) so a refactor that
+  hard-coded one of the dimensions can't pass the first pin alone.
+  Reuses the same `Once`-init pattern as `controls::tests` and
+  `format::tests`.
+
 * **Pin `set_live_property` error and boolean-encoding branches in
   `nokhwa-bindings-gstreamer/src/controls.rs`.** The function has
   four branches: `Integer(i)` happy / `Integer(i)` overflow /
