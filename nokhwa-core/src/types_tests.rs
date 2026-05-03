@@ -2686,6 +2686,22 @@ fn control_value_setter_display_rgb() {
     );
 }
 
+// `ControlValueSetter::RGB` stores three `f64`s and renders them via
+// `f64::Display`, which drops trailing `.0` on whole numbers — so
+// `RGB(1.0, 2.0, 3.0)` formats as `(1, 2, 3)`, not `(1.0, 2.0, 3.0)`.
+// The existing `control_value_setter_display_rgb` only exercises that
+// drop on the middle channel, so a regression that introduced
+// `{:.1}` width formatting on the first or third channel would
+// silently change the output for users with whole-number RGB
+// controls. Pin the all-integer case explicitly.
+#[test]
+fn control_value_setter_display_rgb_all_integer_drops_decimal() {
+    assert_eq!(
+        ControlValueSetter::RGB(1.0, 2.0, 3.0).to_string(),
+        "RGBValue: (1, 2, 3)"
+    );
+}
+
 // ─── CameraControl Display rendering ───
 //
 // `CameraControl::Display` composes the renderings of
