@@ -1068,6 +1068,55 @@ fn mjpeg_empty_returns_error() {
     assert!(frame.into_rgb().materialize().is_err());
 }
 
+// `RgbConversion::write_to` and `RgbaConversion::write_to` for
+// `Frame<Mjpeg>` delegate straight to `buf_mjpeg_to_rgb` (types.rs)
+// with no upper-layer dest-size check (the predicted size requires
+// decoding the JPEG header). The decoder asserts
+// `dest.len() == jpeg_decompress.min_flat_buffer_size()` and errors
+// with `"Bad decoded buffer size"` otherwise. Pin both ends of the
+// guard so a refactor that rounds the comparison or drops it would
+// surface as a panic-on-OOB instead of a clean `ProcessFrameError`.
+
+#[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
+#[test]
+fn mjpeg_rgb_write_to_rejects_too_small_dest() {
+    let buf = Buffer::new(Resolution::new(2, 2), JPEG_RED_2X2, FrameFormat::MJPEG);
+    let frame: Frame<Mjpeg> = Frame::new(buf);
+    let mut dest = vec![0u8; 11]; // expected 12 (2x2 RGB)
+    let err = frame.into_rgb().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::MJPEG, "RGB888", "Bad decoded buffer size");
+}
+
+#[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
+#[test]
+fn mjpeg_rgb_write_to_rejects_too_large_dest() {
+    let buf = Buffer::new(Resolution::new(2, 2), JPEG_RED_2X2, FrameFormat::MJPEG);
+    let frame: Frame<Mjpeg> = Frame::new(buf);
+    let mut dest = vec![0u8; 13]; // expected 12
+    let err = frame.into_rgb().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::MJPEG, "RGB888", "Bad decoded buffer size");
+}
+
+#[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
+#[test]
+fn mjpeg_rgba_write_to_rejects_too_small_dest() {
+    let buf = Buffer::new(Resolution::new(2, 2), JPEG_RED_2X2, FrameFormat::MJPEG);
+    let frame: Frame<Mjpeg> = Frame::new(buf);
+    let mut dest = vec![0u8; 15]; // expected 16 (2x2 RGBA)
+    let err = frame.into_rgba().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::MJPEG, "RGB888", "Bad decoded buffer size");
+}
+
+#[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
+#[test]
+fn mjpeg_rgba_write_to_rejects_too_large_dest() {
+    let buf = Buffer::new(Resolution::new(2, 2), JPEG_RED_2X2, FrameFormat::MJPEG);
+    let frame: Frame<Mjpeg> = Frame::new(buf);
+    let mut dest = vec![0u8; 17]; // expected 16
+    let err = frame.into_rgba().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::MJPEG, "RGB888", "Bad decoded buffer size");
+}
+
 // ---------------------------------------------------------------------------
 // `write_to` destination-buffer guards
 //
