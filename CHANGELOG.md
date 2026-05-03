@@ -187,6 +187,45 @@
 
 ### Testing
 
+* **Expand `device_tests::runner_tests` from one test to five.**
+  `tests/device_tests.rs::runner_tests::runner_produces_frames` was
+  the only `device-test`+`runner` integration test, exercising just
+  the happy path: spawn → drain three frames → `stop()`. The
+  runner's other code paths — `Overflow::DropOldest` relay-thread
+  lifecycle, implicit `Drop` cleanup without explicit `stop()`,
+  `pictures()` / `events()` returning `None` on a stream-only
+  native backend, and runner-mediated `set_control` — were not
+  exercised against real hardware. Added four tests in the
+  `runner_tests` submodule:
+  - `runner_drop_oldest_overflow_drains_relay_on_stop`: capacity 2
+    + `Overflow::DropOldest` + a 300ms sleep so the relay's drop-
+    oldest path actually fires; `stop()` must join the relay
+    cleanly. Catches a regression where the relay thread is
+    orphaned on shutdown.
+  - `runner_drop_without_explicit_stop_cleans_up`: spawns a runner,
+    drains one frame, lets the binding fall out of scope. A `Drop`
+    that panicked on a half-closed channel or deadlocked the
+    worker would surface here.
+  - `runner_stream_only_backend_yields_no_pictures_no_events`:
+    pins that `OpenRequest::any()` on V4L / MSMF / AVFoundation
+    resolves to a stream-only runner with `pictures() == None` and
+    `events() == None`. A regression that started wiring a
+    pictures channel for stream-only backends would silently leak
+    a relay thread per spawn.
+  - `runner_set_control_does_not_disrupt_frame_delivery`: drains
+    one frame, calls `set_control(Brightness, 0)`, then drains
+    another frame. We don't assert the control round-trips
+    (backends differ on whether `controls()` reflects the change
+    synchronously) — only that the worker doesn't wedge on a
+    control command. Brightness is the most universally-supported
+    control across the three native backends; integer 0 is a safe
+    value that backends clamp into range without erroring.
+  All four are gated by `#[cfg(feature = "runner")]` inside the
+  `device-test`-gated module, so they compile only with both
+  features. They run on the `v4l-loopback` (Linux) and self-hosted
+  `macos-camera` device-test runners; MSMF coverage stays the
+  current GH-hosted gap noted in `TODO.md`.
+
 * **Pin `MockShutter` FIFO contract, default `lock_ui`/`unlock_ui`,
   `capture()` convenience, and `MpscEventPoll: Send` bound.**
   `nokhwa-core/src/testing.rs` had only one direct `MockShutter`
