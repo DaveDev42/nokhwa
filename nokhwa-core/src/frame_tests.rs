@@ -635,6 +635,90 @@ fn nv12_into_rgba_write_to_appends_opaque_alpha() {
     }
 }
 
+// `buf_nv12_to_rgb` (`nokhwa-core/src/types.rs:1795-1834`) has three
+// distinct guards before dispatching into `crate::simd::nv12_to_rgb_simd`:
+//   1. resolution divisibility — both width and height must be even
+//      (NV12's UV plane is half-resolution in both dimensions)
+//   2. `data.len() == w * h * 3 / 2` — input plane sizes
+//   3. `out.len() == pxsize * w * h` — output buffer size
+//
+// Symmetric to the YUYV rejection tests added in #314. Without these
+// pins, a regression that dropped any guard (e.g. a refactor that
+// folded NV12 + YUYV into a shared helper and lost the resolution
+// parity check) would surface as a SIMD out-of-bounds panic or
+// silent garbage output rather than a clean `ProcessFrameError`.
+
+#[test]
+fn nv12_into_rgb_write_to_rejects_odd_resolution() {
+    // 3×3 fails the resolution-parity guard at types.rs:1801. We need
+    // a buffer with `w*h*3/2 = 13` bytes (rounded down from 13.5),
+    // but the parity check fires first regardless of input size.
+    // Use a 3×2 frame (parity fails on width) with arbitrary data.
+    let data = vec![100u8; 3 * 2 * 3 / 2]; // 9 bytes
+    let buf = Buffer::new(Resolution::new(3, 2), &data, FrameFormat::NV12);
+    let frame: Frame<Nv12> = Frame::new(buf);
+    let mut dest = vec![0u8; 3 * 2 * 3];
+    let err = frame.into_rgb().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::NV12, "RGB", "bad resolution");
+}
+
+#[test]
+fn nv12_into_rgb_write_to_rejects_wrong_input_size() {
+    // 2×2 needs 6 bytes (4 Y + 2 UV). Pass 5 to trip the input-size
+    // guard at types.rs:1809 after parity check passes.
+    let data = vec![100u8, 100, 100, 100, 128];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::NV12);
+    let frame: Frame<Nv12> = Frame::new(buf);
+    let mut dest = vec![0u8; 2 * 2 * 3];
+    let err = frame.into_rgb().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::NV12, "RGB", "bad input buffer size");
+}
+
+#[test]
+fn nv12_into_rgb_write_to_rejects_mismatched_dest() {
+    // 2×2 valid input (6 bytes). Expected RGB dest = 12 bytes; pass
+    // 9 to trip the output-size guard at types.rs:1819.
+    let mut data = vec![100u8; 4];
+    data.extend_from_slice(&[128, 128]);
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::NV12);
+    let frame: Frame<Nv12> = Frame::new(buf);
+    let mut dest = vec![0u8; 9];
+    let err = frame.into_rgb().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::NV12, "RGB", "bad output buffer size");
+}
+
+#[test]
+fn nv12_into_rgba_write_to_rejects_odd_resolution() {
+    let data = vec![100u8; 3 * 2 * 3 / 2];
+    let buf = Buffer::new(Resolution::new(3, 2), &data, FrameFormat::NV12);
+    let frame: Frame<Nv12> = Frame::new(buf);
+    let mut dest = vec![0u8; 3 * 2 * 4];
+    let err = frame.into_rgba().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::NV12, "RGB", "bad resolution");
+}
+
+#[test]
+fn nv12_into_rgba_write_to_rejects_wrong_input_size() {
+    let data = vec![100u8, 100, 100, 100, 128];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::NV12);
+    let frame: Frame<Nv12> = Frame::new(buf);
+    let mut dest = vec![0u8; 2 * 2 * 4];
+    let err = frame.into_rgba().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::NV12, "RGB", "bad input buffer size");
+}
+
+#[test]
+fn nv12_into_rgba_write_to_rejects_mismatched_dest() {
+    // 2×2 valid input. Expected RGBA dest = 16 bytes; pass 12.
+    let mut data = vec![100u8; 4];
+    data.extend_from_slice(&[128, 128]);
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::NV12);
+    let frame: Frame<Nv12> = Frame::new(buf);
+    let mut dest = vec![0u8; 12];
+    let err = frame.into_rgba().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::NV12, "RGB", "bad output buffer size");
+}
+
 #[test]
 fn yuyv_into_rgb_write_to_neutral_chroma_produces_gray() {
     let data = vec![100u8, 128, 100, 128, 100, 128, 100, 128];
