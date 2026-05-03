@@ -350,6 +350,23 @@
 
 ### Testing
 
+* **Pin `list_controls` early-return paths in
+  `nokhwa-bindings-gstreamer/src/controls.rs`.** `list_controls`
+  (`controls.rs:84`) iterates an Element's `list_properties()`, filters
+  by the four allow-listed v4l2src names (`brightness`, `contrast`,
+  `hue`, `saturation`), and skips properties that are read-only,
+  write-only, or not `ParamSpecInt`. The function had zero direct
+  coverage even though the module docstring promises that
+  `mfvideosrc`/`ksvideosrc`/`avfvideosrc` (Windows + macOS) yield an
+  empty list. Added two narrow pins:
+  `list_controls_returns_empty_for_element_without_matching_property_names`
+  uses `fakesrc` (3 unrelated properties) and
+  `list_controls_returns_empty_for_videotestsrc` uses `videotestsrc`
+  (25+ unrelated properties including `pattern`, `kt`, `kx`, `motion`)
+  to pin that name filtering is exact — substring or case-insensitive
+  drift would surface immediately. Reuses the same `Once`-init pattern
+  as `format::tests`. Test count grows 73 → 75.
+
 * **Pin all 6 error branches and 4 happy-path framerate cases of
   `sample_format` in `nokhwa-bindings-gstreamer/src/uri.rs`.**
   `sample_format` (`uri.rs:240`) is the URL-mode counterpart of
