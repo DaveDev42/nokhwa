@@ -1224,4 +1224,45 @@ mod runner_tests {
 
         runner.stop().expect("runner.stop()");
     }
+
+    // `Overflow::Block` is the third overflow policy, alongside
+    // `DropNewest` (the default, exercised by `runner_produces_frames`)
+    // and `DropOldest` (exercised by
+    // `runner_drop_oldest_overflow_drains_relay_on_stop`). `Block` is
+    // structurally different — no relay thread, the worker's
+    // `blocking_send` stalls until the consumer drains. The unit tests
+    // in `src/runner.rs` (lines ~720-755) cover `make_channel` with
+    // synthetic data, but the full producer-thread → frames-channel
+    // hardware path is unpinned end-to-end. A regression that, e.g.,
+    // collapsed `Block` to `DropNewest` (silently dropping under load)
+    // or wedged the worker on `blocking_send` would slip past every
+    // existing test. Spawn with `Block` + capacity 4, pull frames,
+    // stop cleanly.
+    #[test]
+    fn runner_block_overflow_delivers_frames_and_stops() {
+        let opened = open(CameraIndex::Index(0), OpenRequest::any())
+            .expect("open(CameraIndex::Index(0)) failed");
+        let cfg = RunnerConfig {
+            frames_capacity: 4,
+            overflow: Overflow::Block,
+            ..RunnerConfig::default()
+        };
+        let runner = CameraRunner::spawn(opened, cfg).expect("CameraRunner::spawn with Block");
+        let frames = runner.frames().expect("runner has no frames channel");
+
+        // Pull three frames. With `Block`, the worker stalls on a full
+        // channel; we keep the consumer ahead of the producer so the
+        // happy path (no stalls) is exercised. A regression that
+        // collapsed `Block` to `DropNewest` would still pass *this*
+        // half (frames flow); the stop path below catches the other
+        // half (no relay thread to leak / re-drain on shutdown).
+        for i in 0..3 {
+            let buf = frames
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap_or_else(|e| panic!("recv frame {i} on Block runner: {e}"));
+            assert!(!buf.buffer().is_empty(), "Block runner frame {i} empty");
+        }
+
+        runner.stop().expect("runner.stop() on Block runner");
+    }
 }

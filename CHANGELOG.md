@@ -301,6 +301,20 @@
 
 ### Testing
 
+* **Pin runner `Overflow::Block` end-to-end on hardware in
+  `tests/device_tests.rs::runner_tests`.** New
+  `runner_block_overflow_delivers_frames_and_stops`. The runner has
+  three overflow policies: `DropNewest` (default, covered by
+  `runner_produces_frames`), `DropOldest` (covered by
+  `runner_drop_oldest_overflow_drains_relay_on_stop`), and `Block`.
+  Block is structurally different — no relay thread, the worker's
+  `blocking_send` stalls until the consumer drains. The unit tests
+  in `src/runner.rs` (lines ~720-755) cover `make_channel` with
+  synthetic data, but the full producer-thread → frames-channel
+  hardware path was unpinned end-to-end. A regression that, e.g.,
+  collapsed `Block` to `DropNewest` (silently dropping under load)
+  or wedged the worker on `blocking_send` would slip past every
+  existing test.
 * **Pin `negotiated_format()` and `controls()` are stable across
   consecutive reads in `tests/device_tests.rs`.** Two new tests:
   `negotiated_format_read_is_stable` and `controls_read_is_stable`.
