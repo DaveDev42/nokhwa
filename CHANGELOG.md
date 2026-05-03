@@ -232,6 +232,19 @@
 
 ### Testing
 
+* **Tighten `CameraIndex::Display` to an exact-format pin for both
+  variants.** The pre-existing `camera_index_display` only asserted
+  `s.contains('5')` for `Index(5)` and never exercised the `String`
+  variant — a wrapping refactor like `format!("Index({i})")` or
+  `format!("String({s})")` would silently break GStreamer URL
+  dispatch error messages, since `CameraIndex::String("rtsp://...")`
+  is passed through `OpenedCamera`'s routing and surfaces in
+  `OpenDeviceError`'s `{device}` slot. Replaced with
+  `camera_index_display_exact_format` pinning both variants verbatim:
+  `Index(5)` → `"5"`, `Index(0)` → `"0"`,
+  `String("rtsp://cam.local/stream")` → `"rtsp://cam.local/stream"`,
+  `String("/dev/video0")` → `"/dev/video0"`. Guards
+  `nokhwa-core/src/types.rs:349-353`.
 * **Pin `FrameFormat::Display` exact strings for all six variants.**
   The pre-existing `frame_format_display_roundtrip` is symmetry-only
   (parses Display back via `FromStr` and checks equality), so it
