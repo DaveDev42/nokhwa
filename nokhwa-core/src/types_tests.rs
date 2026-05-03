@@ -764,6 +764,67 @@ fn fulfill_closest_distance_tie_picks_first_in_device_order() {
 }
 
 #[test]
+fn fulfill_closest_framerate_tie_picks_first_in_device_order() {
+    // Companion pin to `fulfill_closest_distance_tie_picks_first_in_device_order`.
+    // Both arms of `Closest` use the same stable-sort-then-first
+    // strategy for tie-breaking: resolution at
+    // `nokhwa-core/src/types.rs:262-264`, framerate at lines 283-284.
+    //
+    // The framerate phase, unlike the resolution phase, does NOT call
+    // `dedup_by` afterwards — relying entirely on Rust's stable
+    // `sort_by_key` to keep input order for equal keys before
+    // `.first()` picks the survivor.
+    //
+    // Net contract: when two framerates are equidistant from the
+    // requested target (e.g. 15 and 45 around 30), the one whose
+    // `CameraFormat` appears first in `all_formats` (and therefore
+    // first in the post-resolution-filter `frame_rates` vector) wins.
+    //
+    // A refactor that swapped to `sort_unstable_by_key` would silently
+    // scramble fps selection on cameras advertising symmetric fps
+    // around the target (a real pattern: many cameras expose 15 and
+    // 30, or 24 and 60, around a typical 30 target). The two
+    // existing fps-related tests cover only unambiguous-winner cases:
+    // `fulfill_closest_picks_nearest_framerate` uses {15, 30, 60} with
+    // target 25 (clear winner: 30); the other Closest tests don't
+    // probe ties at all.
+    //
+    // Test: target 30 fps with candidates {15, 45} — both have
+    // distance 15. A clearly-farther 60 fps (distance 30) is included
+    // as a sanity control so the test fails loudly if distance
+    // computation itself breaks rather than just tie-breaking.
+    let target = CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 30);
+    let req =
+        RequestedFormat::with_formats(RequestedFormatType::Closest(target), &[FrameFormat::MJPEG]);
+
+    let order_a = vec![
+        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 15),
+        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 45),
+        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 60),
+    ];
+    let pick_a = req.fulfill(&order_a).unwrap();
+    assert_eq!(
+        pick_a.frame_rate(),
+        15,
+        "first equidistant fps (by device order) must win",
+    );
+
+    let order_b = vec![
+        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 45),
+        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 15),
+        CameraFormat::new_from(640, 480, FrameFormat::MJPEG, 60),
+    ];
+    let pick_b = req.fulfill(&order_b).unwrap();
+    assert_eq!(
+        pick_b.frame_rate(),
+        45,
+        "swapping the input order must swap the winner — proves the \
+         stable-sort contract on the framerate phase is what's \
+         pinned, not an accidental fps-Ord tiebreaker",
+    );
+}
+
+#[test]
 fn fulfill_decoder_filter_applies_across_variants() {
     let available = vec![
         CameraFormat::new_from(1920, 1080, FrameFormat::NV12, 60),

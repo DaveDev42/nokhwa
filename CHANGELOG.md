@@ -232,6 +232,23 @@
 
 ### Testing
 
+* **Pin `RequestedFormatType::Closest` framerate tie-breaking.**
+  Companion to `fulfill_closest_distance_tie_picks_first_in_device_order`.
+  `nokhwa-core/src/types.rs:283-284` sorts the framerate candidates
+  by `(abs_distance, fps)` with stable `sort_by_key` and picks the
+  first survivor. Unlike the resolution arm, the framerate arm has no
+  `dedup_by` step — it relies entirely on Rust's stable-sort guarantee
+  to keep input order for equal keys before `.first()`. A refactor
+  that swapped to `sort_unstable_by_key` would silently scramble fps
+  selection on cameras advertising symmetric fps around the target
+  (e.g. {15, 45} around 30, or {24, 60} around a typical 30 target).
+  The two existing fps-related tests cover only unambiguous-winner
+  cases. New `fulfill_closest_framerate_tie_picks_first_in_device_order`
+  uses target 30 fps with candidates {15, 45} (both at distance 15)
+  plus a clearly-farther 60 fps as a sanity control, and runs the
+  same swap-the-input-order check pattern as the resolution-tie
+  test to prove the contract is the stable-sort behaviour, not an
+  accidental fps-Ord tiebreaker.
 * **Pin `make_channel` `DropOldest` relay producer-disconnect flush
   loop with a non-empty buffer.** `src/runner.rs:215-220` is the
   flush loop that drains the relay's in-memory `VecDeque` into
