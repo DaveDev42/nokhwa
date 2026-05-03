@@ -97,6 +97,19 @@
 
 ### Refactoring
 
+* **AVFoundation `poll_loop` extracts a pure
+  `reconcile_and_emit_with(tx, previous, current)` helper.** The
+  diff/emit/cache-swap logic was inlined in `poll_loop` — the same
+  shape the V4L and MSMF backends used before they were split.
+  Pulled the I/O-free part into a standalone helper and added 5 unit
+  tests pinning the contract (cache swap, arrivals + removals
+  emitted, arrivals precede removals in emission order, identical
+  snapshots emit no events, returns false when channel closed) so
+  all three native hotplug backends now share both the helper shape
+  and the test surface. New `AVFoundation unit tests (macOS)` CI
+  job (`cargo test -p nokhwa-bindings-macos-avfoundation` on
+  `macos-latest`) wires the apple-gated tests into CI; previously
+  `test-core.yml` only ran the non-Apple stub tests.
 * **MSMF `reconcile_and_emit` extracts a pure
   `reconcile_and_emit_with(tx, previous, current)` helper.** The
   previous shape took a `&SharedState` and called `take_snapshot()`
