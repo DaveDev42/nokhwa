@@ -232,6 +232,25 @@
 
 ### Testing
 
+* **Pin remaining `NokhwaError` Display exact-format strings.**
+  Every variant other than the four `(backend …)` / `(format …)`
+  parenthetical ones (pinned previously) had only `contains(...)`
+  checks: `UninitializedError`, `InitializeError`, `ShutdownError`,
+  `StructureError`, `OpenDeviceError`, `GetPropertyError`,
+  `SetPropertyError`, `ProcessFrameError`,
+  `UnsupportedOperationError`, `NotImplementedError`,
+  `TimeoutError`. A refactor that renamed `"Could not initialize"`
+  to `"Failed to initialize"`, dropped the literal `"with value"`
+  separator from `SetPropertyError`, dropped the trailing period on
+  `UnsupportedOperationError`, or changed `{0:?}` to `{0}` on
+  `TimeoutError`'s `Duration` would silently break log scrapers
+  while passing every existing test. Added 11 new
+  `*_display_exact_format` tests pinning the full Display output
+  verbatim for each variant — including
+  `"Frame capture timed out after 250ms"` (Debug-formatted
+  `Duration`) and
+  `"This operation is not supported by backend Video4Linux."`
+  (trailing period). Guards `nokhwa-core/src/error.rs:25-74`.
 * **Pin `CameraControl` + `ControlValueDescription` Display edge
   cases.** The pre-existing
   `camera_control_display_renders_canonical_log_line` only pins

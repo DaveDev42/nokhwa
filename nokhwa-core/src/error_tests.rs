@@ -118,6 +118,131 @@ fn uninitialized_error_display_mentions_init() {
     assert!(s.contains("init()"));
 }
 
+// Same rationale as the exact-format pins below for the
+// non-`(backend …)` / `(format …)` variants. Every test above
+// in this file uses `contains(...)` checks that pass after any
+// refactor preserving the keywords. Downstream log scrapers and
+// integration tests key on the exact prefix and separator
+// punctuation; pin each variant's full Display string verbatim
+// so a wording change forces a deliberate, reviewer-visible test
+// update. Guards `nokhwa-core/src/error.rs:25-74`.
+#[test]
+fn uninitialized_error_display_exact_format() {
+    let e = NokhwaError::UninitializedError;
+    assert_eq!(format!("{e}"), "Uninitialized Camera. Call `init()` first!");
+}
+
+#[test]
+fn initialize_error_display_exact_format() {
+    let e = NokhwaError::InitializeError {
+        backend: ApiBackend::Video4Linux,
+        error: "no /dev/video0".into(),
+    };
+    assert_eq!(
+        format!("{e}"),
+        "Could not initialize Video4Linux: no /dev/video0"
+    );
+}
+
+#[test]
+fn shutdown_error_display_exact_format() {
+    let e = NokhwaError::ShutdownError {
+        backend: ApiBackend::AVFoundation,
+        error: "device busy".into(),
+    };
+    assert_eq!(
+        format!("{e}"),
+        "Could not shutdown AVFoundation: device busy"
+    );
+}
+
+#[test]
+fn structure_error_display_exact_format() {
+    let e = NokhwaError::StructureError {
+        structure: "FrameFormat".into(),
+        error: "No match for FOOBAR".into(),
+    };
+    assert_eq!(
+        format!("{e}"),
+        "Could not generate required structure FrameFormat: No match for FOOBAR"
+    );
+}
+
+#[test]
+fn open_device_error_display_exact_format() {
+    let e = NokhwaError::OpenDeviceError {
+        device: "/dev/video2".into(),
+        error: "permission denied".into(),
+    };
+    assert_eq!(
+        format!("{e}"),
+        "Could not open device /dev/video2: permission denied"
+    );
+}
+
+#[test]
+fn get_property_error_display_exact_format() {
+    let e = NokhwaError::GetPropertyError {
+        property: "Brightness".into(),
+        error: "not supported".into(),
+    };
+    assert_eq!(
+        format!("{e}"),
+        "Could not get device property Brightness: not supported"
+    );
+}
+
+#[test]
+fn set_property_error_display_exact_format() {
+    let e = NokhwaError::SetPropertyError {
+        property: "Exposure".into(),
+        value: "9999".into(),
+        error: "out of range".into(),
+    };
+    assert_eq!(
+        format!("{e}"),
+        "Could not set device property Exposure with value 9999: out of range"
+    );
+}
+
+#[test]
+fn process_frame_error_display_exact_format() {
+    let e = NokhwaError::ProcessFrameError {
+        src: FrameFormat::YUYV,
+        destination: "RGB".into(),
+        error: "bad sample".into(),
+    };
+    assert_eq!(
+        format!("{e}"),
+        "Could not process frame YUYV to RGB: bad sample"
+    );
+}
+
+#[test]
+fn unsupported_operation_error_display_exact_format() {
+    let e = NokhwaError::UnsupportedOperationError(ApiBackend::Video4Linux);
+    assert_eq!(
+        format!("{e}"),
+        "This operation is not supported by backend Video4Linux."
+    );
+}
+
+#[test]
+fn not_implemented_error_display_exact_format() {
+    let e = NokhwaError::NotImplementedError("hotplug on browser".into());
+    assert_eq!(
+        format!("{e}"),
+        "This operation is not implemented yet: hotplug on browser"
+    );
+}
+
+#[test]
+fn timeout_error_display_exact_format() {
+    let e = NokhwaError::TimeoutError(Duration::from_millis(250));
+    // `{0:?}` on `Duration::from_millis(250)` Debug-formats as `250ms`.
+    assert_eq!(format!("{e}"), "Frame capture timed out after 250ms");
+}
+
 // The four error variants below all share the same parenthetical
 // formatting pattern: `Error<TAIL>: <msg>` where `<TAIL>` is either
 // `" (backend {b})"`, `" (format {f})"`, or empty when the optional
