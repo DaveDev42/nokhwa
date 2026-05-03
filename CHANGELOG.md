@@ -232,6 +232,24 @@
 
 ### Testing
 
+* **Pin `CameraRunner::spawn_{stream,hybrid}` open()-error
+  propagation.** `src/runner.rs:288` and `src/runner.rs:367` both
+  start with `cam.open()?` before doing any thread / channel setup.
+  The contract is: a backend whose `FrameSource::open()` returns
+  `Err` must surface that error from `CameraRunner::spawn` — no
+  worker thread spawned, no `Ok(runner)`. A regression that swallowed
+  the open error (e.g. `let _ = cam.open();` or reordering thread
+  spawn before `open()`) would yield a "healthy" runner whose frames
+  channel never delivers anything; the user would see no error at
+  spawn time and only notice silence on the receiver. Note
+  `spawn_shutter` does NOT call `open()` (shutter backends are
+  triggered, not streamed), so this contract is stream/hybrid-only.
+  New `runner_spawn_stream_propagates_open_error` and
+  `runner_spawn_hybrid_propagates_open_error` install
+  `FailingOpenFrame` / `FailingOpenHybrid` mocks whose `open()`
+  always returns a recognisable error string, then assert
+  `CameraRunner::spawn` returns `Err` with that string surfaced
+  unchanged.
 * **Pin `CameraRunner::spawn_hybrid` swallowing of `take_events()`
   errors.** `src/runner.rs:368-378` discriminates three cases when
   building the events channel: `Some(Ok(poll))` spins up the event
