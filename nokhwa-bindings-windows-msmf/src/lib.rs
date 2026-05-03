@@ -1604,6 +1604,119 @@ mod stub {
             Err(not_on_this_platform())
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{not_on_this_platform, MediaFoundationCaptureDevice};
+        use nokhwa_core::error::NokhwaError;
+        use nokhwa_core::format_types::Mjpeg;
+        use nokhwa_core::traits::{CameraDevice, FrameSource};
+        use nokhwa_core::types::{
+            ApiBackend, CameraFormat, CameraIndex, ControlValueSetter, FrameFormat,
+            KnownCameraControl, RequestedFormat, RequestedFormatType, Resolution,
+        };
+
+        // Pin the contract that the off-Windows stub never hands out a live
+        // device: every fallible method returns `NotImplementedError` and
+        // `MediaFoundationCaptureDevice::new` errors deterministically.
+        // Keeps the docs-only / cross-platform `cargo check` builds honest
+        // even though the real backend only links on Windows.
+
+        fn assert_not_implemented(err: &NokhwaError) {
+            assert!(
+                matches!(err, NokhwaError::NotImplementedError(_)),
+                "expected NotImplementedError, got {err:?}",
+            );
+        }
+
+        #[test]
+        fn shared_error_helper_is_not_implemented() {
+            assert_not_implemented(&not_on_this_platform());
+        }
+
+        #[test]
+        fn new_errors_off_windows() {
+            // Can't use `.expect_err` because the stub type intentionally
+            // does not implement `Debug` — pattern-match instead.
+            match MediaFoundationCaptureDevice::new(
+                &CameraIndex::Index(0),
+                RequestedFormat::new::<Mjpeg>(RequestedFormatType::AbsoluteHighestFrameRate),
+            ) {
+                Err(err) => assert_not_implemented(&err),
+                Ok(_) => panic!("stub `new` must always error off Windows"),
+            }
+        }
+
+        #[test]
+        fn supported_camera_controls_is_empty() {
+            let dev = MediaFoundationCaptureDevice;
+            assert!(dev.supported_camera_controls().is_empty());
+        }
+
+        #[test]
+        fn backend_reports_media_foundation() {
+            let dev = MediaFoundationCaptureDevice;
+            assert_eq!(dev.backend(), ApiBackend::MediaFoundation);
+        }
+
+        #[test]
+        fn camera_device_fallible_methods_return_not_implemented() {
+            let mut dev = MediaFoundationCaptureDevice;
+            assert_not_implemented(&dev.controls().expect_err("stub controls() must error"));
+            let err = dev
+                .set_control(
+                    KnownCameraControl::Brightness,
+                    ControlValueSetter::Integer(0),
+                )
+                .expect_err("stub set_control() must error");
+            assert_not_implemented(&err);
+        }
+
+        #[test]
+        fn frame_source_fallible_methods_return_not_implemented() {
+            let mut dev = MediaFoundationCaptureDevice;
+            assert_not_implemented(
+                &dev.set_format(CameraFormat::new(
+                    Resolution::new(640, 480),
+                    FrameFormat::MJPEG,
+                    30,
+                ))
+                .expect_err("stub set_format() must error"),
+            );
+            assert_not_implemented(
+                &dev.compatible_formats()
+                    .expect_err("stub compatible_formats() must error"),
+            );
+            assert_not_implemented(
+                &dev.compatible_fourcc()
+                    .expect_err("stub compatible_fourcc() must error"),
+            );
+            assert_not_implemented(&dev.open().expect_err("stub open() must error"));
+            assert_not_implemented(&dev.frame().expect_err("stub frame() must error"));
+            assert_not_implemented(&dev.frame_raw().expect_err("stub frame_raw() must error"));
+            assert_not_implemented(&dev.close().expect_err("stub close() must error"));
+        }
+
+        #[test]
+        fn is_open_reports_false() {
+            let dev = MediaFoundationCaptureDevice;
+            assert!(!dev.is_open());
+        }
+
+        #[test]
+        #[should_panic(expected = "MediaFoundation stub: only available on Windows")]
+        fn info_panics_via_stub_unreachable() {
+            let dev = MediaFoundationCaptureDevice;
+            let _info = dev.info();
+        }
+
+        #[test]
+        #[should_panic(expected = "MediaFoundation stub: only available on Windows")]
+        fn negotiated_format_panics_via_stub_unreachable() {
+            let dev = MediaFoundationCaptureDevice;
+            let _fmt = dev.negotiated_format();
+        }
+    }
 }
 
 #[cfg(any(not(windows), feature = "docs-only"))]

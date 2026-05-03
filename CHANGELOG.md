@@ -203,6 +203,26 @@
 
 ### Testing
 
+* **Pin the off-Windows MSMF stub contract.** The non-Windows compile-
+  shim impls of `CameraDevice` / `FrameSource` for
+  `MediaFoundationCaptureDevice` (in
+  `nokhwa-bindings-windows-msmf/src/lib.rs::stub`) had no test
+  coverage — the stub compiles on Linux/macOS but its behavior
+  (`new()` errors, fallible methods return `NotImplementedError`,
+  `info()` / `negotiated_format()` panic via `stub_unreachable()`,
+  `is_open() == false`, `backend() == ApiBackend::MediaFoundation`,
+  `supported_camera_controls()` empty) was only enforced by code
+  review. Mirrors the gap that the V4L off-Linux stub used to have
+  before its `todo!()` panics were fixed — without tests, a future
+  refactor could regress one of the methods to `panic!()` /
+  `todo!()` and the cross-platform `cargo check
+  --features docs-only,docs-nolink` job would still pass. Added a
+  `#[cfg(test)] mod tests` inside the `stub` module with nine unit
+  tests pinning each branch of the contract; two of them use
+  `#[should_panic(expected = "MediaFoundation stub: only available
+  on Windows")]` to lock in the `stub_unreachable()` message.
+  Compiles and runs on the `Test Core & Features` job (Linux),
+  which is where the stub path is actually active.
 * **Expand `device_tests::runner_tests` from one test to five.**
   `tests/device_tests.rs::runner_tests::runner_produces_frames` was
   the only `device-test`+`runner` integration test, exercising just
@@ -1439,6 +1459,18 @@
 
 ### Infrastructure
 
+* **Run `nokhwa-bindings-windows-msmf` unit tests in CI.** No CI
+  job ever invoked `cargo test -p nokhwa-bindings-windows-msmf`,
+  so the off-Windows `stub` module had no test coverage and the
+  Windows-gated `wmf::tests` module's 9 GUID/parser tests were
+  built but never run. Added a step to the `Test Core & Features
+  → Core unit tests` job that runs the crate's tests on
+  `ubuntu-latest` — this is exactly where the off-Windows stub
+  path is active, so the new stub contract tests execute here.
+  The Windows-only `wmf` tests stay out of scope for this Linux
+  step (they're behind `#[cfg(all(windows, not(feature =
+  "docs-only")))]` and would need a Windows runner to execute);
+  filling that gap is tracked separately in TODO.md.
 * **Run the root `nokhwa` crate's headless tests in CI.**
   `Test Core & Features → Core unit tests` only invoked
   `cargo test -p nokhwa-core` (three times across feature combos);

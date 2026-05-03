@@ -44,6 +44,17 @@ jobs:
       # capability dispatch, runner channel policy, and format
       # round-trips ship to `main` untested.
       - run: cargo test -p nokhwa --lib --tests --features input-v4l,runner
+      # `nokhwa-bindings-windows-msmf` ships an off-Windows stub of
+      # `MediaFoundationCaptureDevice` (lib.rs::stub) so cross-platform
+      # `cargo check --features docs-only,docs-nolink` builds compile.
+      # The stub's contract — `new()` errors, fallible methods return
+      # `NotImplementedError`, `info()` / `negotiated_format()` panic
+      # via `stub_unreachable()`, `is_open() == false` — is only
+      # exercised when the crate is unit-tested on a non-Windows host.
+      # Without this step the stub ships without any test coverage,
+      # mirroring the V4L off-Linux gap that previously let `todo!()`
+      # ship to `main`.
+      - run: cargo test -p nokhwa-bindings-windows-msmf
 
   # Verifies output feature deps resolve correctly.
   # input-v4l satisfies the compile_error! guard that requires an input backend.
