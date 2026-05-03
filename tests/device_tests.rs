@@ -191,6 +191,31 @@ fn query_indices_are_unique() {
     }
 }
 
+/// Every `CameraInfo` returned by `query()` must have a non-empty
+/// `human_name()`. UI pickers (the `nokhwactl list-devices` example,
+/// downstream consumer apps) render this string verbatim for every
+/// row — a blank entry surfaces as a confusing empty line a user
+/// can't distinguish from "device disappeared mid-enumeration".
+/// The single-opened-camera path is already pinned by
+/// `opened_camera_info_and_backend_reflect_request` (line ~573) and
+/// `open_info_matches_query_for_same_index` (line ~750), but those
+/// only cover the device that actually gets opened. A regression in
+/// a backend's enumerator that emitted a blank name for a *different*
+/// (un-opened) entry — V4L2 reading an empty `card` field, MSMF
+/// `IMFAttributes::MF_FRIENDLY_NAME` returning an empty BSTR for a
+/// freshly-plugged device, AVFoundation's `localizedName` racing the
+/// device-add notification — would slip past every existing test.
+#[test]
+fn query_results_have_non_empty_human_names() {
+    let devices = query(native_backend()).expect("query() returned an error");
+    for info in &devices {
+        assert!(
+            !info.human_name().is_empty(),
+            "query() returned a device with an empty human_name(): {info:?}; full list: {devices:?}"
+        );
+    }
+}
+
 #[test]
 fn open_stream_and_capture_frames() {
     match open_first() {
