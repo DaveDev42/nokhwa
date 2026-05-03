@@ -220,6 +220,23 @@
 
 ### Testing
 
+* **Pin `HybridCamera::from_device` `EventSource` init-failure
+  normalisation.** `src/session.rs:447–460` swallows
+  `EventSource::take_events` errors during construction and surfaces
+  them as `take_events() == None` (the rustdoc on `take_events`
+  promises "init failures are normalised to `None`"). The branch had
+  no test — the only `EventSource`-driving fixture in
+  `tests/session.rs` returned `Ok(_)`, so a refactor that propagated
+  the `Err` (or panicked, or poisoned the device) would have shipped
+  unnoticed. Added `FailingEventfulHybrid` (a newtype wrapping
+  `MockHybrid` whose `EventSource::take_events` returns
+  `NokhwaError::general(…)`) and `hybrid_camera_normalises_event_
+  source_error_to_none` which asserts: `from_device` does not
+  panic / propagate, `take_events()` returns `None`, repeated
+  `take_events()` stays `None`, and the remaining
+  `FrameSource` / `ShutterCapture` surface (`open` / `frame` /
+  `capture`) is still functional. Pins all three contract clauses
+  in one test so any one of them regressing fails the suite.
 * **Pin the off-Apple AVFoundation stub contract.** Mirror PR for the
   AVFoundation binding crate. The new non-Apple compile-shim impls of
   `CameraDevice` / `FrameSource` for `AVFoundationCaptureDevice` (in

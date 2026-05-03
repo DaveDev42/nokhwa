@@ -416,3 +416,100 @@ fn hybrid_camera_from_device_panics_with_shutter_only() {
     // `ShutterOnly` only has CAP_SHUTTER, missing CAP_FRAME.
     let _ = HybridCamera::from_device(Box::new(make_shutter()));
 }
+
+// ─────────────────── HybridCamera: EventSource init failure normalised ────
+//
+// Pin the `Some(Err(_))` arm of `HybridCamera::from_device` (session.rs:450):
+// when an `EventSource`-capable backend reports an error from the initial
+// `take_events()` call, `from_device` must NOT propagate the error or panic.
+// It must construct a working `HybridCamera` whose subsequent `take_events()`
+// returns `None` (the error is logged via `log::warn!` when the `logging`
+// feature is enabled, otherwise silently swallowed). Without this test the
+// branch could regress to `unwrap()` / propagation and the docs-promised
+// "init failures are normalised to None" contract would silently break.
+
+struct FailingEventfulHybrid(MockHybrid);
+
+impl CameraDevice for FailingEventfulHybrid {
+    fn backend(&self) -> ApiBackend {
+        self.0.backend()
+    }
+    fn info(&self) -> &CameraInfo {
+        self.0.info()
+    }
+    fn controls(&self) -> Result<Vec<CameraControl>, NokhwaError> {
+        self.0.controls()
+    }
+    fn set_control(
+        &mut self,
+        id: KnownCameraControl,
+        value: ControlValueSetter,
+    ) -> Result<(), NokhwaError> {
+        self.0.set_control(id, value)
+    }
+}
+impl FrameSource for FailingEventfulHybrid {
+    fn negotiated_format(&self) -> CameraFormat {
+        self.0.negotiated_format()
+    }
+    fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
+        self.0.set_format(f)
+    }
+    fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+        self.0.compatible_formats()
+    }
+    fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
+        self.0.compatible_fourcc()
+    }
+    fn open(&mut self) -> Result<(), NokhwaError> {
+        self.0.open()
+    }
+    fn is_open(&self) -> bool {
+        self.0.is_open()
+    }
+    fn frame(&mut self) -> Result<Buffer, NokhwaError> {
+        self.0.frame()
+    }
+    fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
+        self.0.frame_raw()
+    }
+    fn close(&mut self) -> Result<(), NokhwaError> {
+        self.0.close()
+    }
+}
+impl ShutterCapture for FailingEventfulHybrid {
+    fn trigger(&mut self) -> Result<(), NokhwaError> {
+        self.0.trigger()
+    }
+    fn take_picture(&mut self, t: Duration) -> Result<Buffer, NokhwaError> {
+        self.0.take_picture(t)
+    }
+}
+impl EventSource for FailingEventfulHybrid {
+    fn take_events(&mut self) -> Result<Box<dyn EventPoll + Send>, NokhwaError> {
+        Err(NokhwaError::general("simulated event-poll init failure"))
+    }
+}
+
+nokhwa_backend!(FailingEventfulHybrid: FrameSource, ShutterCapture, EventSource);
+
+#[test]
+fn hybrid_camera_normalises_event_source_error_to_none() {
+    let mut hybrid = MockHybrid::new(0, vec![mock_frame(4, 4, FrameFormat::MJPEG)]);
+    hybrid.push_frame(mock_frame(4, 4, FrameFormat::MJPEG));
+    let dev = FailingEventfulHybrid(hybrid);
+    // Construction must succeed despite the EventSource error.
+    let mut cam = HybridCamera::from_device(Box::new(dev));
+    // The error is normalised to `None`, not propagated.
+    assert!(
+        cam.take_events().is_none(),
+        "EventSource::take_events Err must be swallowed and surface as None"
+    );
+    // Repeated calls remain `None` (idempotent on the `None` arm).
+    assert!(cam.take_events().is_none());
+    // The remaining FrameSource / ShutterCapture surface still works — the
+    // event-poll failure must not poison the rest of the device.
+    assert!(cam.open().is_ok());
+    assert!(cam.frame().is_ok());
+    assert!(cam.capture(Duration::from_millis(100)).is_ok());
+}
