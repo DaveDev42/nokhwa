@@ -167,6 +167,56 @@ fn rawrgb_into_rgb_write_to() {
     assert_eq!(dest, data);
 }
 
+// `Frame<RawBgr>::into_rgb().write_to(...)` routes through
+// `convert_to_rgb_buffer`'s `FrameFormat::RAWBGR => buf_bgr_to_rgb(...)`
+// arm at frame.rs:431. The materialize counterpart is pinned by
+// `rawbgr_into_rgb_swaps_channels` above, but the `write_to` end-to-end
+// integration was uncovered: a regression in the dispatcher wiring
+// (e.g. accidentally routing RAWBGR through the RAWRGB no-op copy)
+// would silently produce blue-tinted "RGB" output and pass the
+// materialize test only by virtue of going through `data.to_vec()`
+// — and `write_to` callers would not catch it.
+
+#[test]
+fn rawbgr_into_rgb_write_to_swaps_channels() {
+    // Per-pixel-distinct B/G/R values so the test fails loudly if the
+    // dispatcher ever stops swapping (e.g. accidentally lands in the
+    // RAWRGB no-op arm).
+    // BGR: B=10, G=20, R=30  →  RGB: R=30, G=20, B=10
+    // BGR: B=40, G=80, R=120 →  RGB: R=120, G=80, B=40
+    // Repeated to fill 2×2 (buf_bgr_to_rgb requires multiple-of-2 dims).
+    let data = vec![
+        10, 20, 30, 40, 80, 120, // row 0
+        10, 20, 30, 40, 80, 120, // row 1
+    ];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::RAWBGR);
+    let frame: Frame<RawBgr> = Frame::new(buf);
+    let mut dest = vec![0u8; 12];
+    frame.into_rgb().write_to(&mut dest).unwrap();
+    assert_eq!(
+        dest,
+        vec![30, 20, 10, 120, 80, 40, 30, 20, 10, 120, 80, 40,],
+        "write_to must produce per-pixel B↔R-swapped RGB",
+    );
+}
+
+#[test]
+fn rawbgr_into_rgb_write_to_rejects_mismatched_dest() {
+    // 2×2 RAWBGR needs 12 bytes in and 12 out. Pass an 11-byte dest
+    // to hit the `out.len() != output_size` guard inside
+    // `buf_bgr_to_rgb` at types.rs:1951. The error must report
+    // FrameFormat::RAWBGR as the source — proving the dispatch path
+    // hands off to `buf_bgr_to_rgb` (which uses the RAWBGR src
+    // hardcoded inside) rather than wrapping the call with its own
+    // synthesized error.
+    let data = vec![10, 20, 30, 40, 80, 120, 10, 20, 30, 40, 80, 120];
+    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::RAWBGR);
+    let frame: Frame<RawBgr> = Frame::new(buf);
+    let mut dest = vec![0u8; 11]; // expected 12
+    let err = frame.into_rgb().write_to(&mut dest).unwrap_err();
+    assert_process_frame_err(err, FrameFormat::RAWBGR, "RGB", "bad output buffer size");
+}
+
 #[test]
 fn rawrgb_into_rgb_write_png_emits_valid_png() {
     // `RgbConversion::write_png` is a public API that pipes through
