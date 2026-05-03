@@ -29,6 +29,16 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   `-devel` manifest, (c) self-hosted Windows runner with GStreamer
   pre-installed. `Build (windows)` matrix still exercises `input-msmf`
   so no regression.
+- [ ] **MSMF Windows-host unit-test coverage.** `nokhwa-bindings-
+  windows-msmf::wmf::tests` ships 9 GUID/parser tests gated on
+  `#[cfg(all(windows, not(feature = "docs-only")))]`. They currently
+  build but never execute — the new Linux step in `Test Core &
+  Features` exercises only the off-Windows `stub` module. Closing
+  this gap needs a Windows-host job that runs `cargo test
+  -p nokhwa-bindings-windows-msmf`. Lightweight (no device required,
+  pure GUID arithmetic) so it can run on a stock GH-hosted
+  `windows-latest`. Different gap from the device-test item below
+  (which needs a real or virtual MF source).
 - [ ] **MSMF device-test coverage on a GH-hosted `windows-latest`**
   runner. OBS virtualcam spike (`msmf-obs-virtualcam.yml`) is abandoned
   — OBS is a DirectShow filter, invisible to `MFEnumDeviceSources`.
