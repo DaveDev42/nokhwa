@@ -187,6 +187,22 @@
 
 ### Testing
 
+* **Cover `NokhwaError` `Clone`, `Debug`, and
+  `std::error::Error::source()` in
+  `nokhwa-core/src/error_tests.rs`.** The `Display` impl was fully
+  pinned per variant, but `Clone` (used wherever errors cross
+  channel boundaries — runner event sender, etc.), the derived
+  `Debug` output (a separate code path from `thiserror`'s
+  `Display`), and the `Error::source() == None` invariant (which
+  error-chain tooling relies on; a stray `#[source]` on a future
+  field would silently invert it) had zero assertions. Seven new
+  tests pin: `Clone` round-trip preserves `Display` output for unit
+  variants, struct variants preserve every field after clone, the
+  `Option<ApiBackend>` field round-trips its `Some` payload, `Debug`
+  output includes the variant name + `{:?}` field values for both
+  unit and struct variants, the timeout `Duration` survives the
+  `Debug` formatter, and `source()` returns `None` for nine
+  representative variants spanning every shape in the enum.
 * **Cover `CameraRunner::stop()` and the `take_*` channel-handoff
   methods in `tests/runner.rs`.** `stop()` is the graceful-shutdown
   path — it sends `Command::Die`, drops all channel receivers, and
