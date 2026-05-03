@@ -1480,6 +1480,20 @@
 
 ### Infrastructure
 
+* **Run `nokhwa-tokio` unit tests in CI.** The crate ships ~12
+  tests covering the `std::sync::mpsc → tokio::mpsc` forwarder
+  bridge (ordering, closure semantics, owned-non-`Copy` payloads,
+  empty-channel closure surfacing) and `TokioCameraRunner` drop /
+  stop / control-passthrough behavior in `tests/drop_semantics.rs`.
+  No CI step ever invoked `cargo test -p nokhwa-tokio` — the
+  crate compiled transitively under `Build (linux/macos/windows)`
+  but its tests stayed unexecuted, so the forwarder contract was
+  enforced only by author runs. Added a `cargo test -p nokhwa-
+  tokio` step to the `Core unit tests` job. Per-target Cargo.toml
+  picks the native backend automatically (`input-v4l` on Linux),
+  so the step is feature-flag-free. None of the tests touch real
+  hardware (they exercise channel plumbing against `std::sync::
+  mpsc` and the `testing` mock backends).
 * **Run `nokhwa-bindings-linux-v4l` unit tests on non-Linux hosts.**
   The off-Linux `internal` stub module (`#[cfg(not(target_os =
   "linux"))]`) compiled but stayed untested everywhere — the V4L

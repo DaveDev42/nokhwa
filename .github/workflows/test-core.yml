@@ -55,6 +55,17 @@ jobs:
       # mirroring the V4L off-Linux gap that previously let `todo!()`
       # ship to `main`.
       - run: cargo test -p nokhwa-bindings-windows-msmf
+      # `nokhwa-tokio` ships ~12 tests covering the
+      # `std::sync::mpsc → tokio::mpsc` forwarder bridge and
+      # `TokioCameraRunner` drop semantics (lib + tests/drop_semantics.rs).
+      # No CI step ever invoked `cargo test -p nokhwa-tokio`, so the
+      # forwarder ordering / closure / payload-shape contracts and the
+      # async `Drop` no-op assertions shipped untested. The crate auto-
+      # selects `input-v4l` on Linux via per-target Cargo.toml deps, so
+      # `cargo test -p nokhwa-tokio` is feature-flag-free here. None of
+      # the tests touch real hardware (they exercise channel plumbing
+      # against `std::sync::mpsc` and the `testing` mock backends).
+      - run: cargo test -p nokhwa-tokio
 
   # Runs `nokhwa-bindings-linux-v4l` unit tests on non-Linux hosts so the
   # off-Linux `internal` stub module — gated on `#[cfg(not(target_os =
