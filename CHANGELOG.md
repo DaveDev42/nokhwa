@@ -187,6 +187,22 @@
 
 ### Testing
 
+* **Pin `Frame<Mjpeg>::into_rgb()/into_rgba().write_to(...)`
+  destination-buffer guards in
+  `nokhwa-core/src/frame_tests.rs`.** Both methods delegate
+  straight to `buf_mjpeg_to_rgb` (`types.rs`) with no upper-layer
+  dest-size check — the predicted buffer size requires decoding the
+  JPEG header, so the comparison happens inside the decoder
+  (`dest.len() == jpeg_decompress.min_flat_buffer_size()`). The
+  happy-path (correctly-sized dest) was covered, but the both-ends
+  too-small / too-large rejection branch returning
+  `ProcessFrameError("Bad decoded buffer size")` was uncovered. A
+  refactor that loosens the equality check to `<` (mirroring the
+  `MJPEG → Luma` arm's documented asymmetry) or drops the guard
+  altogether would slip past every existing test and land as a
+  panic-on-OOB in downstream zero-copy streaming consumers. Four
+  new tests pin the symmetric `!=` rejection on RGB (12 vs 11/13
+  bytes) and RGBA (16 vs 15/17 bytes) for a 2×2 frame.
 * **Cover `NokhwaError` `Clone`, `Debug`, and
   `std::error::Error::source()` in
   `nokhwa-core/src/error_tests.rs`.** The `Display` impl was fully
