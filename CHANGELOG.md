@@ -114,6 +114,20 @@
 
 ### Refactoring
 
+* **MSMF `MF_MT_FRAME_SIZE` decode centralised in a pure
+  `parse_frame_size(packed: u64) -> (u32, u32)` helper.** The two
+  call sites — `parse_native_media_types` and `format_refreshed` —
+  inlined the same `(packed >> 32) as u32, packed as u32` arithmetic
+  with slightly different shapes (one used `((res << 32) >> 32) as
+  u32` for the height, the other a bare `as u32`). Both are
+  arithmetically equivalent for `u64` but the inconsistency made
+  the layout drift-prone — exactly the shape we just bug-fixed for
+  `MF_MT_FRAME_RATE`. Routed both call sites through the helper
+  and pinned 4 unit tests: 1920x1080 happy path, both halves at
+  `u32::MAX` round-trip, all-zero packed → `(0, 0)`, low-half-only
+  → `(0, height)` (locks the high/low → width/height mapping so a
+  layout regression does not silently swap them). Tests run on the
+  `MSMF unit tests (Windows)` CI job.
 * **AVFoundation `current_authorization_status` extracts a pure
   `decode_authorization_status(raw: isize) -> AVAuthorizationStatus`
   helper.** The four-branch `NSInteger → AVAuthorizationStatus` decode

@@ -226,6 +226,22 @@ pub mod wmf {
         (fraction_u64 >> 32) as u32
     }
 
+    /// Decode a packed `MF_MT_FRAME_SIZE` `UINT64` into `(width,
+    /// height)`. Microsoft packs the width in the *high* 32 bits and
+    /// the height in the *low* 32 bits — the same shape as
+    /// `MF_MT_FRAME_RATE`'s numerator/denominator layout.
+    ///
+    /// Centralised here so the two call sites (enumeration in
+    /// `parse_native_media_types` and the cached-format refresh in
+    /// `format_refreshed`) can not drift, and so the cast can be
+    /// pinned without an `IMFMediaType` round-trip. Mirrors
+    /// `frame_rate_numerator` in shape and intent.
+    fn parse_frame_size(packed: u64) -> (u32, u32) {
+        let width = (packed >> 32) as u32;
+        let height = packed as u32;
+        (width, height)
+    }
+
     fn parse_native_media_types(
         source_reader: &IMFSourceReader,
     ) -> Result<Vec<ParsedMediaType>, NokhwaError> {
@@ -252,11 +268,7 @@ pub mod wmf {
             };
 
             let (width, height) = match unsafe { media_type.GetUINT64(&MF_MT_FRAME_SIZE) } {
-                Ok(res_u64) => {
-                    let width = (res_u64 >> 32) as u32;
-                    let height = res_u64 as u32;
-                    (width, height)
-                }
+                Ok(res_u64) => parse_frame_size(res_u64),
                 Err(why) => {
                     return Err(NokhwaError::GetPropertyError {
                         property: "MF_MT_FRAME_SIZE".to_string(),
@@ -978,9 +990,7 @@ pub mod wmf {
                 Ok(media_type) => {
                     let resolution = match unsafe { media_type.GetUINT64(&MF_MT_FRAME_SIZE) } {
                         Ok(res) => {
-                            let width = (res >> 32) as u32;
-                            let height = ((res << 32) >> 32) as u32;
-
+                            let (width, height) = parse_frame_size(res);
                             Resolution {
                                 width_x: width,
                                 height_y: height,
@@ -1507,6 +1517,46 @@ pub mod wmf {
         #[test]
         fn frame_rate_numerator_zero_packed_returns_zero() {
             assert_eq!(frame_rate_numerator(0), 0);
+        }
+
+        /// `MF_MT_FRAME_SIZE` packs `width << 32 | height`. Pin the
+        /// canonical 1920x1080 case to lock the high/low halves to
+        /// width/height respectively. Mirrors the bug we fixed in
+        /// `frame_rate_numerator` where the high/low halves were
+        /// transposed at the call site.
+        #[test]
+        fn parse_frame_size_1080p() {
+            let packed: u64 = (1920_u64 << 32) | 0x438_u64; // 1080
+            assert_eq!(parse_frame_size(packed), (1920, 1080));
+        }
+
+        /// Both halves at `u32::MAX` round-trip — the helper must
+        /// not lose the high bit on either cast. Same invariant we
+        /// pin for `frame_rate_numerator`.
+        #[test]
+        fn parse_frame_size_max_u32_round_trips() {
+            let packed: u64 = (u64::from(u32::MAX) << 32) | u64::from(u32::MAX);
+            assert_eq!(parse_frame_size(packed), (u32::MAX, u32::MAX));
+        }
+
+        /// All-zero packed value produces `(0, 0)` rather than
+        /// panicking — useful when an upstream consumer treats `0`
+        /// as "unknown" instead of `Resolution::new(0, 0)`. The
+        /// helper itself does not interpret the sentinel.
+        #[test]
+        fn parse_frame_size_zero_packed_is_zero_zero() {
+            assert_eq!(parse_frame_size(0), (0, 0));
+        }
+
+        /// Asymmetric: only the low half is set. Pins that the
+        /// width comes from the *high* 32 bits (so it's `0` here)
+        /// and the height comes from the *low* 32 bits (so it's
+        /// `1080` here) — i.e. the layout is `width:hi | height:lo`,
+        /// not the reverse. A regression of this layout would
+        /// silently swap width and height for every camera.
+        #[test]
+        fn parse_frame_size_low_half_only_is_zero_height_pair() {
+            assert_eq!(parse_frame_size(1080), (0, 1080));
         }
     }
 }
