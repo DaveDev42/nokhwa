@@ -1403,6 +1403,147 @@ mod internal {
             Err(not_on_this_platform())
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{
+            id_to_known_camera_control, known_camera_control_to_id, not_on_this_platform,
+            V4LCaptureDevice,
+        };
+        use nokhwa_core::error::NokhwaError;
+        use nokhwa_core::format_types::Mjpeg;
+        use nokhwa_core::traits::{CameraDevice, FrameSource};
+        use nokhwa_core::types::{
+            ApiBackend, CameraFormat, CameraIndex, ControlValueSetter, FrameFormat,
+            KnownCameraControl, RequestedFormat, RequestedFormatType, Resolution,
+        };
+
+        // Pin the contract that the off-Linux stub never hands out a live
+        // device: every fallible method returns `NotImplementedError` and
+        // `V4LCaptureDevice::new` errors deterministically. Mirrors the
+        // off-Windows MSMF stub coverage. Without these tests a future
+        // refactor could regress one of the methods to `panic!()` /
+        // `todo!()` (the original bug fixed earlier) and the cross-
+        // platform docs build would still pass.
+
+        fn assert_not_implemented(err: &NokhwaError) {
+            assert!(
+                matches!(err, NokhwaError::NotImplementedError(_)),
+                "expected NotImplementedError, got {err:?}",
+            );
+        }
+
+        #[test]
+        fn shared_error_helper_is_not_implemented() {
+            assert_not_implemented(&not_on_this_platform());
+        }
+
+        #[test]
+        fn new_errors_off_linux() {
+            // `V4LCaptureDevice` intentionally does not implement `Debug`,
+            // so we can't use `.expect_err`.
+            match V4LCaptureDevice::new(
+                &CameraIndex::Index(0),
+                RequestedFormat::new::<Mjpeg>(RequestedFormatType::AbsoluteHighestFrameRate),
+            ) {
+                Err(err) => assert_not_implemented(&err),
+                Ok(_) => panic!("stub `new` must always error off Linux"),
+            }
+        }
+
+        #[test]
+        fn force_refresh_camera_format_errors_off_linux() {
+            // Same `Debug`-less pattern as `new_errors_off_linux`. We can
+            // synthesize a `V4LCaptureDevice` directly because it's a unit
+            // struct — the public `new` constructor errors, but the type
+            // itself is constructable for tests pinning the trait surface.
+            let mut dev = V4LCaptureDevice;
+            match dev.force_refresh_camera_format() {
+                Err(err) => assert_not_implemented(&err),
+                Ok(()) => panic!("stub `force_refresh_camera_format` must error off Linux"),
+            }
+        }
+
+        #[test]
+        fn known_camera_control_id_helpers_are_no_ops() {
+            // The off-Linux stubs collapse the V4L2 control-ID mapping to
+            // a constant 0 / `Other(id)` round-trip. Pin that contract so
+            // the cross-platform docs build can't silently drift.
+            assert_eq!(
+                known_camera_control_to_id(KnownCameraControl::Brightness),
+                0
+            );
+            assert_eq!(known_camera_control_to_id(KnownCameraControl::Other(42)), 0);
+            match id_to_known_camera_control(42) {
+                KnownCameraControl::Other(id) => assert_eq!(id, 42),
+                other => panic!("expected Other(42), got {other:?}"),
+            }
+        }
+
+        #[test]
+        fn backend_reports_video_for_linux() {
+            let dev = V4LCaptureDevice;
+            assert_eq!(dev.backend(), ApiBackend::Video4Linux);
+        }
+
+        #[test]
+        fn camera_device_fallible_methods_return_not_implemented() {
+            let mut dev = V4LCaptureDevice;
+            assert_not_implemented(&dev.controls().expect_err("stub controls() must error"));
+            let err = dev
+                .set_control(
+                    KnownCameraControl::Brightness,
+                    ControlValueSetter::Integer(0),
+                )
+                .expect_err("stub set_control() must error");
+            assert_not_implemented(&err);
+        }
+
+        #[test]
+        fn frame_source_fallible_methods_return_not_implemented() {
+            let mut dev = V4LCaptureDevice;
+            assert_not_implemented(
+                &dev.set_format(CameraFormat::new(
+                    Resolution::new(640, 480),
+                    FrameFormat::MJPEG,
+                    30,
+                ))
+                .expect_err("stub set_format() must error"),
+            );
+            assert_not_implemented(
+                &dev.compatible_formats()
+                    .expect_err("stub compatible_formats() must error"),
+            );
+            assert_not_implemented(
+                &dev.compatible_fourcc()
+                    .expect_err("stub compatible_fourcc() must error"),
+            );
+            assert_not_implemented(&dev.open().expect_err("stub open() must error"));
+            assert_not_implemented(&dev.frame().expect_err("stub frame() must error"));
+            assert_not_implemented(&dev.frame_raw().expect_err("stub frame_raw() must error"));
+            assert_not_implemented(&dev.close().expect_err("stub close() must error"));
+        }
+
+        #[test]
+        fn is_open_reports_false() {
+            let dev = V4LCaptureDevice;
+            assert!(!dev.is_open());
+        }
+
+        #[test]
+        #[should_panic(expected = "V4L stub: only available on Linux")]
+        fn info_panics_via_stub_unreachable() {
+            let dev = V4LCaptureDevice;
+            let _info = dev.info();
+        }
+
+        #[test]
+        #[should_panic(expected = "V4L stub: only available on Linux")]
+        fn negotiated_format_panics_via_stub_unreachable() {
+            let dev = V4LCaptureDevice;
+            let _fmt = dev.negotiated_format();
+        }
+    }
 }
 
 pub use internal::*;
