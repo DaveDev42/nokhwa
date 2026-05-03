@@ -232,6 +232,26 @@
 
 ### Testing
 
+* **Tighten `NokhwaError` derived-`Debug` exact format and `Clone`
+  message round-trip.** Three contains-only Debug tests in
+  `nokhwa-core/src/error_tests.rs`
+  (`debug_format_includes_variant_name`,
+  `debug_format_for_timeout_includes_variant_and_duration`,
+  `debug_format_for_struct_variant_includes_field_names`) confirmed
+  variant + selected substrings appeared in the derived `Debug`
+  output, but a regression that replaced the derive with a hand-
+  written `impl Debug` collapsing
+  `OpenDeviceError { device, error }` to a tuple-style
+  `OpenDeviceError("cam0", "ENOENT")`, or that changed
+  `TimeoutError(2s)` to `TimeoutError { duration: 2s }`, would
+  satisfy the loose checks while breaking log scrapers /
+  downstream tests pinned to the exact form. Replaced with three
+  exact-format pins via `assert_eq!(format!("{:?}", e), "...")`.
+  Separately, `clone_optional_backend_field_preserves_some` only
+  destructured `backend, ..` and discarded the `message` field — a
+  hand-written `Clone` that left `message` empty (or swapped it
+  with the backend's `Display` form) on `GeneralError` would have
+  slipped past. Now also asserts `message == "x"` round-trip.
 * **Pin `MockFrameSource::frame_raw`, `compatible_formats`, and
   `MockEventfulFrameSource::take_events` second-call backend
   payload directly.** Three narrow-contract gaps in
