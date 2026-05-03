@@ -232,6 +232,27 @@
 
 ### Testing
 
+* **Pin hotplug second-take variant + payload across MSMF / V4L /
+  AVFoundation device tests; remove redundant `is_err()`-only frame
+  test.** Three sibling integration tests at
+  `tests/device_tests.rs:34,67,100` exercise the
+  `HotplugSource::take_hotplug_events` contract that the *second*
+  call must error. All three impls
+  (`nokhwa-bindings-windows-msmf/src/hotplug.rs:74-83`,
+  `nokhwa-bindings-linux-v4l/src/hotplug.rs:75-84`,
+  `nokhwa-bindings-macos-avfoundation/src/hotplug.rs:59-68`) emit
+  `UnsupportedOperationError(<respective ApiBackend>)`, but the tests
+  only verified `is_err()` — a regression that swapped to
+  `GeneralError` (silently changing public API error shape) or
+  mistagged the backend (mis-routing log-grep tooling) would slip
+  past. Pin all three to variant + exact `ApiBackend` payload.
+  Separately, deleted the redundant
+  `frame_try_new_mismatch_returns_error` in
+  `nokhwa-core/src/frame_tests.rs:54` — it was fully subsumed by
+  the adjacent `frame_try_new_mismatch_error_carries_src_and_destination`
+  which exercises the same GRAY → `Frame<RawRgb>` path with an
+  exact variant + src + destination + error pin. Net -1 lib test
+  (380 vs. 381), +0 integration tests.
 * **Pin `FrameFormat::FromStr` error variant on every remaining
   `is_err()`-only test.** Four call sites in
   `nokhwa-core/src/types_tests.rs`

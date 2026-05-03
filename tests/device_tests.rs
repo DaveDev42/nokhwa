@@ -32,6 +32,7 @@ fn open_first() -> OpenedCamera {
 #[test]
 fn msmf_hotplug_take_and_steady_state() {
     use nokhwa::backends::hotplug::MediaFoundationHotplugContext;
+    use nokhwa::NokhwaError;
     use nokhwa_core::traits::HotplugSource;
     use std::time::Duration;
 
@@ -40,10 +41,23 @@ fn msmf_hotplug_take_and_steady_state() {
         .take_hotplug_events()
         .expect("first take_hotplug_events must succeed");
 
-    assert!(
-        ctx.take_hotplug_events().is_err(),
-        "second take_hotplug_events must error per the trait contract"
-    );
+    // The MSMF impl (`nokhwa-bindings-windows-msmf/src/hotplug.rs:74-83`)
+    // returns `UnsupportedOperationError(ApiBackend::MediaFoundation)`
+    // on the second call. The previous `is_err()` check would pass for
+    // any error variant — including a regression that swapped to
+    // `GeneralError` (silently changing the public-API error shape) or
+    // mistagged the backend as a different `ApiBackend` (mis-routing
+    // log-grep tooling). Pin both the variant and the backend payload.
+    let err = match ctx.take_hotplug_events() {
+        Ok(_) => panic!("second take_hotplug_events must error per the trait contract"),
+        Err(e) => e,
+    };
+    match err {
+        NokhwaError::UnsupportedOperationError(backend) => {
+            assert_eq!(backend, ApiBackend::MediaFoundation);
+        }
+        other => panic!("expected UnsupportedOperationError(MediaFoundation), got {other:?}"),
+    }
 
     // Three poll windows (~1.5s) with no plug/unplug → no events.
     let evt = poll.next_timeout(Duration::from_millis(1500));
@@ -65,6 +79,7 @@ fn msmf_hotplug_take_and_steady_state() {
 #[test]
 fn v4l_hotplug_take_and_steady_state() {
     use nokhwa::backends::hotplug::V4LHotplugContext;
+    use nokhwa::NokhwaError;
     use nokhwa_core::traits::HotplugSource;
     use std::time::Duration;
 
@@ -73,10 +88,20 @@ fn v4l_hotplug_take_and_steady_state() {
         .take_hotplug_events()
         .expect("first take_hotplug_events must succeed");
 
-    assert!(
-        ctx.take_hotplug_events().is_err(),
-        "second take_hotplug_events must error per the trait contract"
-    );
+    // The V4L impl (`nokhwa-bindings-linux-v4l/src/hotplug.rs:75-84`)
+    // returns `UnsupportedOperationError(ApiBackend::Video4Linux)` on
+    // the second call. Pin the variant + backend payload (see the MSMF
+    // sibling for the full rationale on why `is_err()` is too loose).
+    let err = match ctx.take_hotplug_events() {
+        Ok(_) => panic!("second take_hotplug_events must error per the trait contract"),
+        Err(e) => e,
+    };
+    match err {
+        NokhwaError::UnsupportedOperationError(backend) => {
+            assert_eq!(backend, ApiBackend::Video4Linux);
+        }
+        other => panic!("expected UnsupportedOperationError(Video4Linux), got {other:?}"),
+    }
 
     // Three poll windows (~1.5s) with no plug/unplug → no events.
     let evt = poll.next_timeout(Duration::from_millis(1500));
@@ -99,6 +124,7 @@ fn v4l_hotplug_take_and_steady_state() {
 #[test]
 fn avfoundation_hotplug_take_and_steady_state() {
     use nokhwa::backends::hotplug::AVFoundationHotplugContext;
+    use nokhwa::NokhwaError;
     use nokhwa_core::traits::HotplugSource;
     use std::time::Duration;
 
@@ -107,10 +133,20 @@ fn avfoundation_hotplug_take_and_steady_state() {
         .take_hotplug_events()
         .expect("first take_hotplug_events must succeed");
 
-    assert!(
-        ctx.take_hotplug_events().is_err(),
-        "second take_hotplug_events must error per the trait contract"
-    );
+    // The AVF impl (`nokhwa-bindings-macos-avfoundation/src/hotplug.rs:59-68`)
+    // returns `UnsupportedOperationError(ApiBackend::AVFoundation)` on
+    // the second call. Pin the variant + backend payload (see the MSMF
+    // sibling for the full rationale).
+    let err = match ctx.take_hotplug_events() {
+        Ok(_) => panic!("second take_hotplug_events must error per the trait contract"),
+        Err(e) => e,
+    };
+    match err {
+        NokhwaError::UnsupportedOperationError(backend) => {
+            assert_eq!(backend, ApiBackend::AVFoundation);
+        }
+        other => panic!("expected UnsupportedOperationError(AVFoundation), got {other:?}"),
+    }
 
     // Three poll windows (~1.5s) with no plug/unplug → no events.
     let evt = poll.next_timeout(Duration::from_millis(1500));

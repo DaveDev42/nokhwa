@@ -51,15 +51,6 @@ fn frame_into_buffer_roundtrip() {
 }
 
 #[test]
-fn frame_try_new_mismatch_returns_error() {
-    let data = vec![128u8; 4]; // 2x2 gray
-    let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::GRAY);
-    // Try to wrap a GRAY buffer in a Frame<RawRgb> — should fail
-    let result = Frame::<RawRgb>::try_new(buf);
-    assert!(result.is_err());
-}
-
-#[test]
 fn frame_try_new_matching_succeeds() {
     let data = vec![128u8; 4];
     let buf = Buffer::new(Resolution::new(2, 2), &data, FrameFormat::GRAY);
