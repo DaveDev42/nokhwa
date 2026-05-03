@@ -232,6 +232,28 @@
 
 ### Testing
 
+* **Tighten `CameraFormat::new_from` and `CameraInfo::set_index`
+  accessor coverage.** `camera_format_new_from` only pinned
+  `width()`/`height()`/`format()`/`frame_rate()` individually; it
+  never asserted `.resolution() == Resolution::new(640, 480)` as
+  a structural equality. `new_from` builds the inner `Resolution`
+  via field literals (`nokhwa-core/src/types.rs:617-621`) rather
+  than via `Resolution::new`, so a regression where the two paths
+  diverge (e.g. a future private invariant field on `Resolution`
+  set by `new` but skipped by `new_from`'s literal construction)
+  would round-trip the same `width()`/`height()` while breaking
+  structural equality. Pinned the round-trip. Separately,
+  `camera_info_getters_setters` only round-tripped
+  `set_index(CameraIndex::Index(1))` — never the
+  `CameraIndex::String(_)` arm, even though `set_index` is the
+  primary path that variant takes through `CameraInfo` after
+  construction (e.g. when a GStreamer backend rewrites a numeric
+  V4L index to a `rtsp://` URL post-discovery). A regression that
+  silently dropped or coerced the `String` arm (e.g. a stray
+  `_ => self.index = CameraIndex::Index(0)` fallback left from
+  refactoring) would have slipped past. Added a
+  `set_index(CameraIndex::String("rtsp://cam.local/stream"))`
+  round-trip assertion.
 * **Pin `CameraIndex` structural `PartialEq` and tighten the
   `Default` test.** `CameraIndex` derives `PartialEq`
   (`nokhwa-core/src/types.rs:304`), making `Index(0)` and
