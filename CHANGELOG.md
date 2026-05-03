@@ -232,6 +232,28 @@
 
 ### Testing
 
+* **Tighten `Frame::try_new` mismatch-error pin and add an
+  all-integer `ControlValueSetter::RGB` Display pin.** The
+  pre-existing `frame_try_new_mismatch_error_carries_src_and_destination`
+  only asserted `destination.contains("RAWRGB")` and
+  `error.contains("RAWRGB") && error.contains("GRAY")` — a wrapping
+  refactor that changed `Frame<RAWRGB>` to `RAWRGB` or swapped the
+  diagnostic order to `expected GRAY, got RAWRGB` would have stayed
+  green even though both regressions break downstream
+  log/grep tooling and mislead anyone reading the error.
+  Replaced the two `contains` checks with exact-string asserts:
+  `destination == "Frame<RAWRGB>"` and
+  `error == "expected RAWRGB, got GRAY"`. Guards
+  `nokhwa-core/src/frame.rs:80-85`. Separately, the existing
+  `control_value_setter_display_rgb` only exercised the
+  `f64::Display` whole-number drop on the *middle* channel
+  (`RGB(0.5, 1.0, 0.25)` → `"(0.5, 1, 0.25)"`), so a regression
+  that introduced `{:.1}` width formatting on the first or third
+  channel would silently change the rendering for users with
+  whole-number RGB controls. Added
+  `control_value_setter_display_rgb_all_integer_drops_decimal`
+  asserting `RGB(1.0, 2.0, 3.0).to_string() == "RGBValue: (1, 2, 3)"`.
+  Guards `nokhwa-core/src/types.rs:1501-1503`.
 * **Pin `KnownCameraControl::Display` for all 16 variants.** The
   pre-existing `known_camera_control_display_renders_variant_name`
   pinned only 5 of 16 variants exactly (`Brightness`, `WhiteBalance`,

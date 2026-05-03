@@ -85,18 +85,16 @@ fn frame_try_new_mismatch_error_carries_src_and_destination() {
                 FrameFormat::GRAY,
                 "src must be the buffer's actual FrameFormat"
             );
-            assert!(
-                destination.contains("RAWRGB"),
-                "destination must name the expected Frame<F> format; got {destination:?}"
-            );
-            // The diagnostic `error` string is informational, but if a
-            // regression dropped it (e.g. left it empty), debugging
-            // a real format mismatch would lose the human-readable
-            // hint. Pin that it mentions both formats.
-            assert!(
-                error.contains("RAWRGB") && error.contains("GRAY"),
-                "error string must mention both expected and actual formats; got {error:?}"
-            );
+            // Pin the exact destination string. A weaker `contains`
+            // would stay green even if the wrapping changed from
+            // `Frame<RAWRGB>` to e.g. `RAWRGB` or `Frame:RAWRGB`,
+            // breaking downstream log/grep tooling.
+            assert_eq!(destination, "Frame<RAWRGB>");
+            // Pin the exact diagnostic string. A weaker `contains`
+            // pair would stay green if the order was swapped to
+            // `expected GRAY, got RAWRGB`, which would mislead
+            // anyone reading the error.
+            assert_eq!(error, "expected RAWRGB, got GRAY");
         }
         other => panic!("expected NokhwaError::ProcessFrameError, got {other:?}"),
     }
