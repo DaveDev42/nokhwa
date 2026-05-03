@@ -190,6 +190,18 @@
 
 ### Documentation
 
+* **Fix two pre-existing rustdoc warnings.** `cargo +nightly doc
+  --no-deps --features docs-only,docs-nolink,docs-features`
+  emitted (1) `unresolved link to tokio::task::spawn_blocking` in
+  `src/lib.rs:68` (the crate-level docs reference `tokio` without
+  it being a dependency of the root crate — `nokhwa-tokio` is the
+  consumer that depends on it) and (2) `redundant explicit link
+  target` in `src/runner.rs:239` for
+  `[`OpenedCamera`](crate::OpenedCamera)` (the label already
+  resolves to the same destination). Switched the tokio reference
+  to plain backticks (it's prose, not a doc-link) and dropped the
+  redundant `(crate::OpenedCamera)` target. Both warnings predated
+  this PR; no API change.
 * **README: replace "Nokhwa 0.13 splits…" present-tense
   reference and link all three migration guides.** The Quick
   Start section opened with `Nokhwa 0.13 splits camera
@@ -1575,6 +1587,16 @@
 
 ### Infrastructure
 
+* **Add `docs-build` CI job to lock in zero rustdoc warnings.** New
+  `Test Core & Features → Docs build (-D warnings)` job on
+  `ubuntu-latest` running `cargo +nightly doc --no-deps --features
+  docs-only,docs-nolink,docs-features` with `RUSTDOCFLAGS=-D
+  warnings`. Mirrors the `docs-only,docs-nolink,docs-features`
+  config documented in CLAUDE.md (the cross-platform docs surface
+  consumers see at docs.rs). Future broken intra-doc links or
+  malformed `[label](path)` shorthand fail the PR rather than
+  silently shipping; previously rustdoc warnings only surfaced when
+  someone ran the command manually.
 * **Run `nokhwa-bindings-macos-avfoundation` stub tests on non-Apple
   hosts.** New `Test Core & Features → AVFoundation stub unit tests`
   matrix job on `windows-latest` + `ubuntu-latest` running `cargo

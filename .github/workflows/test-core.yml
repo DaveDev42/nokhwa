@@ -140,6 +140,24 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p nokhwa-bindings-windows-msmf
 
+  # Builds the cross-platform docs surface that downstream consumers see
+  # at docs.rs (mirrors the `docs-only,docs-nolink,docs-features` config
+  # documented in CLAUDE.md). `RUSTDOCFLAGS=-D warnings` turns rustdoc
+  # diagnostics into hard errors, so any future broken intra-doc link or
+  # malformed `[label](path)` shorthand fails the PR rather than silently
+  # shipping. nightly is required because `docs-features` activates
+  # `#![feature(doc_cfg)]`.
+  docs-build:
+    name: Docs build (-D warnings)
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo doc --no-deps --features docs-only,docs-nolink,docs-features
+
   # Verifies output feature deps resolve correctly.
   # input-v4l satisfies the compile_error! guard that requires an input backend.
   check-features:
