@@ -144,6 +144,17 @@
 
 ### Cleanup
 
+* **Drop dead `image = "0.25"` deps from `examples/decoder_test` and
+  `examples/capture` (`nokhwactl`).** Same pattern as the prior
+  `setting` / `threaded-capture` cleanup, but on the version-aligned
+  side: both `Cargo.toml` files declared a direct `image` dep that no
+  source file actually imported (`grep -c image
+  examples/{capture,decoder_test}/src/main.rs` returned `0` for both).
+  `examples/capture` even pinned `features = ["png"]`, but the png
+  feature only matters when something actually imports `image::` —
+  declaring it without a use site is dead. Removed the `image` dep
+  block from both manifests. Standalone-workspace `cargo check` still
+  passes for both examples.
 * **Drop dead `image = "0.23.14"` deps from `examples/setting` and
   `examples/threaded-capture`.** Both `Cargo.toml` files declared a
   direct `image = "0.23.14"` dependency that no source file in either
