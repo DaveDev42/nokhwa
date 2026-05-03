@@ -377,6 +377,22 @@
 
 ### Testing
 
+* **Pin MSMF frame-rate `UINT64` fraction parsing in
+  `nokhwa-bindings-windows-msmf/src/lib.rs`.** `parse_native_media_types`
+  decodes `MF_MT_FRAME_RATE` / `_RANGE_MIN` / `_RANGE_MAX` attributes
+  from a `UINT64` packed numerator/denominator. The contract — drop
+  fractional rates whose denominator != 1 (e.g. NTSC's 30000/1001,
+  which `CameraFormat`'s `u32` fps cannot honour without rounding
+  silently to 30 fps) — was inlined inside the unsafe MSMF query
+  loop, so it could not be unit-tested without driving real MSMF
+  enumeration. Extracted a pure
+  `parse_frame_rate_fraction(fraction_u64) -> Option<u32>` helper
+  and pinned all five branches: 30/1 → Some(30), 30000/1001 → None,
+  zero numerator → None, zero denominator → None, and a u32::MAX/1
+  round-trip that catches a future `(u64 >> 32) as u32` cast
+  regression. The MSMF query loop now delegates to the helper. Tests
+  execute on the existing `MSMF unit tests (Windows)` CI job; no new
+  Windows-host runtime cost.
 * **Pin `monotonic_to_wallclock` future-timestamp and happy-path
   branches in `nokhwa-bindings-linux-v4l/src/lib.rs`.**
   `monotonic_to_wallclock` (`lib.rs:1012`) converts a V4L2 buffer's
