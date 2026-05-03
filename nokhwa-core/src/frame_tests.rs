@@ -790,7 +790,12 @@ fn yuyv_into_rgb_write_to_rejects_wrong_input_size() {
     let frame: Frame<Yuyv> = Frame::new(buf);
     let mut dest = vec![0u8; 2 * 3];
     let err = frame.into_rgb().write_to(&mut dest).unwrap_err();
-    assert_process_frame_err(err, FrameFormat::YUYV, "RGB888", "isn't 4:2:2");
+    assert_process_frame_err(
+        err,
+        FrameFormat::YUYV,
+        "RGB888",
+        "Assertion failure, the YUV stream isn't 4:2:2! (wrong number of bytes)",
+    );
 }
 
 #[test]
@@ -802,7 +807,13 @@ fn yuyv_into_rgb_write_to_rejects_mismatched_dest() {
     let frame: Frame<Yuyv> = Frame::new(buf);
     let mut dest = vec![0u8; 9];
     let err = frame.into_rgb().write_to(&mut dest).unwrap_err();
-    assert_process_frame_err(err, FrameFormat::YUYV, "RGB888", "wrong size");
+    assert_process_frame_err(
+        err,
+        FrameFormat::YUYV,
+        "RGB888",
+        "Assertion failure, the destination RGB buffer is of the wrong size! \
+         [expected: 12, actual: 9]",
+    );
 }
 
 #[test]
@@ -812,7 +823,12 @@ fn yuyv_into_rgba_write_to_rejects_wrong_input_size() {
     let frame: Frame<Yuyv> = Frame::new(buf);
     let mut dest = vec![0u8; 2 * 4];
     let err = frame.into_rgba().write_to(&mut dest).unwrap_err();
-    assert_process_frame_err(err, FrameFormat::YUYV, "RGB888", "isn't 4:2:2");
+    assert_process_frame_err(
+        err,
+        FrameFormat::YUYV,
+        "RGB888",
+        "Assertion failure, the YUV stream isn't 4:2:2! (wrong number of bytes)",
+    );
 }
 
 #[test]
@@ -824,7 +840,13 @@ fn yuyv_into_rgba_write_to_rejects_mismatched_dest() {
     let frame: Frame<Yuyv> = Frame::new(buf);
     let mut dest = vec![0u8; 12];
     let err = frame.into_rgba().write_to(&mut dest).unwrap_err();
-    assert_process_frame_err(err, FrameFormat::YUYV, "RGB888", "wrong size");
+    assert_process_frame_err(
+        err,
+        FrameFormat::YUYV,
+        "RGB888",
+        "Assertion failure, the destination RGB buffer is of the wrong size! \
+         [expected: 16, actual: 12]",
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -940,7 +962,12 @@ fn rawbgr_into_luma_rejects_non_multiple_of_3_data() {
     let buf = Buffer::new(Resolution::new(1, 1), &data, FrameFormat::RAWBGR);
     let frame: Frame<RawBgr> = Frame::new(buf);
     let err = frame.into_luma().materialize().unwrap_err();
-    assert_process_frame_err(err, FrameFormat::RAWBGR, "Luma", "not a multiple of 3");
+    assert_process_frame_err(
+        err,
+        FrameFormat::RAWBGR,
+        "Luma",
+        "RGB/BGR data length not a multiple of 3",
+    );
 }
 
 #[test]
@@ -952,7 +979,12 @@ fn rawbgr_into_luma_write_to_rejects_mismatched_dest() {
     let frame: Frame<RawBgr> = Frame::new(buf);
     let mut dest = vec![0u8; 3];
     let err = frame.into_luma().write_to(&mut dest).unwrap_err();
-    assert_process_frame_err(err, FrameFormat::RAWBGR, "Luma", "destination buffer size");
+    assert_process_frame_err(
+        err,
+        FrameFormat::RAWBGR,
+        "Luma",
+        "destination buffer size mismatch (expected 4, got 3)",
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1033,7 +1065,12 @@ fn nv12_into_luma_write_to_rejects_wrong_input_size() {
     let frame: Frame<Nv12> = Frame::new(buf);
     let mut dest = vec![0u8; 4];
     let err = frame.into_luma().write_to(&mut dest).unwrap_err();
-    assert_process_frame_err(err, FrameFormat::NV12, "Luma", "NV12 input size");
+    assert_process_frame_err(
+        err,
+        FrameFormat::NV12,
+        "Luma",
+        "NV12 input size mismatch (expected 6, got 5)",
+    );
 }
 
 #[test]
@@ -1048,7 +1085,12 @@ fn nv12_into_luma_write_to_rejects_mismatched_dest() {
     let frame: Frame<Nv12> = Frame::new(buf);
     let mut dest = vec![0u8; 3]; // expected y_size = 4
     let err = frame.into_luma().write_to(&mut dest).unwrap_err();
-    assert_process_frame_err(err, FrameFormat::NV12, "Luma", "destination buffer size");
+    assert_process_frame_err(
+        err,
+        FrameFormat::NV12,
+        "Luma",
+        "destination buffer size mismatch (expected 4, got 3)",
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1099,7 +1141,12 @@ fn yuyv_into_luma_write_to_rejects_wrong_input_size() {
     // `dest` size doesn't matter — the input-length guard fires first.
     let mut dest = vec![0u8; 4];
     let err = frame.into_luma().write_to(&mut dest).unwrap_err();
-    assert_process_frame_err(err, FrameFormat::YUYV, "Luma", "not divisible by 4");
+    assert_process_frame_err(
+        err,
+        FrameFormat::YUYV,
+        "Luma",
+        "YUYV stream length not divisible by 4",
+    );
 }
 
 #[test]
@@ -1112,7 +1159,12 @@ fn yuyv_into_luma_write_to_rejects_mismatched_dest() {
     let frame: Frame<Yuyv> = Frame::new(buf);
     let mut dest = vec![0u8; 3];
     let err = frame.into_luma().write_to(&mut dest).unwrap_err();
-    assert_process_frame_err(err, FrameFormat::YUYV, "Luma", "destination buffer size");
+    assert_process_frame_err(
+        err,
+        FrameFormat::YUYV,
+        "Luma",
+        "destination buffer size mismatch (expected 4, got 3)",
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1259,7 +1311,12 @@ fn mjpeg_luma_write_to_rejects_too_small_dest() {
     let frame: Frame<Mjpeg> = Frame::new(buf);
     let mut dest = vec![0u8; 3]; // expected >= 4 (2x2 = 4 luma bytes)
     let err = frame.into_luma().write_to(&mut dest).unwrap_err();
-    assert_process_frame_err(err, FrameFormat::MJPEG, "Luma", "too small");
+    assert_process_frame_err(
+        err,
+        FrameFormat::MJPEG,
+        "Luma",
+        "Destination buffer too small",
+    );
 }
 
 #[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
@@ -1360,11 +1417,16 @@ fn mjpeg_rgba_write_to_rejects_too_large_dest() {
 // a regression in the size-check arithmetic would not have failed CI.
 // ---------------------------------------------------------------------------
 
+// Exact-string matcher (rather than `error.contains(needle)`) so a regression
+// that changes the error wording — or drops a computed `expected={N}, got={M}`
+// suffix — is caught by CI. Every caller below pins the verbatim message
+// produced by the source-of-truth at the matching site in `frame.rs` /
+// `types.rs` / `mjpeg.rs`.
 fn assert_process_frame_err(
     err: NokhwaError,
     expected_src: FrameFormat,
     expected_dst: &str,
-    needle: &str,
+    expected_error: &str,
 ) {
     match err {
         NokhwaError::ProcessFrameError {
@@ -1374,10 +1436,7 @@ fn assert_process_frame_err(
         } => {
             assert_eq!(src, expected_src);
             assert_eq!(destination, expected_dst);
-            assert!(
-                error.contains(needle),
-                "error message {error:?} did not contain {needle:?}"
-            );
+            assert_eq!(error, expected_error);
         }
         other => panic!("expected ProcessFrameError, got {other:?}"),
     }
@@ -1390,7 +1449,12 @@ fn rawrgb_into_rgb_write_to_rejects_mismatched_dest() {
     let frame: Frame<RawRgb> = Frame::new(buf);
     let mut dest = vec![0u8; 11]; // off by one
     let err = frame.into_rgb().write_to(&mut dest).unwrap_err();
-    assert_process_frame_err(err, FrameFormat::RAWRGB, "RGB", "destination buffer size");
+    assert_process_frame_err(
+        err,
+        FrameFormat::RAWRGB,
+        "RGB",
+        "destination buffer size mismatch (expected 12, got 11)",
+    );
 }
 
 // `Frame<Gray>` does not implement `IntoRgb`/`IntoRgba` (gray is luma-only),
@@ -1411,7 +1475,12 @@ fn rawrgb_into_rgba_rejects_non_multiple_of_3_data() {
     let buf = Buffer::new(Resolution::new(1, 1), &data, FrameFormat::RAWRGB);
     let frame: Frame<RawRgb> = Frame::new(buf);
     let err = frame.into_rgba().materialize().unwrap_err();
-    assert_process_frame_err(err, FrameFormat::RAWRGB, "RGBA", "not a multiple of 3");
+    assert_process_frame_err(
+        err,
+        FrameFormat::RAWRGB,
+        "RGBA",
+        "RAWRGB data length not a multiple of 3",
+    );
 }
 
 #[test]
@@ -1420,7 +1489,12 @@ fn rawbgr_into_rgba_rejects_non_multiple_of_3_data() {
     let buf = Buffer::new(Resolution::new(1, 1), &data, FrameFormat::RAWBGR);
     let frame: Frame<RawBgr> = Frame::new(buf);
     let err = frame.into_rgba().materialize().unwrap_err();
-    assert_process_frame_err(err, FrameFormat::RAWBGR, "RGBA", "not a multiple of 3");
+    assert_process_frame_err(
+        err,
+        FrameFormat::RAWBGR,
+        "RGBA",
+        "RAWBGR data length not a multiple of 3",
+    );
 }
 
 #[test]
@@ -1430,7 +1504,12 @@ fn rawrgb_into_rgba_write_to_rejects_non_multiple_of_3_data() {
     let frame: Frame<RawRgb> = Frame::new(buf);
     let mut dest = vec![0u8; 4];
     let err = frame.into_rgba().write_to(&mut dest).unwrap_err();
-    assert_process_frame_err(err, FrameFormat::RAWRGB, "RGBA", "not a multiple of 3");
+    assert_process_frame_err(
+        err,
+        FrameFormat::RAWRGB,
+        "RGBA",
+        "RAWRGB data length not a multiple of 3",
+    );
 }
 
 #[test]
@@ -1440,7 +1519,12 @@ fn rawrgb_into_rgba_write_to_rejects_mismatched_dest() {
     let frame: Frame<RawRgb> = Frame::new(buf);
     let mut dest = vec![0u8; 15]; // expected 16
     let err = frame.into_rgba().write_to(&mut dest).unwrap_err();
-    assert_process_frame_err(err, FrameFormat::RAWRGB, "RGBA", "destination buffer size");
+    assert_process_frame_err(
+        err,
+        FrameFormat::RAWRGB,
+        "RGBA",
+        "destination buffer size mismatch (expected 16, got 15)",
+    );
 }
 
 #[test]
@@ -1450,7 +1534,12 @@ fn rawbgr_into_rgba_write_to_rejects_mismatched_dest() {
     let frame: Frame<RawBgr> = Frame::new(buf);
     let mut dest = vec![0u8; 15];
     let err = frame.into_rgba().write_to(&mut dest).unwrap_err();
-    assert_process_frame_err(err, FrameFormat::RAWBGR, "RGBA", "destination buffer size");
+    assert_process_frame_err(
+        err,
+        FrameFormat::RAWBGR,
+        "RGBA",
+        "destination buffer size mismatch (expected 16, got 15)",
+    );
 }
 
 #[test]
@@ -1552,7 +1641,12 @@ fn rawrgb_into_luma_rejects_non_multiple_of_3_data() {
     let buf = Buffer::new(Resolution::new(1, 1), &data, FrameFormat::RAWRGB);
     let frame: Frame<RawRgb> = Frame::new(buf);
     let err = frame.into_luma().materialize().unwrap_err();
-    assert_process_frame_err(err, FrameFormat::RAWRGB, "Luma", "not a multiple of 3");
+    assert_process_frame_err(
+        err,
+        FrameFormat::RAWRGB,
+        "Luma",
+        "RGB/BGR data length not a multiple of 3",
+    );
 }
 
 #[test]
@@ -1562,7 +1656,12 @@ fn rawrgb_into_luma_write_to_rejects_non_multiple_of_3_data() {
     let frame: Frame<RawRgb> = Frame::new(buf);
     let mut dest = vec![0u8; 1];
     let err = frame.into_luma().write_to(&mut dest).unwrap_err();
-    assert_process_frame_err(err, FrameFormat::RAWRGB, "Luma", "not a multiple of 3");
+    assert_process_frame_err(
+        err,
+        FrameFormat::RAWRGB,
+        "Luma",
+        "RGB/BGR data length not a multiple of 3",
+    );
 }
 
 #[test]
@@ -1572,7 +1671,12 @@ fn rawrgb_into_luma_write_to_rejects_mismatched_dest() {
     let frame: Frame<RawRgb> = Frame::new(buf);
     let mut dest = vec![0u8; 3]; // expected 4
     let err = frame.into_luma().write_to(&mut dest).unwrap_err();
-    assert_process_frame_err(err, FrameFormat::RAWRGB, "Luma", "destination buffer size");
+    assert_process_frame_err(
+        err,
+        FrameFormat::RAWRGB,
+        "Luma",
+        "destination buffer size mismatch (expected 4, got 3)",
+    );
 }
 
 #[test]
@@ -1582,5 +1686,10 @@ fn gray_into_luma_write_to_rejects_mismatched_dest() {
     let frame: Frame<Gray> = Frame::new(buf);
     let mut dest = vec![0u8; 3]; // expected 4
     let err = frame.into_luma().write_to(&mut dest).unwrap_err();
-    assert_process_frame_err(err, FrameFormat::GRAY, "Luma", "destination buffer size");
+    assert_process_frame_err(
+        err,
+        FrameFormat::GRAY,
+        "Luma",
+        "destination buffer size mismatch (expected 4, got 3)",
+    );
 }

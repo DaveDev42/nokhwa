@@ -232,6 +232,23 @@
 
 ### Testing
 
+* **Tighten `assert_process_frame_err` from `contains(needle)` to
+  exact-string equality across all 34 callers.** The shared helper
+  in `nokhwa-core/src/frame_tests.rs:1363` was matching the `error`
+  field with `String::contains`, so a regression in any of the
+  conversion error messages — e.g. dropping the computed
+  `expected={N}, got={M}` suffix from `convert_to_rgb_buffer`
+  (`frame.rs:421`), `convert_to_rgba_buffer` (`frame.rs:518`),
+  `convert_to_luma_buffer` (`frame.rs:628`), `buf_yuyv422_to_rgb`
+  (`types.rs:1730`), `buf_yuyv_extract_luma` (`types.rs:1862`), or
+  `buf_nv12_extract_luma` (`types.rs:1898`) — would still satisfy
+  every NV12 / YUYV / RAW{RGB,BGR} / GRAY / MJPEG `ProcessFrameError`
+  test even though the diagnostic became useless for triage. Changed
+  the helper signature's `needle` parameter to `expected_error` and
+  swapped `error.contains(...)` for `assert_eq!(error, expected_error)`,
+  then walked every call site to pass the verbatim source-of-truth
+  message — including the runtime-formatted variants where the
+  test's data sizes determine the expected `{N}, got={M}` numbers.
 * **Pin `Buffer::from_vec` zero-copy doc contract and
   `Buffer` `Hash`/`Eq` dedup.** `Buffer::from_vec` and
   `Buffer::from_vec_with_timestamp` (`nokhwa-core/src/buffer.rs:89-114`)
