@@ -140,6 +140,23 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p nokhwa-bindings-windows-msmf
 
+  # Runs `nokhwa-bindings-macos-avfoundation` unit tests on a macOS host
+  # so tests gated on `#[cfg(any(target_os = "macos", target_os =
+  # "ios"))]` actually execute. The Linux + Windows steps in
+  # `test-avfoundation-non-apple` only exercise the off-Apple `stub`
+  # module — without this job the real `hotplug::reconcile_and_emit_with`
+  # diff/emit/cache-swap contract and any future Apple-only unit tests
+  # ship untested. No device required (pure mpsc + BTreeMap arithmetic);
+  # `macos-latest` is sufficient.
+  test-avfoundation-mac:
+    name: AVFoundation unit tests (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p nokhwa-bindings-macos-avfoundation
+
   # Builds the cross-platform docs surface that downstream consumers see
   # at docs.rs (mirrors the `docs-only,docs-nolink,docs-features` config
   # documented in CLAUDE.md). `RUSTDOCFLAGS=-D warnings` turns rustdoc
