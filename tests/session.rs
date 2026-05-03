@@ -351,3 +351,68 @@ fn hybrid_camera_with_events_delivers_poller() {
     // Subsequent take_events call returns None (poller already taken).
     assert!(cam.take_events().is_none());
 }
+
+// ─────────────────── from_device capability-assertion panics ──────────────
+//
+// Pin the documented `# Panics` contracts on `OpenedCamera::from_device`,
+// `StreamCamera::from_device`, `ShutterCamera::from_device`, and
+// `HybridCamera::from_device`. Each wrapper asserts that the `AnyDevice`
+// advertises the right `CAP_*` bits before downcasting; passing a mismatched
+// device must panic with the documented message rather than reaching the
+// `unreachable!()` placeholder inside `nokhwa_backend!`.
+
+/// `AnyDevice` that advertises zero capabilities. Used only to drive the
+/// `(false, false)` panic arm of `OpenedCamera::from_device`.
+struct NoCaps;
+
+impl nokhwa::session::AnyDevice for NoCaps {
+    fn capabilities(&self) -> u32 {
+        0
+    }
+    fn into_frame_source(self: Box<Self>) -> Box<dyn FrameSource + Send> {
+        unreachable!("NoCaps has no FrameSource")
+    }
+    fn into_shutter(self: Box<Self>) -> Box<dyn ShutterCapture + Send> {
+        unreachable!("NoCaps has no ShutterCapture")
+    }
+    fn into_hybrid(self: Box<Self>) -> Box<dyn nokhwa::session::HybridBackend + Send> {
+        unreachable!("NoCaps is not hybrid")
+    }
+    fn take_events(&mut self) -> Option<Result<Box<dyn EventPoll + Send>, NokhwaError>> {
+        None
+    }
+}
+
+#[test]
+#[should_panic(expected = "advertises no capabilities")]
+fn opened_camera_from_device_panics_on_zero_caps() {
+    let _ = OpenedCamera::from_device(Box::new(NoCaps));
+}
+
+#[test]
+#[should_panic(expected = "StreamCamera requires a FrameSource-capable backend")]
+fn stream_camera_from_device_panics_without_cap_frame() {
+    // `ShutterOnly` advertises CAP_SHUTTER but not CAP_FRAME.
+    let _ = StreamCamera::from_device(Box::new(make_shutter()));
+}
+
+#[test]
+#[should_panic(expected = "ShutterCamera requires a ShutterCapture-capable backend")]
+fn shutter_camera_from_device_panics_without_cap_shutter() {
+    // `FrameOnly` advertises CAP_FRAME but not CAP_SHUTTER.
+    let _ = ShutterCamera::from_device(Box::new(FrameOnly(MockFrameSource::new(0))));
+}
+
+#[test]
+#[should_panic(expected = "HybridCamera requires both FrameSource and ShutterCapture")]
+fn hybrid_camera_from_device_panics_without_both_caps() {
+    // `FrameOnly` only has CAP_FRAME, missing CAP_SHUTTER.
+    let _ = HybridCamera::from_device(Box::new(FrameOnly(MockFrameSource::new(0))));
+}
+
+#[test]
+#[should_panic(expected = "HybridCamera requires both FrameSource and ShutterCapture")]
+fn hybrid_camera_from_device_panics_with_shutter_only() {
+    // `ShutterOnly` only has CAP_SHUTTER, missing CAP_FRAME.
+    let _ = HybridCamera::from_device(Box::new(make_shutter()));
+}
