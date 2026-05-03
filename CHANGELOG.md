@@ -174,6 +174,20 @@
 
 ### Testing
 
+* **Pin `RequestedFormatType` Display rendering for the four
+  remaining variants in `nokhwa-core/src/types_tests.rs`.** The
+  existing `requested_format_type_display_matches_debug` covers
+  only `None`, `AbsoluteHighestResolution`, and `Exact`. The
+  other four variants — `AbsoluteHighestFrameRate`,
+  `HighestResolution(Resolution)`, `HighestFrameRate(u32)`,
+  `Closest(CameraFormat)` — were unpinned. The impl is
+  `write!(f, "{self:?}")`, which looks safe today, but a future
+  hand-written `Display` replacing the `{:?}` delegation would
+  silently break downstream callers that embed these strings into
+  `NokhwaError::ReadFrameError` / `SetPropertyError` payloads.
+  Added one test asserting every payload-bearing variant matches
+  its `Debug` rendering, so the contract holds for the whole
+  enum.
 * **Pin `Frame<RawBgr>::into_rgb().write_to(...)` end-to-end with 2
   unit tests in `nokhwa-core/src/frame_tests.rs`.** The materialize
   counterpart is pinned by `rawbgr_into_rgb_swaps_channels`, but the
