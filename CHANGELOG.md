@@ -232,6 +232,21 @@
 
 ### Testing
 
+* **Pin `FrameFormat::from_fourcc` / `to_fourcc` named-literal
+  table.** The pre-existing `frame_format_fourcc_roundtrip` test only
+  asserts that `from_fourcc(fmt.to_fourcc()) == Some(fmt)` for every
+  variant — a symmetry check that stays green even if two literals are
+  swapped (e.g. `RGB3 ↔ BGR3`), at which point the library would
+  silently mis-identify raw-RGB frames coming off a backend as
+  raw-BGR (or vice versa) without any test failure. Added two
+  explicit named-literal tests
+  (`frame_format_from_fourcc_named_literals` and
+  `frame_format_to_fourcc_named_literals` in
+  `nokhwa-core/src/types_tests.rs`) that pin all six FourCC ↔
+  `FrameFormat` mappings on both sides of the table —
+  `MJPG↔MJPEG`, `YUYV↔YUYV`, `GRAY↔GRAY`, `RGB3↔RAWRGB`,
+  `BGR3↔RAWBGR`, `NV12↔NV12` — guarding
+  `nokhwa-core/src/types.rs:443-466`.
 * **Pin NV12 `into_rgb()` / `into_rgba()` `write_to()` size-guard
   rejections.** Symmetric to the YUYV RGB/RGBA rejection pins.
   `buf_nv12_to_rgb` (`nokhwa-core/src/types.rs:1795-1834`) has three
