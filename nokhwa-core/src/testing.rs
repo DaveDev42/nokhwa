@@ -422,9 +422,15 @@ mod tests {
             mock_frame(3, 3, FrameFormat::MJPEG),
         ];
         let mut sh = MockShutter::new(pics);
+        // `MockShutter::take_picture` (`testing.rs:206-212`) propagates
+        // the caller-supplied timeout verbatim into `TimeoutError(_)`. A
+        // regression that hard-coded a different `Duration` (e.g. always
+        // `MAX`) would mislead downstream telemetry — pin the round-trip
+        // exactly. Sibling tests at `:477,492,627` already pin in the
+        // tighter shape; aligning this site keeps the file consistent.
         assert!(matches!(
             sh.take_picture(Duration::ZERO),
-            Err(NokhwaError::TimeoutError(_))
+            Err(NokhwaError::TimeoutError(d)) if d == Duration::ZERO
         ));
         sh.trigger().unwrap();
         let p = sh.take_picture(Duration::from_millis(10)).unwrap();
@@ -455,9 +461,13 @@ mod tests {
         assert_eq!(a.resolution(), Resolution::new(2, 2));
         assert_eq!(b.resolution(), Resolution::new(3, 3));
         assert_eq!(c.resolution(), Resolution::new(4, 4));
+        // After draining all three queued pictures, the next take_picture
+        // must propagate the passed timeout (`Duration::ZERO`) verbatim
+        // into `TimeoutError`. Pin the value to align with the
+        // tighter shape already used at `:477,492,627`.
         assert!(matches!(
             sh.take_picture(Duration::ZERO),
-            Err(NokhwaError::TimeoutError(_))
+            Err(NokhwaError::TimeoutError(d)) if d == Duration::ZERO
         ));
     }
 
@@ -647,9 +657,12 @@ mod tests {
     #[test]
     fn mock_hybrid_take_picture_without_trigger_times_out() {
         let mut h = MockHybrid::new(0, vec![mock_frame(2, 2, FrameFormat::MJPEG)]);
+        // `MockHybrid::take_picture` routes to the inner `MockShutter`,
+        // which propagates the caller-supplied timeout verbatim. Pin the
+        // round-trip — the sibling at `:625-628` already does, so align.
         assert!(matches!(
             h.take_picture(Duration::ZERO),
-            Err(NokhwaError::TimeoutError(_))
+            Err(NokhwaError::TimeoutError(d)) if d == Duration::ZERO
         ));
     }
 
@@ -709,7 +722,15 @@ mod tests {
         let second = src.frame().unwrap();
         assert_eq!(second.resolution(), Resolution::new(2, 2));
         assert_eq!(second.source_frame_format(), FrameFormat::MJPEG);
-        assert!(matches!(src.frame(), Err(NokhwaError::TimeoutError(_))));
+        // `MockEventfulFrameSource::frame` (`testing.rs:374-376`) routes
+        // to the base `MockFrameSource::frame`, which emits
+        // `TimeoutError(Duration::ZERO)` on an empty queue
+        // (`testing.rs:145`). Pin the value — sibling at `:412` already
+        // does, so align.
+        assert!(matches!(
+            src.frame(),
+            Err(NokhwaError::TimeoutError(d)) if d == Duration::ZERO
+        ));
     }
 
     #[test]
@@ -751,7 +772,15 @@ mod tests {
         src.push_frame(pushed);
         let raw = src.frame_raw().unwrap();
         assert_eq!(&*raw, &expected[..]);
-        assert!(matches!(src.frame_raw(), Err(NokhwaError::TimeoutError(_))));
+        // `MockEventfulFrameSource::frame_raw` (`testing.rs:377-378`)
+        // routes to the base `MockFrameSource::frame_raw`, which emits
+        // `TimeoutError(Duration::ZERO)` on an empty queue
+        // (`testing.rs:151`). Pin the value — sibling at `:780` already
+        // does, so align.
+        assert!(matches!(
+            src.frame_raw(),
+            Err(NokhwaError::TimeoutError(d)) if d == Duration::ZERO
+        ));
     }
 
     // The base `MockFrameSource::frame_raw` (`testing.rs:148-153`) is

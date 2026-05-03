@@ -135,7 +135,12 @@ fn shutter_capture_default_methods() {
     assert!(d.lock_ui().is_ok());
     assert!(d.unlock_ui().is_ok());
     let r = d.capture(Duration::ZERO);
-    assert!(matches!(r, Err(NokhwaError::TimeoutError(_))));
+    // The default `ShutterCapture::capture` (`traits.rs:277-282`) routes
+    // through `Dummy::take_picture` (`traits_tests.rs:91-93`) which
+    // hard-codes `TimeoutError(Duration::ZERO)`. Pin the payload — a
+    // regression that wrapped the inner error in a different variant or
+    // drifted the `Duration` would slip past the wildcard.
+    assert!(matches!(r, Err(NokhwaError::TimeoutError(d)) if d == Duration::ZERO));
 }
 
 #[derive(Default)]

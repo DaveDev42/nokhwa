@@ -232,6 +232,22 @@
 
 ### Testing
 
+* **Pin `TimeoutError(Duration::ZERO)` on six wildcard sites for
+  consistency with sibling tests.** Existing tighter pins at
+  `nokhwa-core/src/testing.rs:412,477,492,627,780` already verify the
+  exact `Duration` payload, but six sibling sites still used
+  `TimeoutError(_)`: `testing.rs:427,460,652,712,754` and
+  `nokhwa-core/src/traits_tests.rs:138`. All six paths route through
+  source code that emits `Duration::ZERO` exactly
+  (`MockFrameSource::frame{,_raw}` at `testing.rs:145,151`,
+  `MockShutter::take_picture` at `:206-212` propagating
+  `Duration::ZERO` verbatim, and `Dummy::take_picture` at
+  `traits_tests.rs:91-93` hard-coding `TimeoutError(Duration::ZERO)`).
+  A regression that drifted the `Duration` payload (e.g. always
+  `MAX`, or the wrong end of a min/max swap) would mislead any
+  downstream caller that surfaces it for telemetry — but the
+  wildcard would let it through. Aligned all six to
+  `TimeoutError(d) if d == Duration::ZERO`.
 * **Pin `set_control` `SendError` variant + message prefix in three
   receiver-drop runner tests.** The sibling tests
   `runner_spawn_stream_worker_exits_on_dropped_frames_receiver`,
