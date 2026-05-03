@@ -167,6 +167,30 @@ fn query_reports_at_least_one_device() {
     );
 }
 
+/// `query()` must return distinct `CameraIndex` values — no two
+/// `CameraInfo` entries should share an index. Each native backend
+/// has a different way to enumerate devices (V4L2 walks `/dev/video*`,
+/// MSMF's `MFEnumDeviceSources` indexes are positional, AVFoundation
+/// uses `AVCaptureDevice.uniqueID`), and any of them could regress
+/// into emitting one physical device under two handles (e.g. the
+/// V4L2 enumerator listing the metadata-only secondary `/dev/videoN`
+/// alongside the primary capture node, or MSMF surfacing the same
+/// `IMFActivate` twice). Users keying a HashMap off `CameraIndex` —
+/// the canonical pattern for "remember the user's selected camera
+/// across sessions" — would silently lose one of the duplicates.
+#[test]
+fn query_indices_are_unique() {
+    let devices = query(native_backend()).expect("query() returned an error");
+    let mut seen: std::collections::HashSet<&CameraIndex> = std::collections::HashSet::new();
+    for info in &devices {
+        assert!(
+            seen.insert(info.index()),
+            "query() returned duplicate index {:?}; full list: {devices:?}",
+            info.index()
+        );
+    }
+}
+
 #[test]
 fn open_stream_and_capture_frames() {
     match open_first() {

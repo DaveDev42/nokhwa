@@ -289,6 +289,18 @@
 
 ### Testing
 
+* **Pin `query()` returns `CameraInfo` entries with unique
+  `CameraIndex` values in `tests/device_tests.rs`.** The new
+  `query_indices_are_unique` test guards against backend
+  enumerators that double-emit a single physical device under two
+  handles (V4L2's metadata-only secondary `/dev/videoN` alongside
+  the primary capture node is the historical risk, MSMF's
+  positional `MFEnumDeviceSources` is another). Users who key a
+  `HashMap<CameraIndex, _>` off the query result — the canonical
+  pattern for remembering the user's selected camera across
+  sessions — would silently lose duplicates, surfacing as a stale
+  selection that points to the wrong device after a reboot. Pinned
+  via a `HashSet<&CameraIndex>` insert loop.
 * **Pin `compatible_fourcc` ⊇ `compatible_formats.format()` (reverse
   subset) in `tests/device_tests.rs`.** The existing
   `compatible_fourcc_is_subset_of_compatible_formats` test pinned one
