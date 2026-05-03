@@ -232,6 +232,21 @@
 
 ### Testing
 
+* **Pin `HybridCamera` `open` / `is_open` / `close` lifecycle.**
+  Companion to `stream_camera_open_frame_close_cycle`.
+  `src/session.rs:504-520` exposes three pass-through methods —
+  `open()`, `is_open()`, `close()` — that delegate to `FrameSource`
+  on the boxed inner. The stream-camera test pins the full
+  `open → is_open(true) → close → is_open(false)` cycle, but no
+  existing hybrid test asserts `is_open()` state transitions, and
+  none calls `close()` on a hybrid at all. A regression that
+  hardcoded `HybridCamera::is_open()` to `true` (or that dropped the
+  `close()` delegation in favour of always-`Ok(())`) would let
+  callers think the camera was in the wrong lifecycle state —
+  invisible until something downstream noticed the camera was still
+  streaming after a `close()`. New
+  `hybrid_camera_open_is_open_close_cycle` exercises the full cycle
+  with a `MockHybrid`-backed `Hybrid` newtype.
 * **Pin `RequestedFormatType::Closest` framerate tie-breaking.**
   Companion to `fulfill_closest_distance_tie_picks_first_in_device_order`.
   `nokhwa-core/src/types.rs:283-284` sorts the framerate candidates
