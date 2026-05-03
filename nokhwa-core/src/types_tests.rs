@@ -1841,6 +1841,31 @@ fn frame_format_to_fourcc_is_four_bytes() {
     }
 }
 
+// Pin the *named* literals on both sides of the FourCC table so that
+// `frame_format_fourcc_roundtrip` cannot be silently green when two
+// entries are swapped — e.g. `RGB3 ↔ BGR3` would still round-trip but
+// would mis-identify raw frames coming off a backend.
+// Guards `nokhwa-core/src/types.rs:443-466`.
+#[test]
+fn frame_format_from_fourcc_named_literals() {
+    assert_eq!(FrameFormat::from_fourcc("MJPG"), Some(FrameFormat::MJPEG));
+    assert_eq!(FrameFormat::from_fourcc("YUYV"), Some(FrameFormat::YUYV));
+    assert_eq!(FrameFormat::from_fourcc("GRAY"), Some(FrameFormat::GRAY));
+    assert_eq!(FrameFormat::from_fourcc("RGB3"), Some(FrameFormat::RAWRGB));
+    assert_eq!(FrameFormat::from_fourcc("BGR3"), Some(FrameFormat::RAWBGR));
+    assert_eq!(FrameFormat::from_fourcc("NV12"), Some(FrameFormat::NV12));
+}
+
+#[test]
+fn frame_format_to_fourcc_named_literals() {
+    assert_eq!(FrameFormat::MJPEG.to_fourcc(), "MJPG");
+    assert_eq!(FrameFormat::YUYV.to_fourcc(), "YUYV");
+    assert_eq!(FrameFormat::GRAY.to_fourcc(), "GRAY");
+    assert_eq!(FrameFormat::RAWRGB.to_fourcc(), "RGB3");
+    assert_eq!(FrameFormat::RAWBGR.to_fourcc(), "BGR3");
+    assert_eq!(FrameFormat::NV12.to_fourcc(), "NV12");
+}
+
 // ─── FrameFormat::decoded_pixel_byte_width ───
 
 #[test]
