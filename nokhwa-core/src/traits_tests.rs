@@ -606,11 +606,25 @@ fn hotplug_event_index_matches_across_connect_disconnect_with_drift() {
     assert_ne!(connected, disconnected);
 }
 
+// Hardened from a contains-only assertion. The derived `Debug` for
+// `HotplugEvent` plus `CameraInfo` is the documented dedupe / log
+// surface used by hotplug consumers (see `HotplugSource` docs);
+// pinning the exact format catches a future hand-written `impl Debug`
+// that, say, dropped the `description` / `misc` fields to "tidy up"
+// log output and silently broke any tooling grep-ing those fields.
 #[test]
-fn hotplug_event_debug_includes_variant_and_camera_info() {
-    let s = format!("{:?}", HotplugEvent::Connected(make_info(0, "Cam")));
-    assert!(s.contains("Connected"), "got: {s}");
-    assert!(s.contains("Cam"), "got: {s}");
+fn hotplug_event_debug_exact_format() {
+    let info = CameraInfo::new("Cam", "desc", "misc", CameraIndex::Index(0));
+    assert_eq!(
+        format!("{:?}", HotplugEvent::Connected(info.clone())),
+        "Connected(CameraInfo { human_name: \"Cam\", description: \"desc\", \
+         misc: \"misc\", index: Index(0) })"
+    );
+    assert_eq!(
+        format!("{:?}", HotplugEvent::Disconnected(info)),
+        "Disconnected(CameraInfo { human_name: \"Cam\", description: \"desc\", \
+         misc: \"misc\", index: Index(0) })"
+    );
 }
 
 #[test]
@@ -628,18 +642,26 @@ fn camera_event_clone_preserves_capture_error_fields() {
     }
 }
 
+// Hardened from contains-only checks: pin the full derived-Debug
+// format for every `CameraEvent` variant including the `code` /
+// `message` field names of `CaptureError`. The previous test would
+// pass even if a hand-written `impl Debug` collapsed
+// `CaptureError { code, message }` to a tuple-style
+// `CaptureError(-42, "boom")` (a tempting "less verbose" rewrite),
+// silently breaking log-shape contracts and any grep-based filters
+// used by event-stream consumers.
 #[test]
-fn camera_event_debug_includes_variant_name() {
-    assert!(format!("{:?}", CameraEvent::Disconnected).contains("Disconnected"));
-    assert!(format!("{:?}", CameraEvent::WillShutDown).contains("WillShutDown"));
-    let s = format!(
-        "{:?}",
-        CameraEvent::CaptureError {
-            code: 1,
-            message: "x".to_string()
-        }
+fn camera_event_debug_exact_format() {
+    assert_eq!(format!("{:?}", CameraEvent::Disconnected), "Disconnected");
+    assert_eq!(format!("{:?}", CameraEvent::WillShutDown), "WillShutDown");
+    assert_eq!(
+        format!(
+            "{:?}",
+            CameraEvent::CaptureError {
+                code: -42,
+                message: "boom".to_string(),
+            }
+        ),
+        "CaptureError { code: -42, message: \"boom\" }"
     );
-    assert!(s.contains("CaptureError"), "got: {s}");
-    assert!(s.contains('1'), "got: {s}");
-    assert!(s.contains('x'), "got: {s}");
 }
