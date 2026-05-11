@@ -18,8 +18,25 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   runtime exercised with `file://` URLs via `uridecodebin` only;
   `DeviceMonitor` + `ksvideosrc`/`mfvideosrc` against a live USB camera
   still needs a manual run.
-- [ ] **MSMF control round-trip** verified 2026-04-20 on MX Brio; re-run
-  if the trait surface changes.
+- [x] **MSMF control round-trip** — re-verified 2026-05-12 on MX Brio
+  after the `IMFSourceReader`-Release-after-`MFShutdown` crash fix
+  (`fix/msmf-release-source-reader-before-mfshutdown`). `cargo test
+  --features input-msmf,device-test --test device_tests` is now green
+  except the two separate bugs below; `control_set_get_round_trip`,
+  `controls_have_unique_known_ids`, `enumerate_controls_and_formats`
+  all pass. Re-run if the trait surface changes.
+- [ ] **MSMF `compatible_format_list()` returns each `(resolution,
+  format, frame_rate)` tuple 3×** — `compatible_formats_unique`
+  device-test fails. Dedup at the source (likely
+  `parse_native_media_types` walking duplicate native media types).
+- [ ] **MSMF numeric-string `CameraIndex` dispatch** — `open(String("0"))`
+  reaches MSMF but its `CameraIndex::String` arm only matches against
+  `misc()`/symlink, never parses a pure-numeric string as an index, so
+  `open_numeric_string_routes_to_native_backend` fails.
+- [ ] **MSMF hotplug test hangs ~60 s then exits `0xffffffff`** —
+  `msmf_hotplug_take_and_steady_state` (the `Drop`-joins-the-worker
+  assertion) regressed; investigate whether the message-pump thread
+  fails to join. Re-check after the Release-order fix lands.
 
 ### Infrastructure / CI
 
