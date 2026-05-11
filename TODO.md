@@ -5,18 +5,6 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Open
 
-### MSMF bugs (found 2026-05-12 via device_tests on MX Brio)
-
-- [ ] **`compatible_format_list()` returns each `(resolution, format,
-  frame_rate)` tuple 3×** — `compatible_formats_unique` device-test
-  fails; the YUYV list is consistently triplicated. Dedup at the source
-  (likely `parse_native_media_types` walking the source reader's native
-  media types multiple times, or 3 stream descriptors).
-- [ ] **Numeric-string `CameraIndex` dispatch** — `open(String("0"))`
-  reaches MSMF but its `CameraIndex::String` arm only matches against
-  `misc()`/symlink, never parses a pure-numeric string as an index, so
-  `open_numeric_string_routes_to_native_backend` fails.
-
 ### Runtime verification pending (compile-verified only)
 
 - [ ] **Event-driven MSMF hotplug (#173) — live unplug/replug** —
@@ -106,10 +94,11 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   via `PostThreadMessageW` but the worker's pump filtered `GetMessage`
   to the hidden HWND, so the thread message was never delivered and
   `join()` deadlocked — fixed by passing `NULL` for the hWnd filter
-  (#385). Post-fix `cargo test --features input-msmf,device-test --test
-  device_tests` is 29/31 green on the MX Brio (the two failures —
-  triplicated `compatible_formats()`, numeric-string `CameraIndex`
-  dispatch — are separate pre-existing bugs, see Open above).
+  (#385). The two follow-up failures that surfaced — triplicated
+  `compatible_formats()` and numeric-string `CameraIndex` dispatch —
+  were fixed in a follow-up (`fix/msmf-format-dedup-and-numeric-string-index`);
+  `cargo test --features input-msmf,device-test --test device_tests`
+  is now **31/31 green on the MX Brio**.
 - **Windows GStreamer local-camera path verified** (session 2, no code
   change) — `gstreamer_probe` on the MX Brio: `DeviceMonitor`
   enumerated 3 sources, opened via `ksvideosrc`, pulled 5× 640×480 NV12

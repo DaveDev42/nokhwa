@@ -635,6 +635,17 @@ pub mod wmf {
                     })
                 }
                 CameraIndex::String(s) => {
+                    // A pure-numeric string is a positional index, not a
+                    // symbolic link — `open(CameraIndex::String("0"))`
+                    // must reach the same device as
+                    // `open(CameraIndex::Index(0))`. (The session-layer
+                    // routes URL-like strings to GStreamer before they
+                    // get here, so anything that reaches this arm is
+                    // either a number or an MSMF symbolic-link path.)
+                    if let Ok(index) = s.parse::<u32>() {
+                        return Self::new(CameraIndex::Index(index));
+                    }
+
                     let devicelist = query()?;
                     let mut id_eq = None;
 
@@ -705,6 +716,18 @@ pub mod wmf {
                     ));
                 }
             }
+            // MSMF advertises one native media type per discrete frame
+            // rate, and each carries `MF_MT_FRAME_RATE_RANGE_MAX` /
+            // `MF_MT_FRAME_RATE` / `MF_MT_FRAME_RATE_RANGE_MIN` — for a
+            // discrete rate all three hold the same value, so a camera
+            // exposing N discrete rates yields ~3N `(res, fmt, fps)`
+            // tuples of which only N are distinct (the MX Brio reports
+            // every YUYV mode 3×). Some drivers also list the same
+            // mode under more than one media type. Collapse to the
+            // canonical sorted + deduped shape, matching
+            // `compatible_fourcc`'s `collect → sort → dedup`.
+            camera_format_list.sort_unstable();
+            camera_format_list.dedup();
             Ok(camera_format_list)
         }
 
