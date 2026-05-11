@@ -5,49 +5,31 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Open
 
-### Runtime verification pending (compile-verified only)
+### MSMF bugs (found 2026-05-12 via device_tests on MX Brio)
 
-- [ ] **Event-driven MSMF hotplug (#173)** — reconnect the MX Brio over
-  USB and run `cargo run --features input-msmf --example hotplug_probe`;
-  unplug/replug should print `Connected(…)` / `Disconnected(…)` in real
-  time. Poller-Drop deadlock fixed 2026-05-12
-  (`fix/msmf-hotplug-getmessage-null-hwnd`): the message pump filtered
-  `GetMessage` to the hidden window and so never saw the `WM_QUIT`
-  thread message `Drop` posts; `msmf_hotplug_take_and_steady_state`
-  now passes. Live unplug/replug observation still pending.
-- [ ] **AVFoundation backends (0.14.1–0.14.3 window)** — hotplug + open +
-  frame-pull have only the `Build (macos)` compile check. Needs a run on
-  the self-hosted `macos-camera` runner.
-- [x] **Windows GStreamer local-camera path (session 2)** — verified
-  2026-05-12 on MX Brio. `cargo run --features input-gstreamer
-  --example gstreamer_probe`: `DeviceMonitor` enumerated 3 sources,
-  opened the MX Brio via `ksvideosrc` (GStreamer's default ranking;
-  emits a deprecation warning preferring `mfvideosrc`), pulled 5×
-  640×480 NV12 frames (460800 B each), `controls()` empty as expected
-  on `ksvideosrc`. Build env: `winget install
-  gstreamerproject.gstreamer` installs the *Complete* MSVC variant
-  (headers + `lib/pkgconfig` + `gstreamer-1.0.lib` + 271 plugins
-  incl. `gstmediafoundation.dll`/`gstwinks.dll`) to
-  `%LOCALAPPDATA%\Programs\gstreamer\1.0\msvc_x86_64` — set
-  `PKG_CONFIG_PATH` to its `lib\pkgconfig` and put its `bin` on PATH.
-  (The `winget == runtime-only` assumption in the CI note below is
-  stale.) `cargo test -p nokhwa-bindings-gstreamer --features backend`
-  → 75 pass; `cargo build --features input-msmf,input-gstreamer` OK.
-- [x] **MSMF control round-trip** — re-verified 2026-05-12 on MX Brio
-  after the `IMFSourceReader`-Release-after-`MFShutdown` crash fix
-  (`fix/msmf-release-source-reader-before-mfshutdown`). `cargo test
-  --features input-msmf,device-test --test device_tests` is now green
-  except the two separate bugs below; `control_set_get_round_trip`,
-  `controls_have_unique_known_ids`, `enumerate_controls_and_formats`
-  all pass. Re-run if the trait surface changes.
-- [ ] **MSMF `compatible_format_list()` returns each `(resolution,
-  format, frame_rate)` tuple 3×** — `compatible_formats_unique`
-  device-test fails. Dedup at the source (likely
-  `parse_native_media_types` walking duplicate native media types).
-- [ ] **MSMF numeric-string `CameraIndex` dispatch** — `open(String("0"))`
+- [ ] **`compatible_format_list()` returns each `(resolution, format,
+  frame_rate)` tuple 3×** — `compatible_formats_unique` device-test
+  fails; the YUYV list is consistently triplicated. Dedup at the source
+  (likely `parse_native_media_types` walking the source reader's native
+  media types multiple times, or 3 stream descriptors).
+- [ ] **Numeric-string `CameraIndex` dispatch** — `open(String("0"))`
   reaches MSMF but its `CameraIndex::String` arm only matches against
   `misc()`/symlink, never parses a pure-numeric string as an index, so
   `open_numeric_string_routes_to_native_backend` fails.
+
+### Runtime verification pending (compile-verified only)
+
+- [ ] **Event-driven MSMF hotplug (#173) — live unplug/replug** —
+  reconnect the MX Brio over USB and run `cargo run --features
+  input-msmf --example hotplug_probe`; unplug/replug should print
+  `Connected(…)` / `Disconnected(…)` in real time. (The Poller-Drop
+  deadlock that previously made this example hang is fixed — #385; the
+  automated `msmf_hotplug_take_and_steady_state` test passes. Only the
+  live human observation remains.)
+- [ ] **AVFoundation backends (0.14.1–0.14.3 window)** — hotplug + open +
+  frame-pull have only the `Build (macos)` compile check. Needs a run on
+  the self-hosted `macos-camera` runner.
+
 ### Infrastructure / CI
 
 - [ ] **Windows GStreamer CI** — local dev install now works via
@@ -113,6 +95,31 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **MSMF teardown crash + hotplug-poller hang fixed; control round-trip
+  re-verified** (#384, #385) — `MediaFoundationDevice::drop` released
+  `IMFSourceReader` *after* `MFShutdown()`/`CoUninitialize()` (struct
+  fields drop after the `Drop::drop` body), which access-violates and
+  crashed every open-then-drop flow with `STATUS_ACCESS_VIOLATION` —
+  the whole `device_tests` suite on real hardware. Wrapped the field in
+  `ManuallyDrop` and dropped it inside the `Drop` body before the MF
+  teardown (#384). Separately, `MsmfHotplugPoll::drop` posted `WM_QUIT`
+  via `PostThreadMessageW` but the worker's pump filtered `GetMessage`
+  to the hidden HWND, so the thread message was never delivered and
+  `join()` deadlocked — fixed by passing `NULL` for the hWnd filter
+  (#385). Post-fix `cargo test --features input-msmf,device-test --test
+  device_tests` is 29/31 green on the MX Brio (the two failures —
+  triplicated `compatible_formats()`, numeric-string `CameraIndex`
+  dispatch — are separate pre-existing bugs, see Open above).
+- **Windows GStreamer local-camera path verified** (session 2, no code
+  change) — `gstreamer_probe` on the MX Brio: `DeviceMonitor`
+  enumerated 3 sources, opened via `ksvideosrc`, pulled 5× 640×480 NV12
+  frames, `controls()` empty (expected on `ksvideosrc`).
+  `winget install gstreamerproject.gstreamer` ships the *Complete* MSVC
+  variant (headers + `lib/pkgconfig` + `gstreamer-1.0.lib` + 271
+  plugins incl. `gstmediafoundation.dll`/`gstwinks.dll`) to
+  `%LOCALAPPDATA%\Programs\gstreamer\1.0\msvc_x86_64` — point
+  `PKG_CONFIG_PATH` at its `lib\pkgconfig`, add its `bin` to PATH, and
+  `cargo build/test --features input-gstreamer` works on Windows.
 - **`compatible_fourcc` cross-backend unification** (#194 / #195 /
   #196 / #197 / #198) — fixed silent MSMF truncation to 2 entries
   (#194), unified MSMF/GStreamer to the canonical `collect → sort →
