@@ -201,7 +201,15 @@ mod real {
         // the documented contract.
         loop {
             let mut msg = MSG::default();
-            let rv = unsafe { GetMessageW(&raw mut msg, Some(hwnd), 0, 0) };
+            // hWnd MUST be NULL here, not `hwnd`: `WM_QUIT` is posted by
+            // `Drop` via `PostThreadMessageW`, which produces a *thread*
+            // message not associated with any window. `GetMessage` with
+            // a non-NULL hWnd filters to that window's queue and never
+            // returns thread messages — so a window-filtered loop would
+            // block on `GetMessage` forever and `Drop`'s `join()` would
+            // hang. NULL retrieves both this thread's window messages
+            // and its thread messages.
+            let rv = unsafe { GetMessageW(&raw mut msg, None, 0, 0) };
             if rv.0 == 0 || rv.0 == -1 {
                 // 0 = WM_QUIT received, -1 = error. Either way, exit.
                 break;
