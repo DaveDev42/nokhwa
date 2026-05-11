@@ -27,7 +27,8 @@ objc2-av-foundation = { version = "0.3", default-features = false, features = [
     "objc2-core-foundation",
     "objc2-core-media",
 ] }
-objc2-core-foundation = { version = "0.3", default-features = false, features = ["CFCGTypes"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["CFCGTypes", "CFRunLoop", "CFDictionary"] }
 objc2-core-media = { version = "0.3", default-features = false, features = ["CMSampleBuffer", "CMTime", "CMFormatDescription"] }
 objc2-core-video = { version = "0.3", default-features = false, features = ["CVPixelBuffer", "CVImageBuffer", "CVReturn"] }
+objc2-io-kit = { version = "0.3", default-features = false, features = ["std", "libc"] }
 block2 = { version = "0.6", default-features = false, features = ["std"] }

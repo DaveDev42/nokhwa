@@ -44,12 +44,6 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
     a diagnostic harness (`workflow_dispatch`-only,
     `continue-on-error: true`).
 
-### Perf follow-ups (correctness already fine)
-
-- [ ] AVFoundation event-driven hotplug via `IOKit` matching
-  notifications. Current impl is 500ms polling. (Deferred to a
-  different host with macOS access.)
-
 ### Backlog
 
 - [ ] **WASM / browser backend.** Blocked on five design decisions, no
