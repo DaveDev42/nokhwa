@@ -4,6 +4,25 @@
 
 ### Bug Fixes
 
+* **MSMF: dropping a `MediaFoundationDevice` faulted
+  (`STATUS_ACCESS_VIOLATION`) when it was the last live device.**
+  `MediaFoundationDevice::drop` calls `de_initialize_mf()`
+  (`MFShutdown()` + `CoUninitialize()`) once the camera refcount hits
+  zero, but the `source_reader: IMFSourceReader` struct field is
+  released *after* the `Drop::drop` body — i.e. after Media Foundation
+  has already been torn down. Releasing an MF COM interface post-
+  `MFShutdown` access-violates, so every flow that opened and then
+  dropped a camera crashed at the very end (the whole `device_tests`
+  suite on real hardware, `examples/setting`, any consumer that lets
+  the camera go out of scope). Fix: wrap the field in
+  `ManuallyDrop<IMFSourceReader>` and `ManuallyDrop::drop` it inside
+  the `Drop::drop` body, *before* `de_initialize_mf()` — forcing the
+  teardown order the platform requires. Found and verified on a
+  Logitech MX Brio: pre-fix `cargo test --features
+  input-msmf,device-test --test device_tests` exits `0xc0000005`;
+  post-fix 29/31 pass (the remaining two — triplicated
+  `compatible_formats()` and numeric-string `CameraIndex` dispatch —
+  are separate pre-existing bugs).
 * **MSMF `format_refreshed` cached the `MF_MT_FRAME_RATE` *denominator*
   in `device_format.frame_rate` instead of the numerator.** The inline
   cast `let frame_rate = fps as u32;` truncated a packed `UINT64`

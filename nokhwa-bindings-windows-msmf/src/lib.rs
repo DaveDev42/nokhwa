@@ -38,7 +38,7 @@ pub mod wmf {
     use std::{
         borrow::Cow,
         cell::Cell,
-        mem::MaybeUninit,
+        mem::{ManuallyDrop, MaybeUninit},
         slice::from_raw_parts,
         sync::{
             atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -541,7 +541,14 @@ pub mod wmf {
         is_open: Cell<bool>,
         device_specifier: CameraInfo,
         device_format: CameraFormat,
-        source_reader: IMFSourceReader,
+        /// Wrapped in `ManuallyDrop` so [`Drop::drop`] can release this
+        /// COM interface *before* `de_initialize_mf()` calls
+        /// `MFShutdown()` + `CoUninitialize()`. Releasing an
+        /// `IMFSourceReader` after the Media Foundation platform has been
+        /// shut down faults (`STATUS_ACCESS_VIOLATION`), and struct
+        /// fields are dropped *after* the `Drop::drop` body — so the
+        /// teardown order has to be made explicit here.
+        source_reader: ManuallyDrop<IMFSourceReader>,
         /// Wallclock instant captured when the stream was started.
         /// MF sample timestamps are relative to stream start, so
         /// `stream_epoch + sample_time` gives us an absolute wallclock.
@@ -623,7 +630,7 @@ pub mod wmf {
                         is_open: Cell::new(false),
                         device_specifier: device_descriptor,
                         device_format: CameraFormat::default(),
-                        source_reader,
+                        source_reader: ManuallyDrop::new(source_reader),
                         stream_epoch: None,
                     })
                 }
@@ -1244,6 +1251,13 @@ pub mod wmf {
                 let _ = self
                     .source_reader
                     .Flush(MEDIA_FOUNDATION_FIRST_VIDEO_STREAM);
+
+                // Release the IMFSourceReader *before* tearing down the
+                // Media Foundation platform: an MF COM interface whose
+                // last reference is dropped after `MFShutdown()` faults
+                // (`STATUS_ACCESS_VIOLATION`). Struct fields drop after
+                // this body, so the ordering has to be forced by hand.
+                ManuallyDrop::drop(&mut self.source_reader);
 
                 // decrement refcnt
                 if CAMERA_REFCNT.load(Ordering::SeqCst) > 0 {
