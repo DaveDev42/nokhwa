@@ -4,6 +4,31 @@
 
 ### Bug Fixes
 
+* **MSMF `compatible_format_list()` returned each `(resolution, format,
+  frame_rate)` tuple multiple times.** MSMF advertises one native media
+  type per discrete frame rate, and each carries
+  `MF_MT_FRAME_RATE_RANGE_MAX` / `MF_MT_FRAME_RATE` /
+  `MF_MT_FRAME_RATE_RANGE_MIN` — for a discrete rate all three hold the
+  same value, so a camera exposing N discrete rates yielded ~3N tuples
+  of which only N were distinct (a Logitech MX Brio reported every YUYV
+  mode 3×); some drivers also list the same mode under more than one
+  media type. Any consumer iterating `compatible_formats()` to build a
+  resolution/fps picker got triplicated entries. Fix: `sort_unstable` +
+  `dedup` the assembled list, matching `compatible_fourcc`'s canonical
+  `collect → sort → dedup` shape. Verified by the `compatible_formats_unique`
+  device-test on the MX Brio.
+* **MSMF: `open(CameraIndex::String("0"))` errored instead of opening
+  device 0.** The `CameraIndex::String` arm only matched the string
+  against each device's MSMF symbolic link (`misc()`), so a pure-numeric
+  string — which is a positional index, not a symlink — never matched
+  and the open failed with `OpenDeviceError`/"Not Found". This broke
+  the documented contract that numeric-string indices route to the
+  native backend identically to `CameraIndex::Index`. Fix: parse the
+  string as a `u32` first and, on success, dispatch to
+  `Self::new(CameraIndex::Index(_))`; non-numeric strings still fall
+  through to the symbolic-link lookup. Verified by
+  `open_numeric_string_routes_to_native_backend`. Whole `device_tests`
+  suite is now 31/31 green on the MX Brio.
 * **MSMF: dropping a `MediaFoundationDevice` faulted
   (`STATUS_ACCESS_VIOLATION`) when it was the last live device.**
   `MediaFoundationDevice::drop` calls `de_initialize_mf()`
