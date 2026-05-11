@@ -411,7 +411,7 @@ mod internal {
                 camera_info: CameraInfo::new(
                     &device_caps.card,
                     &device_caps.driver,
-                    &format!("{} {:?}", &device_caps.bus, &device_caps.version),
+                    &format!("{} {:?}", device_caps.bus, device_caps.version),
                     index,
                 ),
                 device: shared_device,

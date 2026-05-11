@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#![cfg(test)]
-
 use crate::buffer::Buffer;
 use crate::error::NokhwaError;
 use crate::traits::{

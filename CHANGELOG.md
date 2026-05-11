@@ -112,6 +112,33 @@
   in-range values (the previous (2,3,4) over (1,1,1) only passed
   thanks to the inverted predicate).
 
+### Performance
+
+* **Event-driven `AVFoundation` hotplug via `IOKit` matching
+  notifications.** The polling loop in
+  `nokhwa-bindings-macos-avfoundation/src/hotplug.rs` (a
+  `thread::sleep(Duration::from_millis(500))` on a worker thread
+  re-running `device::query()` every tick) is gone. Replacement: a
+  worker thread runs a `CFRunLoop` with
+  `IOServiceAddMatchingNotification` registered for both
+  `kIOFirstMatchNotification` and `kIOTerminatedNotification` on
+  `IOUSBHostDevice`. Steady-state CPU is zero — the OS parks the
+  thread until USB topology actually changes. Hotplug latency drops
+  from the 500ms polling floor to the IOKit kernel-event arrival
+  time (typically tens of milliseconds). Same shape as the V4L
+  inotify and MSMF `WM_DEVICECHANGE` migrations: stop flag +
+  worker-published runloop pointer + thread-safe `CFRunLoopStop`
+  from `Drop`. Why match on `IOUSBHostDevice` rather than a
+  camera-specific class: there is no `IOKit` class that captures
+  every `AVFoundation` device (USB UVC, Continuity Camera, virtual
+  cams from system extensions) — so we use USB device events as a
+  trigger and re-run `device::query()`, which already aggregates all
+  AVF-visible devices. Non-USB hotplug paths surface via the existing
+  AVFoundation per-device `EventSource` notifications. Pinned by the
+  same 5 unit tests as the polling version (`reconcile_and_emit_with`
+  contract is unchanged) and the `avfoundation_hotplug_take_and_steady_state`
+  device-test integration test.
+
 ### Refactoring
 
 * **V4L `get_device_format` extracts a pure

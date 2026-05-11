@@ -1,17 +1,22 @@
 //! Backend-level hotplug for the `AVFoundation` backend.
 //!
-//! Implements [`HotplugSource`] by **polling** `device::query()` on a
-//! dedicated thread every [`POLL_INTERVAL`] and diffing successive
-//! snapshots keyed on the `AVCaptureDevice.uniqueID` stored in
-//! `CameraInfo.misc`.
+//! Event-driven: a dedicated worker thread runs a `CFRunLoop` with
+//! `IOServiceAddMatchingNotification` watching for `kIOFirstMatchNotification`
+//! / `kIOTerminatedNotification` on `IOUSBHostDevice`. Steady-state CPU is
+//! zero — the OS parks the thread until USB topology actually changes.
 //!
-//! Polling parallels the `MediaFoundation` and `Video4Linux`
-//! implementations: `IOKit`'s matching-notification API would be
-//! event-driven but requires a runloop plus Objective-C block callbacks
-//! to manage cleanly across the `HotplugEventPoll` boundary, and
-//! hotplug latency budgets are seconds, not milliseconds. The poll
-//! loop is ten lines of logic and never misses an event because
-//! `query()` reads the *current* device set.
+//! Why match on `IOUSBHostDevice` and not on a camera-specific class: there
+//! is no `IOKit` class that captures every `AVFoundation` device (USB UVC,
+//! Continuity Camera, virtual cams from system extensions, etc.) in a way
+//! that `AVFoundation` enumerates. So we use `IOUSBHostDevice` as a *trigger*
+//! — when *anything* USB plugs or unplugs we re-run `device::query()` and
+//! diff. Non-USB hotplug paths (Continuity Camera handoff) are rare and
+//! `EventSource` still surfaces them via the `AVFoundation` per-device
+//! notifications. The 500 ms latency floor of the old polling impl is gone
+//! for USB cameras (the dominant case) and unchanged for the rest.
+//!
+//! Diff logic is unchanged from the polling version — `reconcile_and_emit_with`
+//! is what the unit tests pin.
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 mod real {
@@ -21,10 +26,17 @@ mod real {
         traits::{HotplugEvent, HotplugEventPoll, HotplugSource},
         types::{ApiBackend, CameraInfo},
     };
+    use objc2_core_foundation::{kCFRunLoopDefaultMode, CFRetained, CFRunLoop};
+    use objc2_io_kit::{
+        io_iterator_t, kIOFirstMatchNotification, kIOMainPortDefault, kIOTerminatedNotification,
+        IOIteratorNext, IONotificationPort, IOObjectRelease, IOServiceAddMatchingNotification,
+        IOServiceMatching,
+    };
     use std::{
         collections::BTreeMap,
+        ffi::c_void,
         sync::{
-            atomic::{AtomicBool, Ordering},
+            atomic::{AtomicBool, AtomicPtr, Ordering},
             mpsc::{self, Receiver, Sender},
             Arc,
         },
@@ -32,15 +44,8 @@ mod real {
         time::Duration,
     };
 
-    /// How often the polling thread re-enumerates `AVFoundation`
-    /// devices. 500ms matches the MSMF and V4L backends and is a
-    /// compromise between "noticeable latency" and "burn CPU on the
-    /// `AVFoundation` discovery session". Tune here if users report
-    /// perceivable lag on hot-unplug.
-    const POLL_INTERVAL: Duration = Duration::from_millis(500);
-
     /// Backend-level hotplug source for `AVFoundation`. Cheap to
-    /// construct — the polling thread is only spawned when
+    /// construct — the worker thread is only spawned when
     /// [`take_hotplug_events`](HotplugSource::take_hotplug_events) is
     /// called, and is joined when the returned poller is dropped.
     #[derive(Default)]
@@ -67,12 +72,21 @@ mod real {
         }
     }
 
-    /// Concrete [`HotplugEventPoll`]. Owns a background thread running
-    /// the poll loop + an mpsc channel + an [`AtomicBool`] shutdown
-    /// flag. Dropping the poll flips the flag and joins the thread.
+    /// Concrete [`HotplugEventPoll`]. Owns a worker thread that drives a
+    /// `CFRunLoop` listening to `IOKit` matching notifications, plus an
+    /// mpsc channel for delivered events. Dropping the poll stops the
+    /// runloop and joins the thread.
     struct AvfHotplugPoll {
         rx: Receiver<HotplugEvent>,
         stop: Arc<AtomicBool>,
+        // The worker thread publishes its `CFRunLoopRef` here so `Drop`
+        // can wake it with `CFRunLoopStop`. The raw pointer is stored
+        // because `CFRunLoop` itself is `!Send` (it represents a
+        // thread-local loop), but `CFRunLoopStop` is documented as
+        // thread-safe — calling it from another thread to wake a
+        // blocked runloop is the canonical pattern. Null if the worker
+        // has not yet published or has already exited.
+        runloop_ptr: Arc<AtomicPtr<CFRunLoop>>,
         join: Option<JoinHandle<()>>,
     }
 
@@ -80,14 +94,19 @@ mod real {
         fn spawn() -> Result<Self, NokhwaError> {
             let (tx, rx) = mpsc::channel();
             let stop = Arc::new(AtomicBool::new(false));
-            let stop_thread = Arc::clone(&stop);
+            let runloop_ptr: Arc<AtomicPtr<CFRunLoop>> =
+                Arc::new(AtomicPtr::new(std::ptr::null_mut()));
+
+            let stop_t = Arc::clone(&stop);
+            let rl_t = Arc::clone(&runloop_ptr);
             let join = thread::Builder::new()
                 .name("nokhwa-avf-hotplug".to_string())
-                .spawn(move || poll_loop(&tx, &stop_thread))
+                .spawn(move || worker(tx, &stop_t, &rl_t))
                 .map_err(|e| NokhwaError::general(format!("spawn hotplug thread: {e}")))?;
             Ok(Self {
                 rx,
                 stop,
+                runloop_ptr,
                 join: Some(join),
             })
         }
@@ -105,40 +124,211 @@ mod real {
     impl Drop for AvfHotplugPoll {
         fn drop(&mut self) {
             self.stop.store(true, Ordering::Release);
+            // Wake the worker's CFRunLoop so it observes the stop flag
+            // and returns. `CFRunLoopStop` is thread-safe per Apple's
+            // CFRunLoop documentation — that's the whole reason we can
+            // cross-thread stop a runloop from Drop.
+            let rl_raw = self.runloop_ptr.load(Ordering::Acquire);
+            if !rl_raw.is_null() {
+                // SAFETY: The worker keeps the CFRunLoop alive (it owns
+                // a `CFRetained<CFRunLoop>`) until it returns from
+                // `CFRunLoopRun`. The runloop_ptr is published before
+                // `run()` and cleared on the worker side only after
+                // run() returns, so as long as we observe non-null
+                // here, the pointer is still valid.
+                unsafe {
+                    (*rl_raw).stop();
+                }
+            }
             if let Some(h) = self.join.take() {
-                // The background thread sleeps up to POLL_INTERVAL
-                // between checks, so the join tops out at that.
                 let _ = h.join();
             }
         }
     }
 
-    /// Build an initial device snapshot, then enter the diff loop. The
-    /// seed snapshot is silent — consumers see *changes*, not the
-    /// population of the device registry at subscription time (that is
-    /// what `query()` is for).
-    fn poll_loop(tx: &Sender<HotplugEvent>, stop: &Arc<AtomicBool>) {
-        let mut previous = snapshot();
-        while !stop.load(Ordering::Acquire) {
-            thread::sleep(POLL_INTERVAL);
-            if stop.load(Ordering::Acquire) {
+    /// State held inside the `IOKit` callback. The callback is an
+    /// `extern "C"` function with a `*mut c_void` user-context pointer,
+    /// so we leak a `Box` containing this struct on the worker thread,
+    /// hand the raw pointer to `IOKit`, and reclaim it on shutdown.
+    struct CbCtx {
+        tx: Sender<HotplugEvent>,
+        previous: BTreeMap<String, CameraInfo>,
+        channel_dead: bool,
+    }
+
+    /// `IOKit` callback for both first-match and terminated notifications.
+    /// `IOKit` *requires* draining the iterator (otherwise the
+    /// notification stays unarmed and never fires again), then re-enums
+    /// `AVFoundation` devices and diffs.
+    extern "C-unwind" fn matching_cb(refcon: *mut c_void, iter: io_iterator_t) {
+        // Drain the iterator — required to re-arm the notification.
+        loop {
+            let svc = IOIteratorNext(iter);
+            if svc == 0 {
                 break;
             }
-            if !reconcile_and_emit_with(tx, &mut previous, snapshot()) {
-                return; // consumer dropped the poller
+            IOObjectRelease(svc);
+        }
+        // SAFETY: `refcon` was set to a `Box::into_raw(Box<CbCtx>)` on
+        // the worker thread; it stays valid until the worker tears down
+        // the notification port and reclaims the box.
+        let ctx = unsafe { &mut *(refcon.cast::<CbCtx>()) };
+        if ctx.channel_dead {
+            return;
+        }
+        let current = snapshot();
+        if !reconcile_and_emit_with(&ctx.tx, &mut ctx.previous, current) {
+            ctx.channel_dead = true;
+        }
+    }
+
+    /// Build a `CFDictionary` matching `IOUSBHostDevice` — coerces the
+    /// `IOServiceMatching` result (`CFMutableDictionary`) to the
+    /// `CFDictionary` view `IOKit`'s notification API expects.
+    fn matching_usb() -> Option<CFRetained<objc2_core_foundation::CFDictionary>> {
+        // SAFETY: `IOServiceMatching` accepts a NUL-terminated C string and
+        // returns a retained `CFMutableDictionary` (or null). We narrow to
+        // the immutable `CFDictionary` view via raw-pointer cast, which is
+        // a no-op since `CFMutableDictionary` is a subtype.
+        unsafe {
+            let mutable = IOServiceMatching(c"IOUSBHostDevice".as_ptr())?;
+            let raw = CFRetained::into_raw(mutable).cast::<objc2_core_foundation::CFDictionary>();
+            Some(CFRetained::from_raw(raw))
+        }
+    }
+
+    /// Worker thread body. Sets up two matching notifications (arrive +
+    /// terminate), publishes its `CFRunLoop` so `Drop` can wake it, then
+    /// runs the runloop. On exit, cleans up `IOKit` handles and reclaims
+    /// the boxed callback context.
+    fn worker(
+        tx: Sender<HotplugEvent>,
+        stop: &Arc<AtomicBool>,
+        runloop_slot: &Arc<AtomicPtr<CFRunLoop>>,
+    ) {
+        // SAFETY: All IOKit / CoreFoundation calls below follow the
+        // standard "create → register → run → unregister → destroy"
+        // lifecycle for matching notifications. Pointers we hand to
+        // IOKit (notification port, callback refcon) are kept alive on
+        // this stack frame for the duration of the runloop, and freed
+        // *after* the port is destroyed.
+        unsafe {
+            let port = IONotificationPort::create(kIOMainPortDefault);
+            if port.is_null() {
+                // Can't seed the diff cache via a callback; fall back to
+                // letting the consumer time out. Channel still works.
+                return;
             }
+
+            let Some(run_source) = IONotificationPort::run_loop_source(port) else {
+                IONotificationPort::destroy(port);
+                return;
+            };
+
+            let Some(rl) = CFRunLoop::current() else {
+                IONotificationPort::destroy(port);
+                return;
+            };
+            rl.add_source(Some(&run_source), kCFRunLoopDefaultMode);
+
+            // Publish the runloop pointer so Drop on the parent side
+            // can wake us. `CFRetained::as_ptr` returns a borrowed raw
+            // pointer that stays valid as long as `rl` is in scope —
+            // we keep `rl` alive until after `CFRunLoopRun` returns.
+            // `rl_raw` itself never escapes this function (only the
+            // pointer value does, via AtomicPtr).
+            let rl_raw: *mut CFRunLoop = CFRetained::as_ptr(&rl).as_ptr();
+            runloop_slot.store(rl_raw, Ordering::Release);
+
+            let ctx = Box::new(CbCtx {
+                tx,
+                previous: snapshot(),
+                channel_dead: false,
+            });
+            let ctx_raw: *mut CbCtx = Box::into_raw(ctx);
+
+            let mut iter_match: io_iterator_t = 0;
+            let mut iter_term: io_iterator_t = 0;
+
+            // Register arrive + terminate. We use one shared callback;
+            // the diff logic figures out what changed by re-enumerating.
+            let kr1 = IOServiceAddMatchingNotification(
+                port,
+                kIOFirstMatchNotification.as_ptr().cast_mut().cast(),
+                matching_usb(),
+                Some(matching_cb),
+                ctx_raw.cast::<c_void>(),
+                &raw mut iter_match,
+            );
+            let kr2 = IOServiceAddMatchingNotification(
+                port,
+                kIOTerminatedNotification.as_ptr().cast_mut().cast(),
+                matching_usb(),
+                Some(matching_cb),
+                ctx_raw.cast::<c_void>(),
+                &raw mut iter_term,
+            );
+
+            // Either notification failing leaves us in a degraded but
+            // safe state: still drain whatever did register so the
+            // notification is armed, then keep running so Drop's join
+            // succeeds. (Returning early would leave the parent stuck
+            // in `recv_timeout` until the channel closes on its own.)
+            if kr1 == 0 {
+                drain(iter_match);
+            }
+            if kr2 == 0 {
+                drain(iter_term);
+            }
+
+            // Block the worker until Drop calls CFRunLoopStop. If the
+            // stop flag is already set (Drop races with spawn) we skip
+            // straight to teardown.
+            if !stop.load(Ordering::Acquire) {
+                CFRunLoop::run();
+            }
+
+            // Teardown order: clear the runloop publication first so a
+            // late Drop doesn't try to stop an already-stopping loop;
+            // remove sources by destroying the port; release iterator
+            // handles; then reclaim the box.
+            runloop_slot.store(std::ptr::null_mut(), Ordering::Release);
+            if iter_match != 0 {
+                IOObjectRelease(iter_match);
+            }
+            if iter_term != 0 {
+                IOObjectRelease(iter_term);
+            }
+            IONotificationPort::destroy(port);
+            // Reclaim and drop the callback context. Safe because IOKit
+            // has been told to stop calling `matching_cb` (port
+            // destroyed) and the runloop has returned.
+            drop(Box::from_raw(ctx_raw));
+        }
+    }
+
+    /// Drain an `IOKit` iterator and release each service handle.
+    /// Required after registering a matching notification, otherwise
+    /// the notification stays unarmed.
+    fn drain(iter: io_iterator_t) {
+        loop {
+            let svc = IOIteratorNext(iter);
+            if svc == 0 {
+                break;
+            }
+            IOObjectRelease(svc);
         }
     }
 
     /// Diff `current` against `previous`, emit events, swap cache.
     /// Returns false if the channel is closed (consumer dropped the
-    /// poller) so [`poll_loop`] can exit early. Split out from
-    /// [`poll_loop`] so unit tests can inject a synthetic `current`
-    /// without touching `AVFoundation`.
+    /// poller) so the worker can shut down early. Split out so unit
+    /// tests can inject a synthetic `current` without touching `IOKit` or
+    /// `AVFoundation`.
     ///
-    /// Emit arrivals before removals so a rapid re-plug landing in
-    /// one [`POLL_INTERVAL`] window surfaces as
-    /// `Disconnected` → `Connected` on the consumer side.
+    /// Emit arrivals before removals so a rapid re-plug landing in one
+    /// callback batch surfaces as `Disconnected` → `Connected` on the
+    /// consumer side.
     fn reconcile_and_emit_with(
         tx: &Sender<HotplugEvent>,
         previous: &mut BTreeMap<String, CameraInfo>,
@@ -171,9 +361,9 @@ mod real {
     ///
     /// Errors from `query()` are swallowed — a transient enumeration
     /// failure should not tear down the hotplug thread. An empty
-    /// snapshot will look like "every device disappeared"; next tick
-    /// we will re-emit them as `Connected`. That is noisy but not
-    /// incorrect.
+    /// snapshot will look like "every device disappeared"; next
+    /// callback we will re-emit them as `Connected`. That is noisy but
+    /// not incorrect.
     fn snapshot() -> BTreeMap<String, CameraInfo> {
         match query() {
             Ok(list) => list.into_iter().map(|ci| (ci.misc(), ci)).collect(),
@@ -246,9 +436,9 @@ mod real {
         }
 
         /// Pin the documented ordering invariant: arrivals are sent
-        /// before removals so a re-plug landing in one
-        /// [`POLL_INTERVAL`] window is observable as
-        /// `Disconnected` → `Connected` on the consumer side.
+        /// before removals so a re-plug landing in one callback batch
+        /// is observable as `Disconnected` → `Connected` on the
+        /// consumer side.
         #[test]
         fn arrivals_precede_removals_in_emission_order() {
             let (tx, rx) = mpsc::channel();

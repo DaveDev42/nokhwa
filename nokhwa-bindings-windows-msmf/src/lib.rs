@@ -1082,7 +1082,7 @@ pub mod wmf {
                             Err(why) => {
                                 last_error = Some(NokhwaError::SetPropertyError {
                                     property: "MEDIA_FOUNDATION_FIRST_VIDEO_STREAM".to_string(),
-                                    value: format!("{:?}", &parsed.media_type),
+                                    value: format!("{:?}", parsed.media_type),
                                     error: why.to_string(),
                                 });
                             }
