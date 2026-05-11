@@ -10,14 +10,29 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 - [ ] **Event-driven MSMF hotplug (#173)** — reconnect the MX Brio over
   USB and run `cargo run --features input-msmf --example hotplug_probe`;
   unplug/replug should print `Connected(…)` / `Disconnected(…)` in real
-  time.
+  time. Poller-Drop deadlock fixed 2026-05-12
+  (`fix/msmf-hotplug-getmessage-null-hwnd`): the message pump filtered
+  `GetMessage` to the hidden window and so never saw the `WM_QUIT`
+  thread message `Drop` posts; `msmf_hotplug_take_and_steady_state`
+  now passes. Live unplug/replug observation still pending.
 - [ ] **AVFoundation backends (0.14.1–0.14.3 window)** — hotplug + open +
   frame-pull have only the `Build (macos)` compile check. Needs a run on
   the self-hosted `macos-camera` runner.
-- [ ] **Windows GStreamer local-camera path (session 2)** — Windows
-  runtime exercised with `file://` URLs via `uridecodebin` only;
-  `DeviceMonitor` + `ksvideosrc`/`mfvideosrc` against a live USB camera
-  still needs a manual run.
+- [x] **Windows GStreamer local-camera path (session 2)** — verified
+  2026-05-12 on MX Brio. `cargo run --features input-gstreamer
+  --example gstreamer_probe`: `DeviceMonitor` enumerated 3 sources,
+  opened the MX Brio via `ksvideosrc` (GStreamer's default ranking;
+  emits a deprecation warning preferring `mfvideosrc`), pulled 5×
+  640×480 NV12 frames (460800 B each), `controls()` empty as expected
+  on `ksvideosrc`. Build env: `winget install
+  gstreamerproject.gstreamer` installs the *Complete* MSVC variant
+  (headers + `lib/pkgconfig` + `gstreamer-1.0.lib` + 271 plugins
+  incl. `gstmediafoundation.dll`/`gstwinks.dll`) to
+  `%LOCALAPPDATA%\Programs\gstreamer\1.0\msvc_x86_64` — set
+  `PKG_CONFIG_PATH` to its `lib\pkgconfig` and put its `bin` on PATH.
+  (The `winget == runtime-only` assumption in the CI note below is
+  stale.) `cargo test -p nokhwa-bindings-gstreamer --features backend`
+  → 75 pass; `cargo build --features input-msmf,input-gstreamer` OK.
 - [x] **MSMF control round-trip** — re-verified 2026-05-12 on MX Brio
   after the `IMFSourceReader`-Release-after-`MFShutdown` crash fix
   (`fix/msmf-release-source-reader-before-mfshutdown`). `cargo test
@@ -33,19 +48,19 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   reaches MSMF but its `CameraIndex::String` arm only matches against
   `misc()`/symlink, never parses a pure-numeric string as an index, so
   `open_numeric_string_routes_to_native_backend` fails.
-- [ ] **MSMF hotplug test hangs ~60 s then exits `0xffffffff`** —
-  `msmf_hotplug_take_and_steady_state` (the `Drop`-joins-the-worker
-  assertion) regressed; investigate whether the message-pump thread
-  fails to join. Re-check after the Release-order fix lands.
-
 ### Infrastructure / CI
 
-- [ ] **Windows GStreamer CI** blocked on `gstreamer.freedesktop.org`'s
-  `go-away` JS challenge (PR #174 closed). Paths forward: (a) private
-  artifact mirror the CI can pull from, (b) wait for `winget` to gain a
-  `-devel` manifest, (c) self-hosted Windows runner with GStreamer
-  pre-installed. `Build (windows)` matrix still exercises `input-msmf`
-  so no regression.
+- [ ] **Windows GStreamer CI** — local dev install now works via
+  `winget install gstreamerproject.gstreamer` (the Complete MSVC
+  variant, see the verified local-camera-path note above), so a
+  Windows CI job is newly feasible: install via winget, export
+  `PKG_CONFIG_PATH`, run `cargo build/test --features input-gstreamer`.
+  The old blocker (`gstreamer.freedesktop.org`'s `go-away` JS
+  challenge breaking direct MSI downloads, PR #174 closed) is sidestepped
+  because winget's installer URL handling clears the challenge.
+  Remaining cost: GStreamer plugins make for a large download — gate
+  the job behind a cache, or accept the ~2-3 min install. `Build
+  (windows)` matrix still exercises `input-msmf` regardless.
 - [ ] **MSMF device-test coverage on a GH-hosted `windows-latest`**
   runner. OBS virtualcam spike (`msmf-obs-virtualcam.yml`) is abandoned
   — OBS is a DirectShow filter, invisible to `MFEnumDeviceSources`.

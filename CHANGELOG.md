@@ -23,6 +23,24 @@
   post-fix 29/31 pass (the remaining two — triplicated
   `compatible_formats()` and numeric-string `CameraIndex` dispatch —
   are separate pre-existing bugs).
+* **MSMF hotplug: dropping the poller hung forever.**
+  `MsmfHotplugPoll::drop` posts `WM_QUIT` to the worker thread via
+  `PostThreadMessageW` and then `join()`s, but the worker's message
+  pump called `GetMessageW(&msg, Some(hwnd), 0, 0)` — a *window-
+  filtered* fetch. `WM_QUIT` from `PostThreadMessage` is a **thread**
+  message, not associated with any window, so a window-filtered
+  `GetMessage` never returns it: the pump blocked on `GetMessage`
+  indefinitely, the `stop` flag (checked only after
+  `DispatchMessage`) was never re-examined, and `Drop`'s `join()`
+  deadlocked. Anything that constructed a
+  `MediaFoundationHotplugContext`, took the event poller, and let it
+  drop would hang on the way out (`hotplug_probe` example,
+  `msmf_hotplug_take_and_steady_state` device-test). Fix: pass `None`
+  for the `hWnd` filter so `GetMessage` retrieves both window and
+  thread messages — the canonical shape for a pump that needs to be
+  stoppable via `PostThreadMessage(WM_QUIT)`. Verified on a Logitech
+  MX Brio: `msmf_hotplug_take_and_steady_state` now finishes in ~1.5 s
+  (previously hung until killed).
 * **MSMF `format_refreshed` cached the `MF_MT_FRAME_RATE` *denominator*
   in `device_format.frame_rate` instead of the numerator.** The inline
   cast `let frame_rate = fps as u32;` truncated a packed `UINT64`
