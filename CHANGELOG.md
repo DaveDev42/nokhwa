@@ -3133,6 +3133,20 @@
 
 ### Infrastructure
 
+* **Formalize the device-testing strategy and add a Windows GStreamer
+  CI job.** New `.github/workflows/check-gstreamer-windows.yml`
+  (experimental, `continue-on-error: true`): `choco install
+  pkgconfiglite` + `winget install gstreamerproject.gstreamer` (the
+  Complete MSVC variant) → wire `PKG_CONFIG_PATH` / `PATH` → `cargo
+  build`/`cargo test --features input-gstreamer` + a `gstreamer_probe`
+  enumeration smoke test. CLAUDE.md gains a "Testing Strategy" section:
+  logic/stub/build tests run in hosted CI on all three OSes; Linux
+  real-camera tests run in CI via `v4l2loopback`; **macOS and Windows
+  device tests are run on the maintainer's own hardware** — hosted
+  runners have no usable virtual camera (codesigned system extensions
+  on macOS; no fakeable `MFEnumDeviceSources` source on Windows). The
+  abandoned `msmf-obs-virtualcam.yml` diagnostic workflow is removed
+  accordingly.
 * **Add `docs-build` CI job to lock in zero rustdoc warnings.** New
   `Test Core & Features → Docs build (-D warnings)` job on
   `ubuntu-latest` running `cargo +nightly doc --no-deps --features
