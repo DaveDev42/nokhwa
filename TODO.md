@@ -20,16 +20,18 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Infrastructure / CI
 
-- [ ] **Windows GStreamer CI** — local dev install now works via
-  `winget install gstreamerproject.gstreamer` (the Complete MSVC
-  variant, see the verified local-camera-path note above), so a
-  Windows CI job is newly feasible: install via winget, export
-  `PKG_CONFIG_PATH`, run `cargo build/test --features input-gstreamer`.
-  The old blocker (`gstreamer.freedesktop.org`'s `go-away` JS
-  challenge breaking direct MSI downloads, PR #174 closed) is sidestepped
-  because winget's installer URL handling clears the challenge.
-  Remaining cost: GStreamer plugins make for a large download — gate
-  the job behind a cache, or accept the ~2-3 min install. `Build
+- [ ] **Windows GStreamer CI — validate the new workflow** —
+  `.github/workflows/check-gstreamer-windows.yml` added (experimental,
+  `continue-on-error: true`): `choco install pkgconfiglite` + `winget
+  install gstreamerproject.gstreamer` (Complete MSVC variant) → wire
+  `PKG_CONFIG_PATH` / `PATH` → `cargo build`/`cargo test --features
+  input-gstreamer` + `gstreamer_probe` smoke test. Needs a first CI run
+  to confirm the GH-hosted-runner install layout matches
+  `%LOCALAPPDATA%\Programs\gstreamer\1.0\msvc_x86_64` and pkg-config
+  resolution works; if green across a few runs, drop
+  `continue-on-error` and add it to the required-status contexts.
+  Remaining cost: the Complete plugin set is a large download (~2-3 min
+  install) — add a cache layer if the job is promoted. `Build
   (windows)` matrix still exercises `input-msmf` regardless.
 - [ ] **MSMF device-test coverage on a GH-hosted `windows-latest`**
   runner. OBS virtualcam spike (`msmf-obs-virtualcam.yml`) is abandoned
