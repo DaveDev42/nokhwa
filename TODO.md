@@ -5,11 +5,20 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Open
 
+> Device-testing strategy (see CLAUDE.md → "Testing Strategy"): Linux
+> real-camera coverage runs in CI via `v4l2loopback`; **macOS and Windows
+> device tests are run on the maintainer's own hardware**, not on
+> GitHub-hosted runners (no usable virtual camera exists there). Hosted
+> CI still covers logic/stub/build tests on all three OSes.
+
 ### Runtime verification pending (compile-verified only)
 
 - [ ] **AVFoundation backends (0.14.1–0.14.3 window)** — hotplug + open +
-  frame-pull have only the `Build (macos)` compile check. Needs a run on
-  the self-hosted `macos-camera` runner.
+  frame-pull have only the `Build (macos)` compile check. Run
+  `cargo test --features device-test,input-avfoundation,runner` on a
+  Mac with a webcam (the self-hosted `macos-camera` runner is one such
+  machine; a local run is equally valid), plus `cargo run --example
+  hotplug_probe` for the hotplug path.
 
 ### Infrastructure / CI
 
@@ -26,20 +35,6 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   Remaining cost: the Complete plugin set is a large download (~2-3 min
   install) — add a cache layer if the job is promoted. `Build
   (windows)` matrix still exercises `input-msmf` regardless.
-- [ ] **MSMF device-test coverage on a GH-hosted `windows-latest`**
-  runner. OBS virtualcam spike (`msmf-obs-virtualcam.yml`) is abandoned
-  — OBS is a DirectShow filter, invisible to `MFEnumDeviceSources`.
-  Remaining candidate paths:
-  - Windows 11 Camera Extension sample (smourier/VCamSample) — requires
-    a code-signing certificate GH Actions can't provide.
-  - Ship a minimal Rust MF source in the test harness — feasible but
-    ~500 LOC `unsafe` `windows` FFI; feasibility of userspace
-    `IMFActivate` appearing in `MFEnumDeviceSources` is unverified.
-  - Self-hosted Windows runner with a USB webcam (same pattern as
-    `macos-camera`).
-  - Accept the gap — current state; `msmf-obs-virtualcam.yml` stays as
-    a diagnostic harness (`workflow_dispatch`-only,
-    `continue-on-error: true`).
 
 ### Backlog
 
@@ -63,15 +58,25 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   covers local capture + controls + URL sources first-class now.
   `opencv-mat` (`nokhwa-core` feature for `cv::Mat` interop) is
   unchanged; enable directly if you want the conversion helpers.
+- **MSMF device tests on GH-hosted `windows-latest`** (decided
+  2026-05-12, not pursuing) — no fakeable MF device source on a hosted
+  runner: OBS virtualcam is a DirectShow filter invisible to
+  `MFEnumDeviceSources`; the Win11 Camera Extension sample needs a
+  code-signing cert GH Actions can't supply; a hand-rolled Rust MF
+  source is ~500 LOC `unsafe` FFI of unverified feasibility. Per the
+  testing strategy (CLAUDE.md), MSMF device tests run on the
+  maintainer's own Windows hardware instead. `msmf-obs-virtualcam.yml`
+  deleted (was a `workflow_dispatch`-only diagnostic harness).
 - **OBS virtualcam MSMF CI spike** (abandoned 2026-04-21) — OBS
   virtualcam is a DirectShow filter; `MFEnumDeviceSources` and
   DirectShow are disjoint enumeration namespaces. No amount of OBS
-  configuration bridges that. `msmf-obs-virtualcam.yml` kept as a
-  diagnostic harness, `workflow_dispatch`-only.
+  configuration bridges that. (Workflow file removed 2026-05-12 — see
+  above.)
 - **macOS GH-hosted virtual camera** — not feasible. Modern vcams need
   system extensions codesigned + notarized + installed from
   `/Applications`; GH-hosted macOS runners have no Apple Developer
-  credentials. AVFoundation CI coverage = self-hosted `macos-camera`.
+  credentials. AVFoundation device-test coverage runs on the
+  maintainer's own Mac (the self-hosted `macos-camera` runner is one).
 - **Network/IP camera backend** — superseded by GStreamer session 5's
   URL path. `CameraIndex::String("rtsp://…")` / `https://…` / `file://…`
   dispatches through `uridecodebin`.

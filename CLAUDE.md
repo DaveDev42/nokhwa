@@ -72,6 +72,17 @@ Almost everything is behind feature flags. A build **must** enable at least one 
 
 `StreamCamera::frame()` → `Buffer` → `Buffer::typed::<F>()` → `Frame<F>` (typed handle). From there: `frame.into_rgb().materialize()` → `image::ImageBuffer`. Format marker types (`Mjpeg`, `Yuyv`, etc.) live in `nokhwa-core/src/format_types.rs`. Conversion traits (`IntoRgb`, `IntoRgba`, `IntoLuma`) in `nokhwa-core/src/frame.rs` are selectively implemented per format (e.g. `Frame<Gray>` cannot convert to RGB).
 
+## Testing Strategy
+
+Two tiers, split by whether a real camera is needed:
+
+- **Logic / stub / build tests — run in CI on GitHub-hosted runners, every PR.** Core unit tests, per-crate stub-contract tests (the off-platform `stub` modules), the cross-platform `cargo check`/`cargo doc` matrix, clippy, fmt. These touch no hardware and run on `ubuntu-latest` / `windows-latest` / `macos-latest`. See `test-core.yml`, `lint.yml`, `build-matrix.yml`.
+- **Device tests — real-camera path (`--features device-test`): open + stream + controls + hotplug.**
+  - **Linux: run in CI.** `v4l-loopback.yml` creates a `v4l2loopback` virtual `/dev/video0` fed by an ffmpeg test pattern, so the full device-test suite + the `hotplug_probe` smoke test run on every PR on `ubuntu-latest`. This is the only platform with a hosted-runner virtual camera.
+  - **macOS and Windows: run locally on the maintainer's own hardware.** GitHub-hosted `macos-latest` / `windows-latest` have no camera and no usable virtual camera (macOS vcams need codesigned + notarized system extensions; Windows MF device sources can't be faked without a code-signed camera extension — OBS virtualcam is DirectShow, invisible to `MFEnumDeviceSources`). We do **not** pursue hosted-runner device coverage for these. Verify AVFoundation/MSMF changes by running `cargo test --features device-test,<input-backend>,runner` (and `cargo run --example hotplug_probe` for hotplug) on a physical Mac / Windows box with a webcam attached, and note the result in the PR. The `device-test.yml` self-hosted `macos-camera` runner is one such machine wired into CI; running the suite locally is equally valid. `windows-latest` in `build-matrix.yml` still compile-checks `input-msmf` every PR.
+
+When a change to an AVFoundation/MSMF code path can only be compile-checked in CI, record it under "Runtime verification pending" in `TODO.md` until it's been exercised on real hardware.
+
 ## Git & GitHub Rules
 
 - This is a **fork** of `l1npengtul/nokhwa`. Our remote is `origin` (`DaveDev42/nokhwa`).
