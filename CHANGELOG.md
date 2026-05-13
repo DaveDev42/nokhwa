@@ -3836,6 +3836,14 @@
   backends that override these `ShutterCapture` methods, must rename their
   usages. Backends that use the default no-op impls are unaffected.
 
+## [0.14.7](https://github.com/DaveDev42/nokhwa/compare/v0.14.6...v0.14.7) (2026-05-13)
+
+
+### Infrastructure
+
+* don't fail the Windows GStreamer job when no camera is present ([#389](https://github.com/DaveDev42/nokhwa/issues/389)) ([337ffdd](https://github.com/DaveDev42/nokhwa/commit/337ffdd87d8614f4e0ff1b9030b63c164c727cdc))
+* promote Windows GStreamer job to required + cache install; release-please PAT support ([#391](https://github.com/DaveDev42/nokhwa/issues/391)) ([1ab91c8](https://github.com/DaveDev42/nokhwa/commit/1ab91c8a1688603ebec4e89431fcd9de5ba7a427))
+
 ## [0.14.6](https://github.com/DaveDev42/nokhwa/compare/v0.14.5...v0.14.6) (2026-05-13)
 
 
