@@ -3133,6 +3133,16 @@
 
 ### Infrastructure
 
+* **Windows GStreamer cache now actually re-uses across PRs.** The
+  install cache added in #391 saved every run as `gstreamer-windows-1`
+  but was scoped to `refs/pull/N/merge` because the workflow only
+  triggered on `pull_request` / `workflow_dispatch`. GitHub Actions
+  only lets a branch restore caches saved on its own ref or on the
+  default branch, so the next PR's first run kept reporting `Cache not
+  found for input keys: gstreamer-windows-1` and re-ran the ~250 MB
+  winget install (~4 min). Fix: also trigger on `push: branches:
+  [main]` so the post-merge run saves the cache on
+  `refs/heads/main`; subsequent PR runs restore it in seconds.
 * **Promote `Build & test (input-gstreamer, Windows)` to a required
   check, with an install cache.** The Windows GStreamer job went green
   on its first two runs (#388 + #389), so the experimental
