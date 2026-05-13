@@ -22,19 +22,15 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Infrastructure / CI
 
-- [ ] **Windows GStreamer CI — validate the new workflow** —
-  `.github/workflows/check-gstreamer-windows.yml` added (experimental,
-  `continue-on-error: true`): `choco install pkgconfiglite` + `winget
-  install gstreamerproject.gstreamer` (Complete MSVC variant) → wire
-  `PKG_CONFIG_PATH` / `PATH` → `cargo build`/`cargo test --features
-  input-gstreamer` + `gstreamer_probe` smoke test. Needs a first CI run
-  to confirm the GH-hosted-runner install layout matches
-  `%LOCALAPPDATA%\Programs\gstreamer\1.0\msvc_x86_64` and pkg-config
-  resolution works; if green across a few runs, drop
-  `continue-on-error` and add it to the required-status contexts.
-  Remaining cost: the Complete plugin set is a large download (~2-3 min
-  install) — add a cache layer if the job is promoted. `Build
-  (windows)` matrix still exercises `input-msmf` regardless.
+- [ ] **Provision `RELEASE_PLEASE_TOKEN` repo secret.** The
+  `release-please.yml` workflow now prefers a maintainer-supplied PAT
+  (fine-grained: `Contents: r/w` + `Pull requests: r/w` on this repo;
+  or classic with `repo`) and falls back to `GITHUB_TOKEN` when unset.
+  With the PAT, release-please's push to the release-PR branch
+  triggers `pull_request` CI normally; without it, the release PR
+  stays BLOCKED on required status checks until someone closes and
+  reopens it (the 2026-05-13 v0.14.6 release hit this). See CLAUDE.md
+  → "Commit & Release Convention".
 
 ### Backlog
 
@@ -83,6 +79,15 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **Windows GStreamer CI promoted to required, with install cache**
+  (2026-05-13) — `check-gstreamer-windows.yml` went green on its first
+  two PR runs (#388 + #389), so dropped job-level `continue-on-error`
+  and added an `actions/cache@v4` layer over the
+  `%LOCALAPPDATA%\Programs\gstreamer` install (cuts ~2–3 min winget
+  install down to a seconds-long restore on hits). Job added to the
+  ruleset required-status contexts so it now blocks merges to `main`.
+  Step-level `continue-on-error` stays on the `gstreamer_probe` step
+  (it `exit(1)`s without a camera; informational only).
 - **Event-driven MSMF hotplug (#173) — live unplug/replug verified on
   real hardware** (2026-05-12) — `hotplug_probe` on the MX Brio:
   unplug printed `Disconnected(MX Brio …)` and replug printed
