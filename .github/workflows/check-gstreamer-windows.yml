@@ -1,6 +1,6 @@
 name: GStreamer (Windows)
 
-# Experimental Windows CI for the cross-platform GStreamer backend.
+# Cross-platform GStreamer backend build + test on Windows.
 #
 # Installs the *Complete* MSVC GStreamer variant via winget (the
 # `gstreamerproject.gstreamer` package ships headers + `lib/pkgconfig` +
@@ -11,11 +11,16 @@ name: GStreamer (Windows)
 # `pkg-config`, so we install `pkgconfiglite` via Chocolatey first
 # (gstreamer-rs's `*-sys` crates resolve link flags through it).
 #
-# `continue-on-error: true`: this job is new and the GH-hosted Windows
-# image / winget / Chocolatey behaviour can shift underneath it. Surface
-# failures without blocking merges — the `Build (windows)` matrix still
-# exercises `input-msmf` regardless. Promote to a required check once the
-# install path has proven stable across a few runs.
+# The GStreamer install dir is cached so the ~250 MB Complete-variant
+# download/install only runs on a cache miss. Bump `GSTREAMER_CACHE_VER`
+# below to invalidate the cache (e.g. on a GStreamer upgrade).
+#
+# Promoted to a required check 2026-05-13 after the install path was
+# verified green on the first runs (#388 + #389). The `gstreamer_probe`
+# step stays step-level `continue-on-error: true` because it `exit(1)`s
+# on a camera-less runner — it remains as a runtime link/init smoke
+# test; `cargo build` + `cargo test -p nokhwa-bindings-gstreamer
+# --features backend` are the must-pass surface.
 
 on:
   pull_request:
@@ -25,34 +30,49 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # The `windows-latest` runner user is `runneradmin`; `--scope user`
+  # winget puts GStreamer under their LOCALAPPDATA.
+  GSTREAMER_ROOT: C:\Users\runneradmin\AppData\Local\Programs\gstreamer\1.0\msvc_x86_64
+  # Bump when the GStreamer version installed by winget changes (or for
+  # any other reason to throw away the cached install).
+  GSTREAMER_CACHE_VER: "1"
+
 jobs:
   gstreamer-windows:
     name: Build & test (input-gstreamer, Windows)
     runs-on: windows-latest
     timeout-minutes: 30
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
 
       - name: Install pkg-config (pkgconfiglite)
-        # The `windows-latest` runner image ships no `pkg-config`.
-        # gstreamer-rs's `gstreamer-sys` / `gstreamer-app-sys` /
-        # `gstreamer-video-sys` use `system-deps`, which shells out to
-        # `pkg-config` to discover the GStreamer link flags from the
-        # `.pc` files the Complete variant installs. `pkgconfiglite` is
+        # `windows-latest` ships no `pkg-config`. gstreamer-rs's
+        # `gstreamer-sys` / `gstreamer-app-sys` / `gstreamer-video-sys`
+        # use `system-deps`, which shells out to `pkg-config` to read
+        # link flags from the GStreamer `.pc` files. `pkgconfiglite` is
         # the de-facto Chocolatey pkg-config for MSVC toolchains.
         run: choco install pkgconfiglite --yes --no-progress
 
+      - name: Cache GStreamer install
+        id: cache-gstreamer
+        uses: actions/cache@v4
+        with:
+          # Cache the whole `…\Programs\gstreamer` tree (the winget
+          # install puts the `1.0\msvc_x86_64` subtree underneath).
+          path: C:\Users\runneradmin\AppData\Local\Programs\gstreamer
+          key: gstreamer-windows-${{ env.GSTREAMER_CACHE_VER }}
+
       - name: Install GStreamer (Complete MSVC variant)
+        if: steps.cache-gstreamer.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          # `--scope user` installs under %LOCALAPPDATA%\Programs without
-          # needing elevation (the runner user can write there). The
-          # Complete variant is large (~250 MB of plugins) — accept the
-          # ~2-3 min install cost for now; a cache layer can come later
-          # if this job is promoted to a required check.
+          # `--scope user` writes under %LOCALAPPDATA%\Programs (no
+          # elevation needed). The Complete variant is ~250 MB of
+          # plugins — ~2–3 min on a cold cache; cache restores
+          # subsequently in seconds.
           winget install --id gstreamerproject.gstreamer `
             --scope user `
             --accept-source-agreements --accept-package-agreements `
@@ -61,17 +81,16 @@ jobs:
       - name: Export GStreamer environment
         shell: pwsh
         run: |
-          $root = "$env:LOCALAPPDATA\Programs\gstreamer\1.0\msvc_x86_64"
-          if (-not (Test-Path "$root\lib\pkgconfig")) {
-            Write-Error "GStreamer pkgconfig dir not found at $root\lib\pkgconfig — winget install layout changed?"
+          if (-not (Test-Path "$env:GSTREAMER_ROOT\lib\pkgconfig")) {
+            Write-Error "GStreamer pkgconfig dir not found at $env:GSTREAMER_ROOT\lib\pkgconfig — winget install layout changed or cache key needs bumping?"
             Get-ChildItem "$env:LOCALAPPDATA\Programs\gstreamer" -Recurse -Depth 3 | Select-Object -First 50
             exit 1
           }
-          # `system-deps` reads PKG_CONFIG_PATH; the linker + the test
-          # binaries need `bin\` on PATH to find `gstreamer-1.0-0.dll`
-          # et al. at link- and run-time.
-          "PKG_CONFIG_PATH=$root\lib\pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "$root\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          # `system-deps` reads `PKG_CONFIG_PATH`; the linker + the
+          # test binaries need `bin\` on `PATH` to find
+          # `gstreamer-1.0-0.dll` et al. at link- and run-time.
+          "PKG_CONFIG_PATH=$env:GSTREAMER_ROOT\lib\pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "$env:GSTREAMER_ROOT\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Build (input-gstreamer)
         run: cargo build --features input-gstreamer
@@ -79,13 +98,13 @@ jobs:
       - name: Test gstreamer bindings
         run: cargo test -p nokhwa-bindings-gstreamer --features backend
 
-      - name: GStreamer probe (enumeration smoke test)
-        # No camera on a GH-hosted runner — `DeviceMonitor` returns zero
-        # sources, and `gstreamer_probe` `exit(1)`s in that case. We run
-        # it anyway as a runtime link/init smoke test (it has to load
-        # `gstreamer-1.0-0.dll` + walk the plugin registry before it can
-        # report "0 sources"), but a non-zero exit from "no camera here"
-        # is expected and must not fail the job. `cargo build` + the
-        # bindings tests above already cover the must-pass surface.
+      - name: GStreamer probe (runtime link/init smoke test)
+        # A hosted runner has no camera → `gstreamer_probe` `exit(1)`s
+        # when `DeviceMonitor` finds zero sources. We run it for the
+        # link/init coverage (it must load `gstreamer-1.0-0.dll` and
+        # walk the plugin registry before it can report "0 sources"),
+        # but a non-zero exit from "no camera here" must not fail the
+        # job. `cargo build` + the bindings tests above are the
+        # must-pass surface.
         continue-on-error: true
         run: cargo run --features input-gstreamer --example gstreamer_probe

@@ -3133,6 +3133,27 @@
 
 ### Infrastructure
 
+* **Promote `Build & test (input-gstreamer, Windows)` to a required
+  check, with an install cache.** The Windows GStreamer job went green
+  on its first two runs (#388 + #389), so the experimental
+  `continue-on-error: true` is dropped at the job level (the
+  `gstreamer_probe` step keeps it — that step `exit(1)`s without a
+  camera and stays informational). Added an `actions/cache@v4` layer
+  over `%LOCALAPPDATA%\Programs\gstreamer` keyed on a bumpable
+  `GSTREAMER_CACHE_VER`; the ~250 MB winget install only runs on a
+  cache miss. The new job is added to the ruleset required-status
+  contexts so it blocks merges to `main`.
+* **`release-please.yml` now prefers a maintainer-supplied
+  `RELEASE_PLEASE_TOKEN` repo secret over `GITHUB_TOKEN`.** Pushes
+  made by the default `GITHUB_TOKEN` don't trigger workflow re-runs,
+  which leaves every release PR BLOCKED on required status checks
+  until someone closes-and-reopens it (the v0.14.6 release hit this).
+  Provision a fine-grained PAT scoped to this repo with `Contents:
+  r/w` + `Pull requests: r/w` (or a classic PAT with `repo`) as
+  `RELEASE_PLEASE_TOKEN`, and release PRs pick up CI automatically.
+  Falls back to `GITHUB_TOKEN` when the secret is unset so the
+  workflow still functions either way. Documented in CLAUDE.md →
+  "Commit & Release Convention".
 * **Formalize the device-testing strategy and add a Windows GStreamer
   CI job.** New `.github/workflows/check-gstreamer-windows.yml`
   (experimental, `continue-on-error: true`): `choco install
