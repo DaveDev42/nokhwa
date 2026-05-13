@@ -29,8 +29,9 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   With the PAT, release-please's push to the release-PR branch
   triggers `pull_request` CI normally; without it, the release PR
   stays BLOCKED on required status checks until someone closes and
-  reopens it (the 2026-05-13 v0.14.6 release hit this). See CLAUDE.md
-  → "Commit & Release Convention".
+  reopens it (v0.14.6, v0.14.7, and v0.14.8 all hit this — we used
+  the close/reopen workaround for each). See CLAUDE.md → "Commit &
+  Release Convention".
 
 ### Backlog
 
@@ -79,15 +80,37 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **Windows GStreamer install cache now actually re-uses across PRs**
+  (#392, v0.14.8, 2026-05-13) — the cache added in #391 saved on
+  every run but only to `refs/pull/N/merge`, because
+  `check-gstreamer-windows.yml` only triggered on `pull_request` /
+  `workflow_dispatch`. GitHub Actions restricts cache restores to the
+  same ref or the default branch, so every PR's first run reported
+  `Cache not found for input keys: gstreamer-windows-1` and re-ran
+  the ~250 MB winget install (~4m45s cold). Fix: also trigger on
+  `push: branches: [main]` so the post-merge run saves to
+  `refs/heads/main`. Verified end-to-end on the v0.14.8 release PR
+  (#393): GStreamer Windows job dropped to **2m17s warm vs 4m45s
+  cold**, and `gh api .../actions/caches` confirms a 443 MB entry on
+  `refs/heads/main`.
 - **Windows GStreamer CI promoted to required, with install cache**
-  (2026-05-13) — `check-gstreamer-windows.yml` went green on its first
-  two PR runs (#388 + #389), so dropped job-level `continue-on-error`
-  and added an `actions/cache@v4` layer over the
-  `%LOCALAPPDATA%\Programs\gstreamer` install (cuts ~2–3 min winget
-  install down to a seconds-long restore on hits). Job added to the
+  (#391, v0.14.7, 2026-05-13) — `check-gstreamer-windows.yml` went
+  green on its first two PR runs (#388 + #389), so dropped job-level
+  `continue-on-error` and added an `actions/cache@v4` layer over the
+  `%LOCALAPPDATA%\Programs\gstreamer` install. Job added to the
   ruleset required-status contexts so it now blocks merges to `main`.
   Step-level `continue-on-error` stays on the `gstreamer_probe` step
-  (it `exit(1)`s without a camera; informational only).
+  (it `exit(1)`s without a camera; informational only). Cache scoping
+  follow-up shipped in #392 (above).
+- **`release-please.yml` prefers `RELEASE_PLEASE_TOKEN` over
+  `GITHUB_TOKEN`** (#391, v0.14.7, 2026-05-13) — pushes made by the
+  default `GITHUB_TOKEN` don't trigger workflow re-runs, leaving
+  every release PR BLOCKED on required status checks until someone
+  closes-and-reopens it (we hit this on v0.14.6, v0.14.7, and
+  v0.14.8). With a maintainer-supplied PAT the close/reopen dance
+  goes away. Falls back to `GITHUB_TOKEN` when the secret is unset.
+  Secret provisioning is the maintainer-only follow-up tracked in
+  "Open → Infrastructure / CI".
 - **Event-driven MSMF hotplug (#173) — live unplug/replug verified on
   real hardware** (2026-05-12) — `hotplug_probe` on the MX Brio:
   unplug printed `Disconnected(MX Brio …)` and replug printed
