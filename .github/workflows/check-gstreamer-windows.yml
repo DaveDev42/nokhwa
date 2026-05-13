@@ -15,6 +15,12 @@ name: GStreamer (Windows)
 # download/install only runs on a cache miss. Bump `GSTREAMER_CACHE_VER`
 # below to invalidate the cache (e.g. on a GStreamer upgrade).
 #
+# We also trigger on `push: branches: [main]` so the post-merge run
+# saves the cache on the `refs/heads/main` ref. GitHub Actions only
+# lets a PR restore caches scoped to its own ref or to the default
+# branch — caches written on `refs/pull/N/merge` are private to that
+# PR, so without this trigger every PR's first run is cold.
+#
 # Promoted to a required check 2026-05-13 after the install path was
 # verified green on the first runs (#388 + #389). The `gstreamer_probe`
 # step stays step-level `continue-on-error: true` because it `exit(1)`s
@@ -24,6 +30,8 @@ name: GStreamer (Windows)
 
 on:
   pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
