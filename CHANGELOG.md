@@ -3846,6 +3846,13 @@
   backends that override these `ShutterCapture` methods, must rename their
   usages. Backends that use the default no-op impls are unaffected.
 
+## [0.14.9](https://github.com/DaveDev42/nokhwa/compare/v0.14.8...v0.14.9) (2026-05-13)
+
+
+### Infrastructure
+
+* **todo:** record v0.14.8 ship (GStreamer Windows cache scope fix) ([#394](https://github.com/DaveDev42/nokhwa/issues/394)) ([afdaab4](https://github.com/DaveDev42/nokhwa/commit/afdaab47ca05d9990665bb63f1e537d2924a5980))
+
 ## [0.14.8](https://github.com/DaveDev42/nokhwa/compare/v0.14.7...v0.14.8) (2026-05-13)
 
 
