@@ -7,13 +7,6 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Runtime verification pending (compile-verified only)
 
-- [ ] **Event-driven MSMF hotplug (#173) — live unplug/replug** —
-  reconnect the MX Brio over USB and run `cargo run --features
-  input-msmf --example hotplug_probe`; unplug/replug should print
-  `Connected(…)` / `Disconnected(…)` in real time. (The Poller-Drop
-  deadlock that previously made this example hang is fixed — #385; the
-  automated `msmf_hotplug_take_and_steady_state` test passes. Only the
-  live human observation remains.)
 - [ ] **AVFoundation backends (0.14.1–0.14.3 window)** — hotplug + open +
   frame-pull have only the `Build (macos)` compile check. Needs a run on
   the self-hosted `macos-camera` runner.
@@ -85,6 +78,11 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **Event-driven MSMF hotplug (#173) — live unplug/replug verified on
+  real hardware** (2026-05-12) — `hotplug_probe` on the MX Brio:
+  unplug printed `Disconnected(MX Brio …)` and replug printed
+  `Connected(MX Brio …)` in real time, no poller-Drop hang (the #385
+  fix holds). Closes the last "compile-verified only" gap for #173.
 - **MSMF teardown crash + hotplug-poller hang fixed; control round-trip
   re-verified** (#384, #385) — `MediaFoundationDevice::drop` released
   `IMFSourceReader` *after* `MFShutdown()`/`CoUninitialize()` (struct
