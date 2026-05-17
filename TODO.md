@@ -20,6 +20,22 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   machine; a local run is equally valid), plus `cargo run --example
   hotplug_probe` for the hotplug path.
 
+### Infrastructure / CI
+
+- [ ] **Provision `RELEASE_PLEASE_TOKEN` repo secret.** The
+  `release-please.yml` workflow prefers a maintainer-supplied PAT
+  (fine-grained: `Contents: r/w` + `Pull requests: r/w` on this repo;
+  or classic with `repo`) and falls back to `GITHUB_TOKEN` when unset.
+  With the PAT, release-please's push to the release-PR branch
+  triggers `pull_request` CI normally; without it, the release PR
+  stays BLOCKED on required status checks until someone closes-and-
+  reopens it (v0.14.6, v0.14.7, v0.14.8, v0.14.10 all hit this).
+  Note: the `workflow_dispatch`-based no-PAT workaround attempted in
+  v0.14.10 (PRs #398/#399) was reverted — `workflow_dispatch`-sourced
+  check runs do not count toward GitHub's PR required-status-checks
+  rollup, so the BLOCKED state persisted. PAT is the proven path.
+  See CLAUDE.md → "Commit & Release Convention".
+
 ### Backlog
 
 - [ ] **WASM / browser backend.** Blocked on five design decisions, no
@@ -67,20 +83,22 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
-- **Zero-click release-please auto-merge via `workflow_dispatch`**
-  (`ci/auto-dispatch-release-pr-checks`) — eliminated the
-  close-and-reopen dance on release PRs without needing a PAT. The
-  release-please workflow now (a) `gh workflow run`-triggers
-  `lint.yml`/`build-matrix.yml`/`test-core.yml`/`check-gstreamer-windows.yml`
-  on the release PR head (`workflow_dispatch` is the documented
-  exemption from `GITHUB_TOKEN` event-suppression), then (b)
-  `gh pr merge --auto --squash`-enables auto-merge so GitHub
-  squash-merges as soon as the dispatched checks turn green. Repo
-  `allow_auto_merge` flipped on for the `--auto` flag to work.
-  `RELEASE_PLEASE_TOKEN` no longer needed; secret-rotation burden
-  avoided. Trade-off accepted: every `feat:`/`fix:` to `main`
-  auto-publishes a patch release (matches the current ship cadence —
-  v0.14.6→v0.14.9 within ~24h).
+- **`workflow_dispatch` auto-dispatch experiment reverted** (#398,
+  #399, then this revert PR) — attempted to skip the
+  `RELEASE_PLEASE_TOKEN` PAT by having `release-please.yml`
+  `gh workflow run`-trigger the required CI workflows on the release
+  PR head (documented exemption from `GITHUB_TOKEN` event-suppression)
+  plus `gh pr merge --auto --squash`. The dispatched runs DID attach
+  check runs to the PR head SHA, but GitHub's PR merge-state engine
+  does NOT count `workflow_dispatch`-sourced check runs toward the
+  required-status-checks rollup — the release PR stayed BLOCKED, and
+  v0.14.10 only shipped after a manual empty-commit nudge on the
+  release branch. Reverted `release-please.yml` to PAT-preferred token
+  with `GITHUB_TOKEN` fallback; kept the `workflow_dispatch:` triggers
+  on `lint.yml`/`build-matrix.yml`/`test-core.yml` (harmless, useful
+  for manual reruns); left `allow_auto_merge=true` on the repo
+  (harmless). PAT provisioning re-tracked under Open →
+  Infrastructure / CI.
 - **Windows GStreamer install cache now actually re-uses across PRs**
   (#392, v0.14.8, 2026-05-13) — the cache added in #391 saved on
   every run but only to `refs/pull/N/merge`, because

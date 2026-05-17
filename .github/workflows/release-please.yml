@@ -9,43 +9,33 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  actions: write
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4
-        id: release
         with:
-          # `GITHUB_TOKEN` works here because the follow-up step
-          # `workflow_dispatch`-triggers the required CI workflows on
-          # the release PR head and enables auto-merge — both bypass
-          # the standard `GITHUB_TOKEN`-suppresses-PR-events rule
-          # (`workflow_dispatch` is the documented exemption).
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # Prefer a maintainer-supplied PAT (repo secret
+          # `RELEASE_PLEASE_TOKEN`, fine-grained or classic with
+          # `contents:write` + `pull-requests:write` on this repo) so
+          # release-please's push to the release-PR branch triggers
+          # normal `pull_request` CI. GitHub Actions suppresses workflow
+          # re-runs on pushes made by the default `GITHUB_TOKEN`, which
+          # leaves the release PR permanently BLOCKED on required
+          # status checks (worked around by closing and reopening the
+          # PR by hand). When the secret is unset, fall back to
+          # `GITHUB_TOKEN` so the workflow still functions — just
+          # without auto-triggered CI on the release PR.
+          #
+          # NOTE: a previous attempt (v0.14.10 era, PRs #398/#399)
+          # tried to avoid the PAT by `workflow_dispatch`-triggering
+          # the required CI workflows on the release PR head from this
+          # workflow. The dispatched runs DO attach check runs to the
+          # PR head SHA, but GitHub's PR merge-state engine does NOT
+          # count `workflow_dispatch`-sourced check runs toward the
+          # required-status-checks rollup — the PR stayed BLOCKED.
+          # Reverted in favor of the PAT path. See TODO.md.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-
-      # release-please's push to the release-PR branch is made with
-      # `GITHUB_TOKEN`, so `pull_request` workflows on the release PR
-      # never auto-trigger and required status checks stay forever
-      # "expected" → PR is BLOCKED. Manually `gh workflow run`-ing the
-      # required workflows (a documented exemption from the
-      # `GITHUB_TOKEN` event-suppression rule) attaches check runs to
-      # the PR head SHA so required checks turn green, then `--auto`
-      # lets GitHub squash-merge once they do — yielding zero-click
-      # patch releases without a PAT.
-      - name: Auto-dispatch CI + enable auto-merge on release PR
-        if: steps.release.outputs.pr != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          PR_HEAD: ${{ fromJson(steps.release.outputs.pr).headBranchName }}
-          PR_NUMBER: ${{ fromJson(steps.release.outputs.pr).number }}
-        run: |
-          gh workflow run lint.yml                    --ref "$PR_HEAD"
-          gh workflow run build-matrix.yml            --ref "$PR_HEAD"
-          gh workflow run test-core.yml               --ref "$PR_HEAD"
-          gh workflow run check-gstreamer-windows.yml --ref "$PR_HEAD"
-          gh pr merge "$PR_NUMBER" --auto --squash
