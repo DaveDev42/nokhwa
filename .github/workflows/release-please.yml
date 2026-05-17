@@ -37,7 +37,7 @@ jobs:
       # lets GitHub squash-merge once they do — yielding zero-click
       # patch releases without a PAT.
       - name: Auto-dispatch CI + enable auto-merge on release PR
-        if: steps.release.outputs.pr
+        if: steps.release.outputs.pr != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
