@@ -191,6 +191,40 @@ mod internal {
         Ok(device)
     }
 
+    /// Expand a V4L2 `FrameInterval` into the list of `CameraFormat`s it
+    /// represents at the given resolution + frame format.
+    ///
+    /// V4L2 reports frame intervals as either:
+    /// - `Discrete(n/d)` — accept only `n == 1` and yield `denominator` as FPS
+    /// - `Stepwise { min, max, step }` — yield `min.numerator..=max.numerator`
+    ///   step-by-`step.numerator` as FPS values, but only when min/max have
+    ///   non-unit denominators (mirrors the historical guard from
+    ///   `compatible_formats()` / `new()`).
+    fn expand_frame_interval(
+        interval: FrameIntervalEnum,
+        resolution: Resolution,
+        fmt: FrameFormat,
+    ) -> Vec<CameraFormat> {
+        match interval {
+            FrameIntervalEnum::Discrete(dis) => {
+                if dis.numerator == 1 {
+                    vec![CameraFormat::new(resolution, fmt, dis.denominator)]
+                } else {
+                    vec![]
+                }
+            }
+            FrameIntervalEnum::Stepwise(step) => {
+                if step.max.denominator == 1 && step.min.denominator == 1 {
+                    return vec![];
+                }
+                (step.min.numerator..=step.max.numerator)
+                    .step_by(step.step.numerator as usize)
+                    .map(|fps| CameraFormat::new(resolution, fmt, fps))
+                    .collect()
+            }
+        }
+    }
+
     fn get_device_format(device: &Device) -> Result<CameraFormat, NokhwaError> {
         match device.format() {
             Ok(format) => {
@@ -328,33 +362,9 @@ mod internal {
                             .enum_frameintervals(ff, res.x(), res.y())
                             .unwrap_or_default()
                             .into_iter()
-                            .flat_map(|x| match x.interval {
-                                FrameIntervalEnum::Discrete(dis) => {
-                                    if dis.numerator == 1 {
-                                        vec![CameraFormat::new(
-                                            Resolution::new(x.width, x.height),
-                                            framefmt,
-                                            dis.denominator,
-                                        )]
-                                    } else {
-                                        vec![]
-                                    }
-                                }
-                                FrameIntervalEnum::Stepwise(step) => {
-                                    let mut intvec = vec![];
-                                    for fstep in (step.min.numerator..=step.max.numerator)
-                                        .step_by(step.step.numerator as usize)
-                                    {
-                                        if step.max.denominator != 1 || step.min.denominator != 1 {
-                                            intvec.push(CameraFormat::new(
-                                                Resolution::new(x.width, x.height),
-                                                framefmt,
-                                                fstep,
-                                            ));
-                                        }
-                                    }
-                                    intvec
-                                }
+                            .flat_map(move |x| {
+                                let res = Resolution::new(x.width, x.height);
+                                expand_frame_interval(x.interval, res, framefmt)
                             })
                     })
                     .collect::<Vec<CameraFormat>>();
@@ -754,28 +764,7 @@ mod internal {
                     {
                         Ok(intervals) => {
                             for interval in intervals {
-                                match interval.interval {
-                                    FrameIntervalEnum::Discrete(dis) => {
-                                        if dis.numerator == 1 {
-                                            out.push(CameraFormat::new(
-                                                res,
-                                                fourcc,
-                                                dis.denominator,
-                                            ));
-                                        }
-                                    }
-                                    FrameIntervalEnum::Stepwise(step) => {
-                                        for fstep in (step.min.numerator..step.max.numerator)
-                                            .step_by(step.step.numerator as usize)
-                                        {
-                                            if step.max.denominator != 1
-                                                || step.min.denominator != 1
-                                            {
-                                                out.push(CameraFormat::new(res, fourcc, fstep));
-                                            }
-                                        }
-                                    }
-                                }
+                                out.extend(expand_frame_interval(interval.interval, res, fourcc));
                             }
                         }
                         Err(why) => {

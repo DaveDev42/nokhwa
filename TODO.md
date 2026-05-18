@@ -13,6 +13,11 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Runtime verification pending (compile-verified only)
 
+- [ ] **V4L FrameInterval helper refactor (refactor/v4l-frame-interval-helper)** —
+  `expand_frame_interval()` consolidation + Stepwise inclusive-bound fix
+  has only logic/stub CI coverage. Verify on Linux hardware with a webcam
+  that reports Stepwise intervals (`cargo test --features device-test,input-v4l,runner`).
+
 - [ ] **AVFoundation backends (0.14.1–0.14.3 window)** — hotplug + open +
   frame-pull have only the `Build (macos)` compile check. Run
   `cargo test --features device-test,input-avfoundation,runner` on a
