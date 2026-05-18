@@ -489,7 +489,7 @@ fn iso_current() -> c_float {
     unsafe { AVCaptureISOCurrent }
 }
 
-pub fn get_raw_device_info(index: CameraIndex, device: &AVCaptureDevice) -> CameraInfo {
+pub(crate) fn get_raw_device_info(index: CameraIndex, device: &AVCaptureDevice) -> CameraInfo {
     let name = device_localized_name(device);
     let manufacturer = device_manufacturer(device);
     let position = device_position(device);
@@ -508,45 +508,18 @@ pub fn get_raw_device_info(index: CameraIndex, device: &AVCaptureDevice) -> Came
     )
 }
 
-/// Wrapper around `AVFrameRateRange` with a public `inner()` accessor.
-pub struct AVFrameRateRangeWrapper {
-    inner: Retained<AVFrameRateRange>,
-}
-
-impl AVFrameRateRangeWrapper {
-    #[must_use]
-    pub fn new(inner: Retained<AVFrameRateRange>) -> Self {
-        Self { inner }
-    }
-
-    #[must_use]
-    pub fn max(&self) -> f64 {
-        range_max_frame_rate(&self.inner)
-    }
-
-    #[must_use]
-    pub fn min(&self) -> f64 {
-        range_min_frame_rate(&self.inner)
-    }
-
-    #[must_use]
-    pub fn inner(&self) -> &AVFrameRateRange {
-        &self.inner
-    }
-}
-
 #[derive(Debug)]
-pub struct AVCaptureDeviceFormatWrapper {
+pub(crate) struct AVCaptureDeviceFormatWrapper {
     /// Retained to prevent deallocation while the wrapper is alive.
     #[allow(dead_code)]
     pub(crate) internal: Retained<AVCaptureDeviceFormat>,
-    pub resolution: CMVideoDimensions,
-    pub fps_list: Vec<f64>,
-    pub fourcc: FrameFormat,
+    pub(crate) resolution: CMVideoDimensions,
+    pub(crate) fps_list: Vec<f64>,
+    pub(crate) fourcc: FrameFormat,
 }
 
 impl AVCaptureDeviceFormatWrapper {
-    pub fn try_from_format(format: &AVCaptureDeviceFormat) -> Result<Self, NokhwaError> {
+    pub(crate) fn try_from_format(format: &AVCaptureDeviceFormat) -> Result<Self, NokhwaError> {
         let media_type = format_media_type(format);
         let media_type_local = AVMediaTypeLocal::try_from(media_type.as_ref())?;
         if media_type_local != AVMediaTypeLocal::Video {
@@ -651,7 +624,7 @@ impl AVCaptureDeviceWrapper {
         &self.device
     }
 
-    pub fn supported_formats_raw(&self) -> Result<Vec<AVCaptureDeviceFormatWrapper>, NokhwaError> {
+    pub(crate) fn supported_formats_raw(&self) -> Vec<AVCaptureDeviceFormatWrapper> {
         let formats = device_formats(&self.inner);
         let mut result = Vec::new();
         for i in 0..formats.count() {
@@ -661,12 +634,12 @@ impl AVCaptureDeviceWrapper {
                 result.push(f);
             }
         }
-        Ok(result)
+        result
     }
 
     pub fn supported_formats(&self) -> Result<Vec<CameraFormat>, NokhwaError> {
         Ok(self
-            .supported_formats_raw()?
+            .supported_formats_raw()
             .iter()
             .flat_map(|av_fmt| {
                 let resolution = av_fmt.resolution;
@@ -827,14 +800,7 @@ impl AVCaptureDeviceWrapper {
                 value: (focus_poi.x, focus_poi.y),
                 default: (0.5, 0.5),
             },
-            if focus_poi_supported {
-                vec![]
-            } else {
-                vec![
-                    KnownCameraControlFlag::Disabled,
-                    KnownCameraControlFlag::ReadOnly,
-                ]
-            },
+            disabled_if_unsupported(focus_poi_supported),
             focus_auto || focus_continuous,
         ));
 
@@ -851,14 +817,7 @@ impl AVCaptureDeviceWrapper {
                 step: f64::MIN_POSITIVE,
                 default: 1.0,
             },
-            if focus_manual {
-                vec![]
-            } else {
-                vec![
-                    KnownCameraControlFlag::Disabled,
-                    KnownCameraControlFlag::ReadOnly,
-                ]
-            },
+            disabled_if_unsupported(focus_manual),
             focus_manual,
         ));
 
@@ -915,14 +874,7 @@ impl AVCaptureDeviceWrapper {
                 value: (exposure_poi.x, exposure_poi.y),
                 default: (0.5, 0.5),
             },
-            if exposure_poi_supported {
-                vec![]
-            } else {
-                vec![
-                    KnownCameraControlFlag::Disabled,
-                    KnownCameraControlFlag::ReadOnly,
-                ]
-            },
+            disabled_if_unsupported(exposure_poi_supported),
             focus_auto || focus_continuous,
         ));
 
@@ -938,14 +890,7 @@ impl AVCaptureDeviceWrapper {
                 value: exposure_face_driven,
                 default: false,
             },
-            if exposure_face_driven_supported {
-                vec![]
-            } else {
-                vec![
-                    KnownCameraControlFlag::Disabled,
-                    KnownCameraControlFlag::ReadOnly,
-                ]
-            },
+            disabled_if_unsupported(exposure_face_driven_supported),
             exposure_poi_supported,
         ));
 
@@ -1102,14 +1047,7 @@ impl AVCaptureDeviceWrapper {
                     f64::from(white_balance_default.blueGain),
                 ),
             },
-            if white_balance_gain_supported {
-                vec![]
-            } else {
-                vec![
-                    KnownCameraControlFlag::Disabled,
-                    KnownCameraControlFlag::ReadOnly,
-                ]
-            },
+            disabled_if_unsupported(white_balance_gain_supported),
             white_balance_gain_supported,
         ));
 
@@ -1143,14 +1081,7 @@ impl AVCaptureDeviceWrapper {
                     possible,
                     default: 0,
                 },
-                if has_torch {
-                    vec![]
-                } else {
-                    vec![
-                        KnownCameraControlFlag::Disabled,
-                        KnownCameraControlFlag::ReadOnly,
-                    ]
-                },
+                disabled_if_unsupported(has_torch),
                 has_torch,
             ));
         }
@@ -1167,14 +1098,7 @@ impl AVCaptureDeviceWrapper {
                     value: llb_enabled,
                     default: false,
                 },
-                if has_llb {
-                    vec![]
-                } else {
-                    vec![
-                        KnownCameraControlFlag::Disabled,
-                        KnownCameraControlFlag::ReadOnly,
-                    ]
-                },
+                disabled_if_unsupported(has_llb),
                 has_llb,
             ));
         }
@@ -1211,14 +1135,7 @@ impl AVCaptureDeviceWrapper {
                 value: distortion_correction_current_value,
                 default: false,
             },
-            if distortion_correction_supported {
-                vec![]
-            } else {
-                vec![
-                    KnownCameraControlFlag::ReadOnly,
-                    KnownCameraControlFlag::Disabled,
-                ]
-            },
+            disabled_if_unsupported(distortion_correction_supported),
             distortion_correction_supported,
         ));
 
@@ -1690,6 +1607,22 @@ impl AVCaptureDeviceWrapper {
         } else {
             Ok(a[a.len() - 1])
         }
+    }
+}
+
+/// Standard `KnownCameraControlFlag` set for an `AVFoundation` control
+/// based on whether the device reports it as supported. Unsupported
+/// controls are surfaced to callers as `Disabled` + `ReadOnly` so the
+/// `CameraControl` round-trips and `set_control` rejects writes
+/// without an `unwrap` on missing platform support.
+fn disabled_if_unsupported(supported: bool) -> Vec<KnownCameraControlFlag> {
+    if supported {
+        vec![]
+    } else {
+        vec![
+            KnownCameraControlFlag::Disabled,
+            KnownCameraControlFlag::ReadOnly,
+        ]
     }
 }
 
