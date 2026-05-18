@@ -1,7 +1,4 @@
 {
-  "enabledPlugins": {
-    "superpowers@claude-plugins-official": false
-  },
   "hooks": {
     "PreToolUse": [
       {
@@ -14,5 +11,9 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": false,
+    "rust-analyzer-lsp@claude-plugins-official": true
   }
 }
