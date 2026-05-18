@@ -36,21 +36,6 @@ use std::time::Duration;
 /// be instant.
 const FIRST_SAMPLE_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Schemes we treat as URLs (dispatched through `uridecodebin`).
-/// Anything else is assumed to be a display-name lookup against the
-/// live `DeviceMonitor`.
-pub(crate) fn looks_like_uri(s: &str) -> bool {
-    // Cheap check — no regex. A URI scheme is `alpha (alpha/digit/+/-/.)* ":"`.
-    // We only recognise the common multimedia ones to avoid treating a
-    // camera whose display name happens to contain `:` as a URL.
-    const SCHEMES: &[&str] = &[
-        "rtsp://", "rtsps://", "rtmp://", "rtmps://", "http://", "https://", "file://", "srt://",
-        "udp://", "tcp://",
-    ];
-    let lower = s.to_ascii_lowercase();
-    SCHEMES.iter().any(|s| lower.starts_with(s))
-}
-
 /// URI-mode pipeline handle. Shape mirrors [`crate::pipeline::PipelineHandle`]
 /// but the constructor and source element differ: no `Device`, no
 /// `capsfilter`, format is learned from the first sample instead of
@@ -321,8 +306,11 @@ pub(crate) fn compatible_fourcc_from_negotiated(fmt: CameraFormat) -> Vec<FrameF
 
 #[cfg(test)]
 mod tests {
-    use super::{compatible_fourcc_from_negotiated, looks_like_uri};
-    use nokhwa_core::types::{CameraFormat, FrameFormat, Resolution};
+    use super::compatible_fourcc_from_negotiated;
+    use nokhwa_core::{
+        looks_like_url_scheme,
+        types::{CameraFormat, FrameFormat, Resolution},
+    };
 
     #[test]
     fn looks_like_uri_detects_all_known_schemes() {
@@ -338,7 +326,7 @@ mod tests {
             "udp://239.0.0.1:5004",
             "tcp://example.com:1234",
         ] {
-            assert!(looks_like_uri(s), "expected URL: {s}");
+            assert!(looks_like_url_scheme(s), "expected URL: {s}");
         }
     }
 
@@ -354,7 +342,7 @@ mod tests {
             "rtsp",
             "http:/foo",
         ] {
-            assert!(!looks_like_uri(s), "expected non-URL: {s}");
+            assert!(!looks_like_url_scheme(s), "expected non-URL: {s}");
         }
     }
 
@@ -366,16 +354,10 @@ mod tests {
             "FILE:///tmp/x",
             "RtMpS://example.com",
         ] {
-            assert!(looks_like_uri(s), "expected URL (mixed case): {s}");
+            assert!(looks_like_url_scheme(s), "expected URL (mixed case): {s}");
         }
     }
 
-    // The session.rs `looks_like_uri_scheme` function has a doc note saying
-    // "Kept in sync with the scheme list in
-    // `nokhwa-bindings-gstreamer::uri::looks_like_uri`." This test pins the
-    // scheme list shape (count + canonical lower-case forms) so a divergence
-    // between the two implementations would be visible at the binding-crate
-    // level. The mirror test in `nokhwa::session` covers the other side.
     #[test]
     fn scheme_list_shape_is_stable() {
         // Each of these MUST be detected. The set is intentionally narrow:
@@ -385,13 +367,15 @@ mod tests {
             "srt://", "udp://", "tcp://",
         ];
         for prefix in mirror {
-            assert!(looks_like_uri(prefix), "{prefix} should be a URL prefix");
+            assert!(
+                looks_like_url_scheme(prefix),
+                "{prefix} should be a URL prefix"
+            );
         }
-        // And these intentionally are NOT in the list. If anyone adds them,
-        // they have to update both implementations and this test.
+        // And these intentionally are NOT in the list.
         for unsupported in ["ftp://", "ws://", "wss://", "data:", "mms://"] {
             assert!(
-                !looks_like_uri(unsupported),
+                !looks_like_url_scheme(unsupported),
                 "{unsupported} unexpectedly recognised"
             );
         }

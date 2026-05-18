@@ -66,12 +66,13 @@ mod internal {
         compatible_formats as caps_for_device, compatible_fourcc as fourcc_for_device,
         ensure_gst_init, find_device, resolve_format, snapshot_video_devices, PipelineHandle,
     };
-    use crate::uri::{compatible_fourcc_from_negotiated, looks_like_uri, UriPipelineHandle};
+    use crate::uri::{compatible_fourcc_from_negotiated, UriPipelineHandle};
     use gstreamer::prelude::*;
     use gstreamer::Device;
     use nokhwa_core::{
         buffer::Buffer,
         error::NokhwaError,
+        looks_like_url_scheme,
         traits::{CameraDevice, FrameSource},
         types::{
             ApiBackend, CameraControl, CameraFormat, CameraIndex, CameraInfo, ControlValueSetter,
@@ -177,7 +178,7 @@ mod internal {
     /// macOS — so format enumeration and actual negotiation happen
     /// against the real device caps rather than a hardcoded element
     /// name. URL dispatch (`rtsp://` / `http://` / `https://` /
-    /// `file://`, see `uri::looks_like_uri`) routes through
+    /// `file://`, see `nokhwa_core::looks_like_url_scheme`) routes through
     /// `uridecodebin` regardless of platform. The two pipelines live
     /// in `BackendSource::Local` and `BackendSource::Uri`
     /// respectively.
@@ -208,7 +209,7 @@ mod internal {
 
             // Branch 1: URL-like string → uridecodebin pipeline.
             if let CameraIndex::String(s) = index {
-                if looks_like_uri(s) {
+                if looks_like_url_scheme(s) {
                     let info = CameraInfo::new(s, "URL", s, index.clone());
                     return Ok(Self {
                         info,
