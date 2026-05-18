@@ -666,32 +666,6 @@ pub mod wmf {
                 }
             }
         }
-        //
-        // pub fn with_string(unique_id: &[u16]) -> Result<Self, NokhwaError> {
-        //     let devicelist = query()?;
-        //     let mut id_eq = None;
-        //
-        //     for mfdev in devicelist {
-        //         if (mfdev.symlink() as &[u16]) == unique_id {
-        //             id_eq = Some(mfdev.index().as_index()?);
-        //             break;
-        //         }
-        //     }
-        //
-        //     match id_eq {
-        //         Some(index) => Self::new(index),
-        //         None => {
-        //             return Err(BindingError::DeviceOpenFailError(
-        //                 std::str::from_utf8(
-        //                     &unique_id.iter().map(|x| *x as u8).collect::<Vec<u8>>(),
-        //                 )
-        //                 .unwrap_or("")
-        //                 .to_string(),
-        //                 "Not Found".to_string(),
-        //             ))
-        //         }
-        //     }
-        // }
 
         pub fn index(&self) -> &CameraIndex {
             self.device_specifier.index()
@@ -705,33 +679,9 @@ pub mod wmf {
             self.device_specifier.misc()
         }
 
-        pub fn compatible_format_list(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
-            let mut camera_format_list = vec![];
-            for parsed in parse_native_media_types(&self.source_reader)? {
-                for frame_rate in &parsed.frame_rates {
-                    camera_format_list.push(CameraFormat::new(
-                        parsed.resolution,
-                        parsed.frame_format,
-                        *frame_rate,
-                    ));
-                }
-            }
-            // MSMF advertises one native media type per discrete frame
-            // rate, and each carries `MF_MT_FRAME_RATE_RANGE_MAX` /
-            // `MF_MT_FRAME_RATE` / `MF_MT_FRAME_RATE_RANGE_MIN` — for a
-            // discrete rate all three hold the same value, so a camera
-            // exposing N discrete rates yields ~3N `(res, fmt, fps)`
-            // tuples of which only N are distinct (the MX Brio reports
-            // every YUYV mode 3×). Some drivers also list the same
-            // mode under more than one media type. Collapse to the
-            // canonical sorted + deduped shape, matching
-            // `compatible_fourcc`'s `collect → sort → dedup`.
-            camera_format_list.sort_unstable();
-            camera_format_list.dedup();
-            Ok(camera_format_list)
-        }
-
-        pub fn control(&self, control: KnownCameraControl) -> Result<CameraControl, NokhwaError> {
+        fn get_camera_control_services(
+            &self,
+        ) -> Result<(IAMCameraControl, IAMVideoProcAmp), NokhwaError> {
             let camera_control = unsafe {
                 let mut receiver: MaybeUninit<IAMCameraControl> = MaybeUninit::uninit();
                 let ptr_receiver = receiver.as_mut_ptr();
@@ -768,6 +718,37 @@ pub mod wmf {
                 }
                 receiver.assume_init()
             };
+            Ok((camera_control, video_proc_amp))
+        }
+
+        pub fn compatible_format_list(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+            let mut camera_format_list = vec![];
+            for parsed in parse_native_media_types(&self.source_reader)? {
+                for frame_rate in &parsed.frame_rates {
+                    camera_format_list.push(CameraFormat::new(
+                        parsed.resolution,
+                        parsed.frame_format,
+                        *frame_rate,
+                    ));
+                }
+            }
+            // MSMF advertises one native media type per discrete frame
+            // rate, and each carries `MF_MT_FRAME_RATE_RANGE_MAX` /
+            // `MF_MT_FRAME_RATE` / `MF_MT_FRAME_RATE_RANGE_MIN` — for a
+            // discrete rate all three hold the same value, so a camera
+            // exposing N discrete rates yields ~3N `(res, fmt, fps)`
+            // tuples of which only N are distinct (the MX Brio reports
+            // every YUYV mode 3×). Some drivers also list the same
+            // mode under more than one media type. Collapse to the
+            // canonical sorted + deduped shape, matching
+            // `compatible_fourcc`'s `collect → sort → dedup`.
+            camera_format_list.sort_unstable();
+            camera_format_list.dedup();
+            Ok(camera_format_list)
+        }
+
+        pub fn control(&self, control: KnownCameraControl) -> Result<CameraControl, NokhwaError> {
+            let (camera_control, video_proc_amp) = self.get_camera_control_services()?;
 
             let mut min = 0;
             let mut max = 0;
@@ -917,43 +898,7 @@ pub mod wmf {
             value: ControlValueSetter,
         ) -> Result<(), NokhwaError> {
             let current_value = self.control(control)?;
-
-            let camera_control = unsafe {
-                let mut receiver: MaybeUninit<IAMCameraControl> = MaybeUninit::uninit();
-                let ptr_receiver = receiver.as_mut_ptr();
-                if let Err(why) = self.source_reader.GetServiceForStream(
-                    MF_SOURCE_READER_MEDIASOURCE,
-                    &GUID_NULL,
-                    &IAMCameraControl::IID,
-                    ptr_receiver
-                        .cast::<IAMCameraControl>()
-                        .cast::<*mut c_void>(),
-                ) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: "MF_SOURCE_READER_MEDIASOURCE".to_string(),
-                        value: "IAMCameraControl".to_string(),
-                        error: why.to_string(),
-                    });
-                }
-                receiver.assume_init()
-            };
-            let video_proc_amp = unsafe {
-                let mut receiver: MaybeUninit<IAMVideoProcAmp> = MaybeUninit::uninit();
-                let ptr_receiver = receiver.as_mut_ptr();
-                if let Err(why) = self.source_reader.GetServiceForStream(
-                    MF_SOURCE_READER_MEDIASOURCE,
-                    &GUID_NULL,
-                    &IAMVideoProcAmp::IID,
-                    ptr_receiver.cast::<IAMVideoProcAmp>().cast::<*mut c_void>(),
-                ) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: "MF_SOURCE_READER_MEDIASOURCE".to_string(),
-                        value: "IAMVideoProcAmp".to_string(),
-                        error: why.to_string(),
-                    });
-                }
-                receiver.assume_init()
-            };
+            let (camera_control, video_proc_amp) = self.get_camera_control_services()?;
 
             let control_id = kcc_to_i32(control).ok_or(NokhwaError::SetPropertyError {
                 property: "CameraControl".to_string(),
