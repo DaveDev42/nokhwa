@@ -13,6 +13,12 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Runtime verification pending (compile-verified only)
 
+- [ ] **GStreamer cleanup bundle (refactor/gst-snapshot-and-init-helpers)** —
+  `ensure_gst_init()` + `snapshot_video_devices()` consolidation has only
+  `docs-only` + CI cross-platform compile coverage. Verify on a Linux box
+  with libgstreamer1.0-dev installed: `cargo test -p nokhwa-bindings-gstreamer
+  --features input-gstreamer`.
+
 - [ ] **V4L FrameInterval helper refactor (refactor/v4l-frame-interval-helper)** —
   `expand_frame_interval()` consolidation + Stepwise inclusive-bound fix
   has only logic/stub CI coverage. Verify on Linux hardware with a webcam

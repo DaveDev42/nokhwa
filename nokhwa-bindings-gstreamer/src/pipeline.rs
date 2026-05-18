@@ -228,21 +228,27 @@ fn element_err(what: &str, why: &str) -> NokhwaError {
     }
 }
 
-/// Walk the live monitor a second time to find the device the caller
-/// enumerated via [`crate::query`]. We pick by `display_name` because
-/// the original `query` only stored that in `CameraInfo.human_name`;
-/// falling back to positional index lets the common "first camera"
-/// path work even when two devices share a display name.
-pub(crate) fn find_device(
-    display_name: &str,
-    positional_index: u32,
-) -> Result<Device, NokhwaError> {
+/// Ensure GStreamer is initialized. Idempotent — safe to call from
+/// multiple call sites. Standardizes the `NokhwaError` wording so
+/// failures are diagnosable regardless of entry point.
+pub(crate) fn ensure_gst_init() -> Result<(), NokhwaError> {
+    gstreamer::init().map_err(|e| NokhwaError::general(format!("gstreamer init failed: {e}")))
+}
+
+/// Open a `DeviceMonitor` filtered to `Video/Source` + `video/x-raw`,
+/// snapshot the current device list, and stop the monitor. Used by
+/// both `query()` and `find_device()` to keep enumeration logic and
+/// error wording in one place.
+pub(crate) fn snapshot_video_devices() -> Result<Vec<gstreamer::Device>, NokhwaError> {
     use gstreamer::DeviceMonitor;
 
-    gstreamer::init().map_err(|e| NokhwaError::general(format!("gstreamer init failed: {e}")))?;
-
+    ensure_gst_init()?;
     let monitor = DeviceMonitor::new();
     let caps = Caps::builder("video/x-raw").build();
+    // Returning None from add_filter means the filter slot could not
+    // be installed. A zero-filter monitor would surface every device
+    // on the host, including audio sources — treat it as a fatal
+    // enumeration error rather than silently widening the query.
     if monitor
         .add_filter(Some("Video/Source"), Some(&caps))
         .is_none()
@@ -254,9 +260,25 @@ pub(crate) fn find_device(
     }
     monitor
         .start()
-        .map_err(|e| NokhwaError::general(format!("DeviceMonitor::start: {e}")))?;
-    let devices = monitor.devices();
+        .map_err(|e| NokhwaError::general(format!("DeviceMonitor::start failed: {e}")))?;
+    let devices = monitor.devices().into_iter().collect();
+    // Stop the monitor before returning — leaked monitors hold
+    // references to GStreamer plugins that subsequent calls expect
+    // to be free.
     monitor.stop();
+    Ok(devices)
+}
+
+/// Walk the live monitor a second time to find the device the caller
+/// enumerated via [`crate::query`]. We pick by `display_name` because
+/// the original `query` only stored that in `CameraInfo.human_name`;
+/// falling back to positional index lets the common "first camera"
+/// path work even when two devices share a display name.
+pub(crate) fn find_device(
+    display_name: &str,
+    positional_index: u32,
+) -> Result<Device, NokhwaError> {
+    let devices = snapshot_video_devices()?;
 
     if !display_name.is_empty() {
         if let Some(d) = devices

@@ -63,12 +63,12 @@ mod internal {
         v4l2_cid_value, GstControlHandle,
     };
     use crate::pipeline::{
-        compatible_formats as caps_for_device, compatible_fourcc as fourcc_for_device, find_device,
-        resolve_format, PipelineHandle,
+        compatible_formats as caps_for_device, compatible_fourcc as fourcc_for_device,
+        ensure_gst_init, find_device, resolve_format, snapshot_video_devices, PipelineHandle,
     };
     use crate::uri::{compatible_fourcc_from_negotiated, looks_like_uri, UriPipelineHandle};
     use gstreamer::prelude::*;
-    use gstreamer::{Caps, Device, DeviceMonitor};
+    use gstreamer::Device;
     use nokhwa_core::{
         buffer::Buffer,
         error::NokhwaError,
@@ -97,34 +97,7 @@ mod internal {
     ///   to positional index.
     /// - `index` as a monotonic `CameraIndex::Index(n)`.
     pub fn query() -> Result<Vec<CameraInfo>, NokhwaError> {
-        gstreamer::init()
-            .map_err(|e| NokhwaError::general(format!("gstreamer init failed: {e}")))?;
-
-        let monitor = DeviceMonitor::new();
-        let caps = Caps::builder("video/x-raw").build();
-        // Returning None from add_filter means the filter slot could not
-        // be installed. A zero-filter monitor would surface every device
-        // on the host, including audio sources — treat it as a fatal
-        // enumeration error rather than silently widening the query.
-        if monitor
-            .add_filter(Some("Video/Source"), Some(&caps))
-            .is_none()
-        {
-            return Err(NokhwaError::StructureError {
-                structure: "DeviceMonitor filter Video/Source".to_string(),
-                error: "add_filter returned None".to_string(),
-            });
-        }
-
-        monitor
-            .start()
-            .map_err(|e| NokhwaError::general(format!("DeviceMonitor::start failed: {e}")))?;
-
-        let devices = monitor.devices();
-        // Stop the monitor before returning — leaked monitors hold
-        // references to GStreamer plugins that subsequent calls expect
-        // to be free.
-        monitor.stop();
+        let devices = snapshot_video_devices()?;
 
         let mut cameras = Vec::with_capacity(devices.len());
         for (idx, dev) in devices.into_iter().enumerate() {
@@ -231,8 +204,7 @@ mod internal {
 
     impl GStreamerCaptureDevice {
         pub fn new(index: &CameraIndex, cam_fmt: RequestedFormat) -> Result<Self, NokhwaError> {
-            gstreamer::init()
-                .map_err(|e| NokhwaError::general(format!("gstreamer init failed: {e}")))?;
+            ensure_gst_init()?;
 
             // Branch 1: URL-like string → uridecodebin pipeline.
             if let CameraIndex::String(s) = index {
