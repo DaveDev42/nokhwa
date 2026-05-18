@@ -19,6 +19,10 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   Mac with a webcam (the self-hosted `macos-camera` runner is one such
   machine; a local run is equally valid), plus `cargo run --example
   hotplug_probe` for the hotplug path.
+- [ ] **MSMF COM service helper refactor (refactor/msmf-com-service-helper)** —
+  `get_camera_control_services()` consolidation has only the `Build (windows)`
+  compile check. Verify control read/write on physical Windows hardware
+  (`cargo test --features device-test,input-msmf,runner` on a Win box with a webcam).
 
 ### Infrastructure / CI
 
