@@ -3112,16 +3112,16 @@ fn buf_nv12_extract_luma_rejects_input_and_dest_size_mismatches() {
 }
 
 #[test]
-fn buf_bgr_to_rgb_rejects_odd_resolution_and_size_mismatches() {
-    // BGR-to-RGB is a byte-shuffle, but the guard still requires
-    // even dimensions (matches the NV12 contract for downstream
-    // consistency) and exact-size input + output. Pin every
-    // branch so a SIMD shuffle never indexes past the buffer.
-    let mut out = vec![0u8; 6 * 4 * 3];
+fn buf_bgr_to_rgb_rejects_size_mismatches() {
+    // BGR-to-RGB is a flat 3-bytes-per-pixel byte shuffle; any pixel
+    // count (odd or even dimensions) is valid. The function only
+    // rejects mismatches between the declared resolution and the
+    // actual buffer lengths. Pin every error branch so a regression
+    // never silently indexes past the buffer.
     let res_odd = Resolution::new(5, 4);
-    let err =
-        buf_bgr_to_rgb(res_odd, &[0u8; 60], &mut out).expect_err("odd width must be rejected");
-    assert_process_frame_error(err, FrameFormat::RAWBGR);
+    let mut out_odd = vec![0u8; 5 * 4 * 3];
+    buf_bgr_to_rgb(res_odd, &[0u8; 5 * 4 * 3], &mut out_odd)
+        .expect("odd width must now be accepted");
 
     let res = Resolution::new(4, 4);
     let mut out_ok = vec![0u8; 4 * 4 * 3];
@@ -3203,4 +3203,27 @@ fn buf_bgr_to_rgb_swaps_b_and_r_channels() {
         assert_eq!(out[off + 1], base + 2, "pixel {i} G channel preserved");
         assert_eq!(out[off + 2], base + 1, "pixel {i} B channel");
     }
+}
+
+#[test]
+fn buf_bgr_to_rgb_accepts_odd_resolution() {
+    // BGR is a flat 3-byte-per-pixel format with no chroma subsampling,
+    // so any pixel count — including odd width or height — is valid.
+    // This test guards against a regression where an even-dimension
+    // check copied from the NV12 path is reintroduced.
+
+    // 3×1: B0G0R0 B1G1R1 B2G2R2 → expect per-pixel B/R swap
+    let res = Resolution::new(3, 1);
+    let bgr: [u8; 9] = [10, 20, 30, 40, 50, 60, 70, 80, 90];
+    let mut rgb = [0u8; 9];
+    buf_bgr_to_rgb(res, &bgr, &mut rgb).unwrap();
+    assert_eq!(rgb, [30, 20, 10, 60, 50, 40, 90, 80, 70]);
+
+    // 5×3 (both odd): all-ones input must emerge all-ones (G=1 stays,
+    // B=1 and R=1 swap but are indistinguishable at a uniform value).
+    let res2 = Resolution::new(5, 3);
+    let bgr2 = vec![1u8; 5 * 3 * 3];
+    let mut rgb2 = vec![0u8; 5 * 3 * 3];
+    buf_bgr_to_rgb(res2, &bgr2, &mut rgb2).unwrap();
+    assert!(rgb2.iter().all(|&b| b == 1));
 }

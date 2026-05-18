@@ -1929,14 +1929,6 @@ pub fn buf_bgr_to_rgb(
     let width = resolution.width();
     let height = resolution.height();
 
-    if !width.is_multiple_of(2) || !height.is_multiple_of(2) {
-        return Err(NokhwaError::ProcessFrameError {
-            src: FrameFormat::RAWBGR,
-            destination: "RGB".to_string(),
-            error: "bad resolution".to_string(),
-        });
-    }
-
     let input_size = (width * height * 3) as usize; // BGR is 3 bytes per pixel
     let output_size = (width * height * 3) as usize; // RGB is 3 bytes per pixel
 
