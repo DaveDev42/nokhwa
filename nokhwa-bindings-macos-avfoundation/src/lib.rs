@@ -49,10 +49,8 @@ pub use callback::{
     current_authorization_status, request_permission_with_callback, AVCaptureVideoCallback,
 };
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-pub use device::{
-    get_raw_device_info, query, AVCaptureDeviceFormatWrapper, AVCaptureDeviceWrapper,
-    AVFrameRateRangeWrapper,
-};
+pub use device::{query, AVCaptureDeviceWrapper};
+
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use ffi::*;
 

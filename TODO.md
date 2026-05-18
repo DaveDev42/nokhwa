@@ -34,6 +34,11 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   `get_camera_control_services()` consolidation has only the `Build (windows)`
   compile check. Verify control read/write on physical Windows hardware
   (`cargo test --features device-test,input-msmf,runner` on a Win box with a webcam).
+- [ ] **AVFoundation cleanup bundle (refactor/avf-helper-extraction)** —
+  `disabled_if_unsupported()` extraction and `pub(crate)` narrowing have only
+  `Build (macos)` + clippy compile coverage. Verify on Mac with a webcam:
+  `cargo test --features device-test,input-avfoundation,runner` + `cargo
+  run --example hotplug_probe`.
 
 ### Infrastructure / CI
 
