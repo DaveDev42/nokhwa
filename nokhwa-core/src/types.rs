@@ -1553,41 +1553,37 @@ pub fn mjpeg_to_rgb(data: &[u8], rgba: bool) -> Result<Vec<u8>, NokhwaError> {
             match decompressor_res {
                 Ok(decompressor) => decompressor,
                 Err(why) => {
-                    return Err(NokhwaError::ProcessFrameError {
-                        src: FrameFormat::MJPEG,
-                        destination: "RGB888".to_string(),
-                        error: why.to_string(),
-                    })
+                    return Err(NokhwaError::process_frame(
+                        FrameFormat::MJPEG,
+                        "RGB888",
+                        why.to_string(),
+                    ))
                 }
             }
         }
         Err(why) => {
-            return Err(NokhwaError::ProcessFrameError {
-                src: FrameFormat::MJPEG,
-                destination: "RGB888".to_string(),
-                error: why.to_string(),
-            })
+            return Err(NokhwaError::process_frame(
+                FrameFormat::MJPEG,
+                "RGB888",
+                why.to_string(),
+            ))
         }
     };
 
     let scanlines_res = match jpeg_decompress.read_scanlines::<u8>() {
         Ok(v) => v,
         Err(why) => {
-            return Err(NokhwaError::ProcessFrameError {
-                src: FrameFormat::MJPEG,
-                destination: "JPEG".to_string(),
-                error: why.to_string(),
-            })
+            return Err(NokhwaError::process_frame(
+                FrameFormat::MJPEG,
+                "JPEG",
+                why.to_string(),
+            ))
         }
     };
     // assert!(jpeg_decompress.finish_decompress());
     jpeg_decompress
         .finish()
-        .map_err(|why| NokhwaError::ProcessFrameError {
-            src: FrameFormat::MJPEG,
-            destination: "RGB888".to_string(),
-            error: why.to_string(),
-        })?;
+        .map_err(|why| NokhwaError::process_frame(FrameFormat::MJPEG, "RGB888", why.to_string()))?;
 
     Ok(scanlines_res)
 }
@@ -1621,47 +1617,39 @@ pub fn buf_mjpeg_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<(), 
             match decompressor_res {
                 Ok(decompressor) => decompressor,
                 Err(why) => {
-                    return Err(NokhwaError::ProcessFrameError {
-                        src: FrameFormat::MJPEG,
-                        destination: "RGB888".to_string(),
-                        error: why.to_string(),
-                    })
+                    return Err(NokhwaError::process_frame(
+                        FrameFormat::MJPEG,
+                        "RGB888",
+                        why.to_string(),
+                    ))
                 }
             }
         }
         Err(why) => {
-            return Err(NokhwaError::ProcessFrameError {
-                src: FrameFormat::MJPEG,
-                destination: "RGB888".to_string(),
-                error: why.to_string(),
-            })
+            return Err(NokhwaError::process_frame(
+                FrameFormat::MJPEG,
+                "RGB888",
+                why.to_string(),
+            ))
         }
     };
 
     // assert_eq!(dest.len(), jpeg_decompress.min_flat_buffer_size());
     if dest.len() != jpeg_decompress.min_flat_buffer_size() {
-        return Err(NokhwaError::ProcessFrameError {
-            src: FrameFormat::MJPEG,
-            destination: "RGB888".to_string(),
-            error: "Bad decoded buffer size".to_string(),
-        });
+        return Err(NokhwaError::process_frame(
+            FrameFormat::MJPEG,
+            "RGB888",
+            "Bad decoded buffer size",
+        ));
     }
 
     jpeg_decompress
         .read_scanlines_into::<u8>(dest)
-        .map_err(|why| NokhwaError::ProcessFrameError {
-            src: FrameFormat::MJPEG,
-            destination: "RGB888".to_string(),
-            error: why.to_string(),
-        })?;
+        .map_err(|why| NokhwaError::process_frame(FrameFormat::MJPEG, "RGB888", why.to_string()))?;
     // assert!(jpeg_decompress.finish_decompress());
     jpeg_decompress
         .finish()
-        .map_err(|why| NokhwaError::ProcessFrameError {
-            src: FrameFormat::MJPEG,
-            destination: "RGB888".to_string(),
-            error: why.to_string(),
-        })?;
+        .map_err(|why| NokhwaError::process_frame(FrameFormat::MJPEG, "RGB888", why.to_string()))?;
     Ok(())
 }
 
@@ -1711,12 +1699,11 @@ pub fn yuyv422_to_rgb(data: &[u8], rgba: bool) -> Result<Vec<u8>, NokhwaError> {
 #[inline]
 pub fn buf_yuyv422_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<(), NokhwaError> {
     if !data.len().is_multiple_of(4) {
-        return Err(NokhwaError::ProcessFrameError {
-            src: FrameFormat::YUYV,
-            destination: "RGB888".to_string(),
-            error: "Assertion failure, the YUV stream isn't 4:2:2! (wrong number of bytes)"
-                .to_string(),
-        });
+        return Err(NokhwaError::process_frame(
+            FrameFormat::YUYV,
+            "RGB888",
+            "Assertion failure, the YUV stream isn't 4:2:2! (wrong number of bytes)",
+        ));
     }
 
     let pixel_size = if rgba { 4 } else { 3 };
@@ -1724,11 +1711,11 @@ pub fn buf_yuyv422_to_rgb(data: &[u8], dest: &mut [u8], rgba: bool) -> Result<()
     let rgb_buf_size = (data.len() / 4) * (2 * pixel_size);
 
     if dest.len() != rgb_buf_size {
-        return Err(NokhwaError::ProcessFrameError {
-            src: FrameFormat::YUYV,
-            destination: "RGB888".to_string(),
-            error: format!("Assertion failure, the destination RGB buffer is of the wrong size! [expected: {rgb_buf_size}, actual: {}]", dest.len()),
-        });
+        return Err(NokhwaError::process_frame(
+            FrameFormat::YUYV,
+            "RGB888",
+            format!("Assertion failure, the destination RGB buffer is of the wrong size! [expected: {rgb_buf_size}, actual: {}]", dest.len()),
+        ));
     }
 
     if rgba {
@@ -1799,29 +1786,29 @@ pub fn buf_nv12_to_rgb(
     rgba: bool,
 ) -> Result<(), NokhwaError> {
     if !resolution.width().is_multiple_of(2) || !resolution.height().is_multiple_of(2) {
-        return Err(NokhwaError::ProcessFrameError {
-            src: FrameFormat::NV12,
-            destination: "RGB".to_string(),
-            error: "bad resolution".to_string(),
-        });
+        return Err(NokhwaError::process_frame(
+            FrameFormat::NV12,
+            "RGB",
+            "bad resolution",
+        ));
     }
 
     if data.len() != (resolution.width() as usize * resolution.height() as usize * 3) / 2 {
-        return Err(NokhwaError::ProcessFrameError {
-            src: FrameFormat::NV12,
-            destination: "RGB".to_string(),
-            error: "bad input buffer size".to_string(),
-        });
+        return Err(NokhwaError::process_frame(
+            FrameFormat::NV12,
+            "RGB",
+            "bad input buffer size",
+        ));
     }
 
     let pxsize: usize = if rgba { 4 } else { 3 };
 
     if out.len() != pxsize * resolution.width() as usize * resolution.height() as usize {
-        return Err(NokhwaError::ProcessFrameError {
-            src: FrameFormat::NV12,
-            destination: "RGB".to_string(),
-            error: "bad output buffer size".to_string(),
-        });
+        return Err(NokhwaError::process_frame(
+            FrameFormat::NV12,
+            "RGB",
+            "bad output buffer size",
+        ));
     }
 
     crate::simd::nv12_to_rgb_simd(
@@ -1847,23 +1834,23 @@ pub fn buf_nv12_to_rgb(
 #[inline]
 pub fn buf_yuyv_extract_luma(data: &[u8], dest: &mut [u8]) -> Result<(), NokhwaError> {
     if !data.len().is_multiple_of(4) {
-        return Err(NokhwaError::ProcessFrameError {
-            src: FrameFormat::YUYV,
-            destination: "Luma".to_string(),
-            error: "YUYV stream length not divisible by 4".to_string(),
-        });
+        return Err(NokhwaError::process_frame(
+            FrameFormat::YUYV,
+            "Luma",
+            "YUYV stream length not divisible by 4",
+        ));
     }
 
     let pixel_count = data.len() / 2;
     if dest.len() != pixel_count {
-        return Err(NokhwaError::ProcessFrameError {
-            src: FrameFormat::YUYV,
-            destination: "Luma".to_string(),
-            error: format!(
+        return Err(NokhwaError::process_frame(
+            FrameFormat::YUYV,
+            "Luma",
+            format!(
                 "destination buffer size mismatch (expected {pixel_count}, got {})",
                 dest.len()
             ),
-        });
+        ));
     }
 
     crate::simd::yuyv_extract_luma_simd(data, dest);
@@ -1891,25 +1878,25 @@ pub fn buf_nv12_extract_luma(
     let expected_input = y_size * 3 / 2;
 
     if data.len() != expected_input {
-        return Err(NokhwaError::ProcessFrameError {
-            src: FrameFormat::NV12,
-            destination: "Luma".to_string(),
-            error: format!(
+        return Err(NokhwaError::process_frame(
+            FrameFormat::NV12,
+            "Luma",
+            format!(
                 "NV12 input size mismatch (expected {expected_input}, got {})",
                 data.len()
             ),
-        });
+        ));
     }
 
     if dest.len() != y_size {
-        return Err(NokhwaError::ProcessFrameError {
-            src: FrameFormat::NV12,
-            destination: "Luma".to_string(),
-            error: format!(
+        return Err(NokhwaError::process_frame(
+            FrameFormat::NV12,
+            "Luma",
+            format!(
                 "destination buffer size mismatch (expected {y_size}, got {})",
                 dest.len()
             ),
-        });
+        ));
     }
 
     dest.copy_from_slice(&data[..y_size]);
@@ -1933,19 +1920,19 @@ pub fn buf_bgr_to_rgb(
     let output_size = (width * height * 3) as usize; // RGB is 3 bytes per pixel
 
     if data.len() != input_size {
-        return Err(NokhwaError::ProcessFrameError {
-            src: FrameFormat::RAWBGR,
-            destination: "RGB".to_string(),
-            error: "bad input buffer size".to_string(),
-        });
+        return Err(NokhwaError::process_frame(
+            FrameFormat::RAWBGR,
+            "RGB",
+            "bad input buffer size",
+        ));
     }
 
     if out.len() != output_size {
-        return Err(NokhwaError::ProcessFrameError {
-            src: FrameFormat::RAWBGR,
-            destination: "RGB".to_string(),
-            error: "bad output buffer size".to_string(),
-        });
+        return Err(NokhwaError::process_frame(
+            FrameFormat::RAWBGR,
+            "RGB",
+            "bad output buffer size",
+        ));
     }
 
     crate::simd::bgr_to_rgb_simd(data, out);

@@ -123,10 +123,8 @@ pub trait FrameSource: CameraDevice {
         let rgba_data = frame::convert_to_rgba(fcc, resolution, buffer.buffer())?;
         let img: image::ImageBuffer<image::Rgba<u8>, Vec<u8>> =
             image::ImageBuffer::from_raw(resolution.width_x, resolution.height_y, rgba_data)
-                .ok_or(NokhwaError::ProcessFrameError {
-                    src: fcc,
-                    destination: "Rgba".to_string(),
-                    error: "Failed to create ImageBuffer".to_string(),
+                .ok_or_else(|| {
+                    NokhwaError::process_frame(fcc, "Rgba", "Failed to create ImageBuffer")
                 })?;
         let texture_size = Extent3d {
             width: img.width(),
@@ -191,15 +189,15 @@ pub trait FrameSource: CameraDevice {
         let (tex_format, tex_size, bytes_per_row) = raw_texture_layout(source_format, resolution)?;
         let expected_size = (bytes_per_row * tex_size.height) as usize;
         if raw.len() < expected_size {
-            return Err(NokhwaError::ProcessFrameError {
-                src: source_format,
-                destination: "RawTextureData".to_string(),
-                error: format!(
+            return Err(NokhwaError::process_frame(
+                source_format,
+                "RawTextureData",
+                format!(
                     "raw buffer ({} bytes) smaller than expected ({} bytes)",
                     raw.len(),
                     expected_size
                 ),
-            });
+            ));
         }
         let texture = device.create_texture(&TextureDescriptor {
             label,

@@ -75,15 +75,15 @@ impl<F: CaptureFormat> Frame<F> {
     /// Returns [`NokhwaError::ProcessFrameError`] on format mismatch.
     pub fn try_new(buffer: Buffer) -> Result<Self, NokhwaError> {
         if buffer.source_frame_format() != F::FRAME_FORMAT {
-            return Err(NokhwaError::ProcessFrameError {
-                src: buffer.source_frame_format(),
-                destination: format!("Frame<{:?}>", F::FRAME_FORMAT),
-                error: format!(
+            return Err(NokhwaError::process_frame(
+                buffer.source_frame_format(),
+                format!("Frame<{:?}>", F::FRAME_FORMAT),
+                format!(
                     "expected {:?}, got {:?}",
                     F::FRAME_FORMAT,
                     buffer.source_frame_format()
                 ),
-            });
+            ));
         }
         Ok(Self {
             buffer,
@@ -199,13 +199,8 @@ impl RgbConversion {
 
         let rgb_data = convert_to_rgb(fcc, resolution, data)?;
 
-        ImageBuffer::from_raw(resolution.width_x, resolution.height_y, rgb_data).ok_or(
-            NokhwaError::ProcessFrameError {
-                src: fcc,
-                destination: "Rgb".to_string(),
-                error: "Failed to create ImageBuffer".to_string(),
-            },
-        )
+        ImageBuffer::from_raw(resolution.width_x, resolution.height_y, rgb_data)
+            .ok_or_else(|| NokhwaError::process_frame(fcc, "Rgb", "Failed to create ImageBuffer"))
     }
 
     /// Writes the converted RGB data into the provided buffer.
@@ -232,11 +227,7 @@ impl RgbConversion {
                 &mut std::io::BufWriter::new(writer),
                 image::ImageFormat::Png,
             )
-            .map_err(|e| NokhwaError::ProcessFrameError {
-                src: fcc,
-                destination: "PNG".to_string(),
-                error: e.to_string(),
-            })
+            .map_err(|e| NokhwaError::process_frame(fcc, "PNG", e.to_string()))
     }
 }
 
@@ -258,13 +249,8 @@ impl RgbaConversion {
 
         let rgba_data = convert_to_rgba(fcc, resolution, data)?;
 
-        ImageBuffer::from_raw(resolution.width_x, resolution.height_y, rgba_data).ok_or(
-            NokhwaError::ProcessFrameError {
-                src: fcc,
-                destination: "Rgba".to_string(),
-                error: "Failed to create ImageBuffer".to_string(),
-            },
-        )
+        ImageBuffer::from_raw(resolution.width_x, resolution.height_y, rgba_data)
+            .ok_or_else(|| NokhwaError::process_frame(fcc, "Rgba", "Failed to create ImageBuffer"))
     }
 
     /// Writes the converted RGBA data into the provided buffer.
@@ -298,13 +284,8 @@ impl LumaConversion {
 
         let luma_data = convert_to_luma(fcc, resolution, data)?;
 
-        ImageBuffer::from_raw(resolution.width_x, resolution.height_y, luma_data).ok_or(
-            NokhwaError::ProcessFrameError {
-                src: fcc,
-                destination: "Luma".to_string(),
-                error: "Failed to create ImageBuffer".to_string(),
-            },
-        )
+        ImageBuffer::from_raw(resolution.width_x, resolution.height_y, luma_data)
+            .ok_or_else(|| NokhwaError::process_frame(fcc, "Luma", "Failed to create ImageBuffer"))
     }
 
     /// Writes the converted luma data into the provided buffer.
@@ -415,15 +396,15 @@ pub(crate) fn convert_to_rgb_buffer(
         FrameFormat::NV12 => buf_nv12_to_rgb(resolution, data, dest, false),
         FrameFormat::RAWRGB => {
             if dest.len() != data.len() {
-                return Err(NokhwaError::ProcessFrameError {
-                    src: fcc,
-                    destination: "RGB".to_string(),
-                    error: format!(
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "RGB",
+                    format!(
                         "destination buffer size mismatch (expected {}, got {})",
                         data.len(),
                         dest.len()
                     ),
-                });
+                ));
             }
             dest.copy_from_slice(data);
             Ok(())
@@ -431,11 +412,7 @@ pub(crate) fn convert_to_rgb_buffer(
         FrameFormat::RAWBGR => buf_bgr_to_rgb(resolution, data, dest),
         FrameFormat::GRAY => {
             if dest.len() != data.len() * 3 {
-                return Err(NokhwaError::ProcessFrameError {
-                    src: fcc,
-                    destination: "RGB".to_string(),
-                    error: "Bad buffer length".to_string(),
-                });
+                return Err(NokhwaError::process_frame(fcc, "RGB", "Bad buffer length"));
             }
             data.iter().enumerate().for_each(|(idx, &pxv)| {
                 let i = idx * 3;
@@ -459,11 +436,11 @@ pub(crate) fn convert_to_rgba(
         FrameFormat::NV12 => nv12_to_rgb(resolution, data, true),
         FrameFormat::RAWRGB => {
             if !data.len().is_multiple_of(3) {
-                return Err(NokhwaError::ProcessFrameError {
-                    src: fcc,
-                    destination: "RGBA".to_string(),
-                    error: "RAWRGB data length not a multiple of 3".to_string(),
-                });
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "RGBA",
+                    "RAWRGB data length not a multiple of 3",
+                ));
             }
             let mut rgba = vec![0u8; (data.len() / 3) * 4];
             crate::simd::rgb_to_rgba_simd(data, &mut rgba);
@@ -471,11 +448,11 @@ pub(crate) fn convert_to_rgba(
         }
         FrameFormat::RAWBGR => {
             if !data.len().is_multiple_of(3) {
-                return Err(NokhwaError::ProcessFrameError {
-                    src: fcc,
-                    destination: "RGBA".to_string(),
-                    error: "RAWBGR data length not a multiple of 3".to_string(),
-                });
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "RGBA",
+                    "RAWBGR data length not a multiple of 3",
+                ));
             }
             let mut rgba = vec![0u8; (data.len() / 3) * 4];
             crate::simd::bgr_to_rgba_simd(data, &mut rgba);
@@ -503,55 +480,51 @@ pub(crate) fn convert_to_rgba_buffer(
         FrameFormat::NV12 => buf_nv12_to_rgb(resolution, data, dest, true),
         FrameFormat::RAWRGB => {
             if !data.len().is_multiple_of(3) {
-                return Err(NokhwaError::ProcessFrameError {
-                    src: fcc,
-                    destination: "RGBA".to_string(),
-                    error: "RAWRGB data length not a multiple of 3".to_string(),
-                });
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "RGBA",
+                    "RAWRGB data length not a multiple of 3",
+                ));
             }
             let expected = (data.len() / 3) * 4;
             if dest.len() != expected {
-                return Err(NokhwaError::ProcessFrameError {
-                    src: fcc,
-                    destination: "RGBA".to_string(),
-                    error: format!(
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "RGBA",
+                    format!(
                         "destination buffer size mismatch (expected {expected}, got {})",
                         dest.len()
                     ),
-                });
+                ));
             }
             crate::simd::rgb_to_rgba_simd(data, dest);
             Ok(())
         }
         FrameFormat::RAWBGR => {
             if !data.len().is_multiple_of(3) {
-                return Err(NokhwaError::ProcessFrameError {
-                    src: fcc,
-                    destination: "RGBA".to_string(),
-                    error: "RAWBGR data length not a multiple of 3".to_string(),
-                });
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "RGBA",
+                    "RAWBGR data length not a multiple of 3",
+                ));
             }
             let expected = (data.len() / 3) * 4;
             if dest.len() != expected {
-                return Err(NokhwaError::ProcessFrameError {
-                    src: fcc,
-                    destination: "RGBA".to_string(),
-                    error: format!(
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "RGBA",
+                    format!(
                         "destination buffer size mismatch (expected {expected}, got {})",
                         dest.len()
                     ),
-                });
+                ));
             }
             crate::simd::bgr_to_rgba_simd(data, dest);
             Ok(())
         }
         FrameFormat::GRAY => {
             if dest.len() != data.len() * 4 {
-                return Err(NokhwaError::ProcessFrameError {
-                    src: fcc,
-                    destination: "RGBA".to_string(),
-                    error: "Bad buffer length".to_string(),
-                });
+                return Err(NokhwaError::process_frame(fcc, "RGBA", "Bad buffer length"));
             }
             data.iter().enumerate().for_each(|(idx, &pxv)| {
                 let i = idx * 4;
@@ -599,11 +572,11 @@ pub(crate) fn convert_to_luma(
         // RAWBGR works with the same function: (R+G+B)/3 == (B+G+R)/3 (addition is commutative)
         FrameFormat::RAWRGB | FrameFormat::RAWBGR => {
             if !data.len().is_multiple_of(3) {
-                return Err(NokhwaError::ProcessFrameError {
-                    src: fcc,
-                    destination: "Luma".to_string(),
-                    error: "RGB/BGR data length not a multiple of 3".to_string(),
-                });
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "Luma",
+                    "RGB/BGR data length not a multiple of 3",
+                ));
             }
             let mut luma = vec![0u8; data.len() / 3];
             crate::simd::rgb_to_luma_simd(data, &mut luma);
@@ -621,15 +594,15 @@ pub(crate) fn convert_to_luma_buffer(
     match fcc {
         FrameFormat::GRAY => {
             if dest.len() != data.len() {
-                return Err(NokhwaError::ProcessFrameError {
-                    src: fcc,
-                    destination: "Luma".to_string(),
-                    error: format!(
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "Luma",
+                    format!(
                         "destination buffer size mismatch (expected {}, got {})",
                         data.len(),
                         dest.len()
                     ),
-                });
+                ));
             }
             dest.copy_from_slice(data);
             Ok(())
@@ -639,22 +612,22 @@ pub(crate) fn convert_to_luma_buffer(
         // RAWBGR works with the same function: (R+G+B)/3 == (B+G+R)/3 (addition is commutative)
         FrameFormat::RAWRGB | FrameFormat::RAWBGR => {
             if !data.len().is_multiple_of(3) {
-                return Err(NokhwaError::ProcessFrameError {
-                    src: fcc,
-                    destination: "Luma".to_string(),
-                    error: "RGB/BGR data length not a multiple of 3".to_string(),
-                });
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "Luma",
+                    "RGB/BGR data length not a multiple of 3",
+                ));
             }
             let pixel_count = data.len() / 3;
             if dest.len() != pixel_count {
-                return Err(NokhwaError::ProcessFrameError {
-                    src: fcc,
-                    destination: "Luma".to_string(),
-                    error: format!(
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "Luma",
+                    format!(
                         "destination buffer size mismatch (expected {pixel_count}, got {})",
                         dest.len()
                     ),
-                });
+                ));
             }
             crate::simd::rgb_to_luma_simd(data, dest);
             Ok(())
@@ -662,11 +635,11 @@ pub(crate) fn convert_to_luma_buffer(
         FrameFormat::MJPEG => {
             let luma = convert_to_luma(fcc, resolution, data)?;
             if dest.len() < luma.len() {
-                return Err(NokhwaError::ProcessFrameError {
-                    src: fcc,
-                    destination: "Luma".to_string(),
-                    error: "Destination buffer too small".to_string(),
-                });
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "Luma",
+                    "Destination buffer too small",
+                ));
             }
             dest[..luma.len()].copy_from_slice(&luma);
             Ok(())
@@ -708,18 +681,10 @@ fn mat_from_decoded(
             data_ptr,
             Mat_AUTO_STEP,
         )
-        .map_err(|why| NokhwaError::ProcessFrameError {
-            src: src_format,
-            destination: "OpenCV Mat".to_string(),
-            error: why.to_string(),
-        })?;
+        .map_err(|why| NokhwaError::process_frame(src_format, "OpenCV Mat", why.to_string()))?;
 
         tmp.try_clone()
-            .map_err(|why| NokhwaError::ProcessFrameError {
-                src: src_format,
-                destination: "OpenCV Mat".to_string(),
-                error: why.to_string(),
-            })
+            .map_err(|why| NokhwaError::process_frame(src_format, "OpenCV Mat", why.to_string()))
     }
 }
 
@@ -743,43 +708,35 @@ fn mat_write_decoded(
             cv_type,
             Scalar::default(),
         )
-        .map_err(|why| NokhwaError::ProcessFrameError {
-            src: src_format,
-            destination: "OpenCV Mat".to_string(),
-            error: why.to_string(),
-        })?;
+        .map_err(|why| NokhwaError::process_frame(src_format, "OpenCV Mat", why.to_string()))?;
     } else if dst.typ() != cv_type {
-        return Err(NokhwaError::ProcessFrameError {
-            src: src_format,
-            destination: "OpenCV Mat".to_string(),
-            error: "Matrix type mismatch".to_string(),
-        });
+        return Err(NokhwaError::process_frame(
+            src_format,
+            "OpenCV Mat",
+            "Matrix type mismatch",
+        ));
     } else if dst.rows() != resolution.height_y as i32 || dst.cols() != resolution.width_x as i32 {
-        return Err(NokhwaError::ProcessFrameError {
-            src: src_format,
-            destination: "OpenCV Mat".to_string(),
-            error: "Matrix dimensions mismatch".to_string(),
-        });
+        return Err(NokhwaError::process_frame(
+            src_format,
+            "OpenCV Mat",
+            "Matrix dimensions mismatch",
+        ));
     }
 
-    let bytes = dst
-        .data_bytes_mut()
-        .map_err(|_| NokhwaError::ProcessFrameError {
-            src: src_format,
-            destination: "OpenCV Mat".to_string(),
-            error: "Matrix must be continuous".to_string(),
-        })?;
+    let bytes = dst.data_bytes_mut().map_err(|_| {
+        NokhwaError::process_frame(src_format, "OpenCV Mat", "Matrix must be continuous")
+    })?;
 
     if bytes.len() != data.len() {
-        return Err(NokhwaError::ProcessFrameError {
-            src: src_format,
-            destination: "OpenCV Mat".to_string(),
-            error: format!(
+        return Err(NokhwaError::process_frame(
+            src_format,
+            "OpenCV Mat",
+            format!(
                 "Buffer size mismatch (mat has {}, data has {})",
                 bytes.len(),
                 data.len()
             ),
-        });
+        ));
     }
 
     bytes.copy_from_slice(data);
