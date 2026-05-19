@@ -157,7 +157,7 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   `get_property`/`set_property` from PR #427. `open_device` and `structure` take two `impl Into<String>`
   fields; `process_frame` takes a `FrameFormat` (non-String) `src` field plus two `impl Into<String>` fields.
   Foundational for follow-up PRs that will migrate call sites across v4l/msmf/avf/gstreamer/core.
-  PR: #TBD
+  PR: #434
 
 - **Normalize "device not found" error message across backends (refactor/normalize-device-not-found)** —
   Standardized 4 `OpenDeviceError` sites (MSMF ×2, AVF device.rs ×1, GStreamer ×1) to `"device not found"`.
