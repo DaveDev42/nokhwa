@@ -208,6 +208,9 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 - **MSMF property-error call-site migration (refactor/msmf-use-nokhwa-error-helpers)** —
   Migrated all 25 `NokhwaError::GetPropertyError { … }` (16) and `NokhwaError::SetPropertyError { … }` (9) struct-literal call sites in `nokhwa-bindings-windows-msmf/src/lib.rs` to the new `NokhwaError::get_property` / `NokhwaError::set_property` shorthand constructors. Bare string literals had redundant `.to_string()` dropped; `format!(…)` / `why.to_string()` / `control.to_string()` calls left unchanged. Display output identical.
 
+- **`nokhwa-core` `process_frame` call-site migration (refactor/core-migrate-process-frame-call-sites)** —
+  Migrated all 47 `NokhwaError::ProcessFrameError { src, destination, error }` struct-literal construction sites across `traits.rs` (2), `frame.rs` (28), `wgpu.rs` (2), and `types.rs` (15) to the `NokhwaError::process_frame(src, destination, error)` shorthand constructor. Bare string literals had redundant `.to_string()` dropped; dynamic expressions (`format!(…)`, `why.to_string()`) passed as-is. Pattern-match arms, doc comments, and test fixtures left untouched.
+
 - **Migrate test call sites to `NokhwaError::get_property`/`set_property` helpers (refactor/core-tests-use-nokhwa-error-helpers)** —
   Replaced 2 manual `GetPropertyError { … }` / `SetPropertyError { … }` struct-literal constructions in `error_tests.rs`
   with the shorthand constructors. 2 reference sites in the constructor-validation tests intentionally kept manual (load-bearing).

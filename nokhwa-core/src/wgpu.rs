@@ -60,11 +60,11 @@ pub fn raw_texture_layout(
         // (each texel = 1 pixel channel), but total bytes per row = 2*w.
         FrameFormat::YUYV => {
             if !w.is_multiple_of(2) {
-                return Err(NokhwaError::ProcessFrameError {
-                    src: format,
-                    destination: "RawTextureData".to_string(),
-                    error: format!("YUYV requires even width, got {w}"),
-                });
+                return Err(NokhwaError::process_frame(
+                    format,
+                    "RawTextureData",
+                    format!("YUYV requires even width, got {w}"),
+                ));
             }
             Ok((
                 TextureFormat::Rg8Unorm,
@@ -80,11 +80,11 @@ pub fn raw_texture_layout(
         // Total = 1.5 * w * h bytes. Store as R8Unorm with height * 3/2.
         FrameFormat::NV12 => {
             if !w.is_multiple_of(2) || !h.is_multiple_of(2) {
-                return Err(NokhwaError::ProcessFrameError {
-                    src: format,
-                    destination: "RawTextureData".to_string(),
-                    error: format!("NV12 requires even dimensions, got {w}x{h}"),
-                });
+                return Err(NokhwaError::process_frame(
+                    format,
+                    "RawTextureData",
+                    format!("NV12 requires even dimensions, got {w}x{h}"),
+                ));
             }
             Ok((
                 TextureFormat::R8Unorm,
