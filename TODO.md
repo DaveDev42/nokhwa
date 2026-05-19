@@ -157,6 +157,9 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   block shared by `control()` and `set_control()` into a private helper. Error message
   text (`property: "CameraControl"`, `error: "Does not exist"`) preserved verbatim.
 
+- **V4L `query()` flatten + useless_format fix (refactor/v4l-query-flatten-and-fix-useless-format)** —
+  Collapsed `Ok({ let x = …; x })` to `Ok(…)` and replaced `format!("{}", …to_string_lossy())` with `.to_string_lossy().into_owned()`. Two load-bearing `#[allow]` attributes unchanged.
+
 - **`CameraRunner::send_cmd` helper extraction (refactor/runner-extract-send-cmd)** —
   Deduped the identical `self.cmd.send(…).map_err(…)` body shared by `trigger` and
   `set_control` into a private `send_cmd` method. Error message text preserved verbatim;
