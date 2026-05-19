@@ -87,7 +87,6 @@ mod internal {
 
     /// query v4l2 cameras
     #[allow(clippy::unnecessary_wraps)]
-    #[allow(clippy::cast_possible_truncation)]
     pub fn query() -> Result<Vec<CameraInfo>, NokhwaError> {
         Ok(v4l::context::enum_devices()
             .iter()
