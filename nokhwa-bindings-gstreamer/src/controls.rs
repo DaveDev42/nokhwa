@@ -29,7 +29,7 @@ use gstreamer::Element;
 use nokhwa_core::{
     error::NokhwaError,
     types::{
-        ApiBackend, CameraControl, ControlValueDescription, ControlValueSetter, KnownCameraControl,
+        CameraControl, ControlValueDescription, ControlValueSetter, KnownCameraControl,
         KnownCameraControlFlag,
     },
 };
@@ -198,14 +198,6 @@ pub(crate) fn v4l2_cid_value(cid: &str, value: &ControlValueSetter) -> Result<i6
             error: "unsupported ControlValueSetter variant for V4L2 CID".to_string(),
         }),
     }
-}
-
-/// Sentinel used by `set_control` when called on a platform where
-/// GStreamer's source element has no usable control surface
-/// (Windows / macOS today).
-#[must_use]
-pub(crate) fn unsupported() -> NokhwaError {
-    NokhwaError::UnsupportedOperationError(ApiBackend::GStreamer)
 }
 
 #[cfg(test)]
@@ -459,35 +451,6 @@ mod tests {
                 other => panic!("expected SetPropertyError for {setter:?}, got {other:?}"),
             }
         }
-    }
-
-    #[test]
-    fn unsupported_returns_unsupported_operation_error() {
-        // The Windows / macOS sentinel — must surface `GStreamer` so
-        // the user knows which backend lacks the support, not just
-        // "unsupported".
-        //
-        // The previous version of this test checked
-        // `msg.contains("GStreamer")`, but `NokhwaError`'s
-        // `#[error("This operation is not supported by backend {0}.")]`
-        // attribute is a documented contract: log scrapers, downstream
-        // tests, and user-facing diagnostics all key off the exact
-        // wording. A drift like dropping the trailing period or
-        // changing "by backend" → "for backend" would slip past
-        // `contains("GStreamer")` while breaking that contract. Pin
-        // the Display form verbatim alongside the variant.
-        let err = unsupported();
-        assert!(
-            matches!(
-                err,
-                NokhwaError::UnsupportedOperationError(ApiBackend::GStreamer)
-            ),
-            "wrong variant: {err:?}"
-        );
-        assert_eq!(
-            format!("{err}"),
-            "This operation is not supported by backend GStreamer."
-        );
     }
 
     /// `set_live_property` (`brightness` / `contrast` / `hue` /

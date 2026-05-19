@@ -59,8 +59,8 @@ mod uri;
 #[cfg(all(feature = "backend", not(feature = "docs-only")))]
 mod internal {
     use crate::controls::{
-        build_extra_controls, control_handle, list_controls, set_live_property, unsupported,
-        v4l2_cid_value, GstControlHandle,
+        build_extra_controls, control_handle, list_controls, set_live_property, v4l2_cid_value,
+        GstControlHandle,
     };
     use crate::pipeline::{
         compatible_formats as caps_for_device, compatible_fourcc as fourcc_for_device,
@@ -334,14 +334,6 @@ mod internal {
                 }
             }
         }
-    }
-
-    // `unsupported` is a sentinel used by sibling modules on non-Linux
-    // paths. Keep the re-export explicit so clippy's `dead_code` pass
-    // doesn't trip on the import.
-    #[allow(dead_code)]
-    fn _touch_unsupported() -> NokhwaError {
-        unsupported()
     }
 
     impl FrameSource for GStreamerCaptureDevice {

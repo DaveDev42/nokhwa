@@ -18,6 +18,12 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   refcount 정확성을 유지하는지 확인. 단일 스레드 동작은 변경 없음.
   `cargo test --features device-test,input-msmf,runner` on Windows hardware.
 
+- [ ] **GStreamer _touch_unsupported cleanup (refactor/gst-remove-touch-unsupported-workaround)** —
+  Dropped the dead-code lint workaround function and its companion
+  `unsupported` import. macOS does not have GStreamer dev libs locally, so
+  verify Linux/Windows backend builds pass clippy with `-D warnings` in CI
+  and that controls path still functions on Linux hardware.
+
 - [ ] **GStreamer cleanup bundle (refactor/gst-snapshot-and-init-helpers)** —
   `ensure_gst_init()` + `snapshot_video_devices()` consolidation has only
   `docs-only` + CI cross-platform compile coverage. Verify on a Linux box
