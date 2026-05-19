@@ -110,7 +110,7 @@ pub mod testing;
 pub mod wgpu;
 
 /// Cheap URL-scheme sniff used by the top-level `open()` and the
-/// GStreamer URI pipeline to decide whether a string is a URL.
+/// `GStreamer` URI pipeline to decide whether a string is a URL.
 ///
 /// Recognises the multimedia schemes that `uridecodebin` accepts
 /// (`rtsp`, `rtsps`, `rtmp`, `rtmps`, `http`, `https`, `file`, `srt`,
