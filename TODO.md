@@ -152,6 +152,8 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **Remove redundant per-item `cast_possible_truncation` allows in V4L crate (refactor/strip-redundant-v4l-cast-allows)** — Deleted 2 per-item `#[allow(clippy::cast_possible_truncation)]` at former lines 90 and 1356 of `nokhwa-bindings-linux-v4l/src/lib.rs`; both were already covered by the crate-level `#![allow(clippy::cast_possible_truncation)]`. The load-bearing `#[allow(clippy::cast_possible_wrap)]` at line 496 (not in the crate-level block) was left untouched.
+
 - **Strip stale `#[allow]` suppressions in MSMF/V4L stubs (refactor/strip-stale-clippy-allows)** —
   Removed 4 stale allows: `missing_errors_doc` / `unused_self` / `needless_pass_by_value` from
   the non-Windows `pub mod wmf` stub (all three already covered crate-wide or didn't fire),
