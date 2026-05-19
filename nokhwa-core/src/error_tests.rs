@@ -395,3 +395,24 @@ fn helper_constructors_pass_message_through_unchanged() {
         panic!("wrong variant");
     }
 }
+
+#[test]
+fn get_property_constructor_produces_correct_variant() {
+    let e = NokhwaError::get_property("Brightness", "not supported");
+    let expected = NokhwaError::GetPropertyError {
+        property: "Brightness".into(),
+        error: "not supported".into(),
+    };
+    assert_eq!(format!("{e}"), format!("{expected}"));
+}
+
+#[test]
+fn set_property_constructor_produces_correct_variant() {
+    let e = NokhwaError::set_property("Exposure", "9999", "out of range");
+    let expected = NokhwaError::SetPropertyError {
+        property: "Exposure".into(),
+        value: "9999".into(),
+        error: "out of range".into(),
+    };
+    assert_eq!(format!("{e}"), format!("{expected}"));
+}

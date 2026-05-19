@@ -108,6 +108,29 @@ impl NokhwaError {
             backend: None,
         }
     }
+
+    /// Shorthand for `NokhwaError::GetPropertyError { property, error }`.
+    #[must_use]
+    pub fn get_property(property: impl Into<String>, error: impl Into<String>) -> Self {
+        Self::GetPropertyError {
+            property: property.into(),
+            error: error.into(),
+        }
+    }
+
+    /// Shorthand for `NokhwaError::SetPropertyError { property, value, error }`.
+    #[must_use]
+    pub fn set_property(
+        property: impl Into<String>,
+        value: impl Into<String>,
+        error: impl Into<String>,
+    ) -> Self {
+        Self::SetPropertyError {
+            property: property.into(),
+            value: value.into(),
+            error: error.into(),
+        }
+    }
 }
 
 #[cfg(test)]
