@@ -152,6 +152,11 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **`CameraRunner::send_cmd` helper extraction (refactor/runner-extract-send-cmd)** —
+  Deduped the identical `self.cmd.send(…).map_err(…)` body shared by `trigger` and
+  `set_control` into a private `send_cmd` method. Error message text preserved verbatim;
+  the test-pinned prefix `"runner thread gone: "` is unchanged.
+
 - **AVF DataPipe/CompressionData removal (refactor/avf-remove-unused-datapipe-and-legacy-comments)** —
   compile-only refactor; no external callers existed. Verify AVF capture
   still works normally on macOS with a webcam:
