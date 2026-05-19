@@ -437,11 +437,6 @@ fn format_max_iso(format: &AVCaptureDeviceFormat) -> c_float {
 // -- Safe wrappers for AVFrameRateRange read-only property accessors --
 
 // SAFETY: Read-only property accessor on a valid `AVFrameRateRange` reference.
-fn range_min_frame_rate(range: &AVFrameRateRange) -> f64 {
-    unsafe { range.minFrameRate() }
-}
-
-// SAFETY: Read-only property accessor on a valid `AVFrameRateRange` reference.
 fn range_max_frame_rate(range: &AVFrameRateRange) -> f64 {
     unsafe { range.maxFrameRate() }
 }
@@ -530,15 +525,14 @@ impl AVCaptureDeviceFormatWrapper {
         let mut fps_list: Vec<f64> = Vec::new();
         for i in 0..frame_rate_ranges.count() {
             let range = frame_rate_ranges.objectAtIndex(i);
-            let min_fps = range_min_frame_rate(&range);
             let max_fps = range_max_frame_rate(&range);
-            // Exclude degenerate 0 fps and the sentinel 1 fps minimum that
-            // AVFoundation sometimes reports for variable-rate ranges.
-            // Exact comparison against integer-valued constants is intentional.
-            #[allow(clippy::float_cmp)]
-            if min_fps != 0_f64 && min_fps != 1_f64 {
-                fps_list.push(min_fps);
-            }
+            // Only emit the maxFrameRate endpoint of each AVFrameRateRange.
+            // set_all() matches solely against maxFrameRate (using the
+            // range's minFrameDuration to clamp delivery rate); emitting
+            // minFrameRate here would produce CameraFormat values that
+            // compatible_formats() reports as valid but set_format() cannot
+            // find, violating the contract that every enumerated entry is
+            // settable.
             fps_list.push(max_fps);
         }
         fps_list.sort_by(|n, m| n.partial_cmp(m).unwrap_or(Ordering::Equal));

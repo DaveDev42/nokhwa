@@ -70,25 +70,6 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   변함없이 동작하는지 확인: `cargo test --features device-test,input-msmf,runner` on
   a Windows box with a webcam attached.
 
-### AVFoundation bugs (discovered 2026-05-20 during verification)
-
-- [ ] **AVF numeric-string `CameraIndex` doesn't route to native backend** —
-  `CameraIndex::String("0")` returns `OpenDeviceError { device: "0", error: "Device is null" }`
-  instead of opening the camera at positional index 0. MSMF was fixed to handle this in
-  PR #387 (`fix(msmf): dedup compatible_format_list and treat numeric-string CameraIndex as positional`).
-  AVF needs the same treatment.
-  - Failing test: `open_numeric_string_routes_to_native_backend` in `nokhwa/tests/device_tests.rs` (~line 614).
-  - Likely fix: `src/session.rs` `open()` routing, or AVF `CaptureDevice::new` index parsing in
-    `nokhwa-bindings-macos-avfoundation/src/`.
-
-- [ ] **AVF `compatible_formats()` reports formats that `set_format()` cannot actually set** —
-  On FaceTime HD, `compatible_formats()` includes `CameraFormat { resolution: 1920x1080, format: NV12, frame_rate: 15 }`
-  but `set_format()` rejects it with "Not Found/Rejected/Unsupported". `compatible_formats()` should
-  only report formats the device can actually negotiate.
-  - Failing tests: `negotiated_format_after_set_format_matches` (~line 969) and
-    `set_format_from_compatible_round_trip` (~line 565) in `nokhwa/tests/device_tests.rs`.
-  - Likely fix: AVF `compatible_formats()` enumeration logic in `nokhwa-bindings-macos-avfoundation/src/`.
-
 ### Infrastructure / CI
 
 - [ ] **Provision `RELEASE_PLEASE_TOKEN` repo secret.** The
@@ -151,6 +132,15 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   dispatches through `uridecodebin`.
 
 ## Shipped recently (for context)
+
+- **AVF `compatible_formats()` max-fps-only fix** — `try_from_format` was pushing both
+  `minFrameRate` and `maxFrameRate` endpoints of each `AVFrameRateRange` into `fps_list`,
+  but `set_all()` matches solely against `maxFrameRate`. This caused formats like
+  `1920x1080 NV12 @15fps` (the `minFrameRate` of a 15–30 fps range) to appear in
+  `compatible_formats()` yet be rejected by `set_format()`. Fix: emit only `maxFrameRate`
+  from each range; removed the now-dead `range_min_frame_rate` helper. Verified on FaceTime HD:
+  `set_format_from_compatible_round_trip` and `negotiated_format_after_set_format_matches` now pass;
+  full `device_tests` suite is 37/37.
 
 - **AVFoundation numeric-string `CameraIndex` routing (fix/avf-numeric-string-cameraindex-routing)** —
   `open(CameraIndex::String("0"))` on macOS returned `OpenDeviceError { error: "Device is null" }`
