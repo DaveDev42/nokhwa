@@ -255,9 +255,9 @@ pub mod wmf {
         let mut result = vec![];
         let mut index = 0;
 
-        while let Ok(media_type) = unsafe {
-            source_reader.GetNativeMediaType(MF_FIRST_VIDEO_STREAM, index)
-        } {
+        while let Ok(media_type) =
+            unsafe { source_reader.GetNativeMediaType(MF_FIRST_VIDEO_STREAM, index) }
+        {
             index += 1;
 
             let fourcc = match unsafe { media_type.GetGUID(&MF_MT_SUBTYPE) } {
@@ -1223,9 +1223,7 @@ pub mod wmf {
         fn drop(&mut self) {
             // swallow errors
             unsafe {
-                let _ = self
-                    .source_reader
-                    .Flush(MF_FIRST_VIDEO_STREAM);
+                let _ = self.source_reader.Flush(MF_FIRST_VIDEO_STREAM);
 
                 // Release the IMFSourceReader *before* tearing down the
                 // Media Foundation platform: an MF COM interface whose
