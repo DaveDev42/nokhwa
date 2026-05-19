@@ -89,22 +89,19 @@ mod internal {
     #[allow(clippy::unnecessary_wraps)]
     #[allow(clippy::cast_possible_truncation)]
     pub fn query() -> Result<Vec<CameraInfo>, NokhwaError> {
-        Ok({
-            let camera_info: Vec<CameraInfo> = v4l::context::enum_devices()
-                .iter()
-                .map(|node| {
-                    CameraInfo::new(
-                        &node
-                            .name()
-                            .unwrap_or(format!("{}", node.path().to_string_lossy())),
-                        &format!("Video4Linux Device @ {}", node.path().to_string_lossy()),
-                        "",
-                        CameraIndex::Index(node.index() as u32),
-                    )
-                })
-                .collect();
-            camera_info
-        })
+        Ok(v4l::context::enum_devices()
+            .iter()
+            .map(|node| {
+                CameraInfo::new(
+                    &node
+                        .name()
+                        .unwrap_or(node.path().to_string_lossy().into_owned()),
+                    &format!("Video4Linux Device @ {}", node.path().to_string_lossy()),
+                    "",
+                    CameraIndex::Index(node.index() as u32),
+                )
+            })
+            .collect())
     }
 
     type SharedDevice = std::sync::Arc<std::sync::Mutex<Device>>;
