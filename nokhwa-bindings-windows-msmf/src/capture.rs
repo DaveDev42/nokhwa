@@ -92,10 +92,12 @@ impl MediaFoundationCaptureDevice {
         Ok(new_cam)
     }
 
-    /// Gets the list of supported [`KnownCameraControl`]s
-    /// # Errors
-    /// May error if there is an error from `MediaFoundation`.
-    pub fn supported_camera_controls(&self) -> Vec<KnownCameraControl> {
+    /// Gets the list of supported [`KnownCameraControl`]s.
+    ///
+    /// Internal helper. The public surface is [`CameraDevice::controls`],
+    /// which returns the same enumeration as `Vec<CameraControl>` (the
+    /// `KnownCameraControl` ID is a subset of that view).
+    pub(crate) fn supported_camera_controls(&self) -> Vec<KnownCameraControl> {
         let mut supported_camera_controls: Vec<KnownCameraControl> = vec![];
 
         for camera_control in all_known_camera_controls() {

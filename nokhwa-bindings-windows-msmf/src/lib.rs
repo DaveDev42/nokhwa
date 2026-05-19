@@ -1706,7 +1706,8 @@ mod stub {
 
         /// Returns the list of supported [`KnownCameraControl`]s.
         #[must_use]
-        pub fn supported_camera_controls(&self) -> Vec<KnownCameraControl> {
+        #[allow(dead_code)] // stub mirrors the Windows-only inherent helper
+        pub(crate) fn supported_camera_controls(&self) -> Vec<KnownCameraControl> {
             Vec::new()
         }
     }
