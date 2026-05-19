@@ -35,6 +35,15 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   has only logic/stub CI coverage. Verify on Linux hardware with a webcam
   that reports Stepwise intervals (`cargo test --features device-test,input-v4l,runner`).
 
+- [ ] **V4L controls() message + INACTIVE dedup (refactor/v4l-controls-messages)** —
+  Replaced the "what is this?????? todo: support ig" + "Failed to Fufill"
+  strings with descriptive errors, stripped the legacy uwu comment, and
+  folded the duplicate `INACTIVE → Disabled` mapping into a single
+  `DISABLED | INACTIVE` check. Behaviour-preserving: the `active` field on
+  the `CameraControl` still keys off `Flags::INACTIVE` only. Verify on
+  Linux hardware that `controls()` still surfaces the same flag set on a
+  webcam exercising AUTO_GAIN / GAIN gating.
+
 - [ ] **AVFoundation backends (0.14.1–0.14.3 window)** — hotplug + open +
   frame-pull have only the `Build (macos)` compile check. Run
   `cargo test --features device-test,input-avfoundation,runner` on a

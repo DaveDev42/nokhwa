@@ -336,7 +336,6 @@ mod internal {
                 let Some(framefmt) = fourcc_to_frameformat(ff) else {
                     continue;
                 };
-                // i write unmaintainable blobs of code because i am so cute uwu~~
                 let mut formats = device
                     .enum_framesizes(ff)
                     .map_err(|why| NokhwaError::GetPropertyError {
@@ -375,7 +374,7 @@ mod internal {
                 .fulfill(&camera_formats)
                 .ok_or(NokhwaError::GetPropertyError {
                     property: "CameraFormat".to_string(),
-                    error: "Failed to Fufill".to_string(),
+                    error: "Failed to fulfill requested CameraFormat".to_string(),
                 })?;
 
             let current_format = get_device_format(&device)?;
@@ -562,14 +561,23 @@ mod internal {
                             value: current,
                             default: None,
                         },
-                        _ => {
+                        (ty, val) => {
                             return Err(io::Error::new(
                                 ErrorKind::Unsupported,
-                                "what is this?????? todo: support ig",
+                                format!(
+                                "v4l control descriptor type {ty:?} does not match value {val:?}; \
+                                     unsupported variant"
+                            ),
                             ))
                         }
                     };
 
+                    // V4L2 distinguishes DISABLED (permanently unusable) from
+                    // INACTIVE (temporarily gated by another control, e.g.
+                    // AUTO_GAIN=on hides GAIN). `KnownCameraControlFlag` has no
+                    // `Inactive` variant, so we map both to `Disabled` and rely
+                    // on the dedup below to avoid emitting it twice when a
+                    // descriptor happens to carry both bits.
                     let is_readonly = desc
                         .flags
                         .intersects(Flags::READ_ONLY)
@@ -578,28 +586,18 @@ mod internal {
                         .flags
                         .intersects(Flags::WRITE_ONLY)
                         .then_some(KnownCameraControlFlag::WriteOnly);
-                    let is_disabled = desc
-                        .flags
-                        .intersects(Flags::DISABLED)
-                        .then_some(KnownCameraControlFlag::Disabled);
                     let is_volatile = desc
                         .flags
                         .intersects(Flags::VOLATILE)
                         .then_some(KnownCameraControlFlag::Volatile);
-                    let is_inactive = desc
+                    let is_disabled = desc
                         .flags
-                        .intersects(Flags::INACTIVE)
+                        .intersects(Flags::DISABLED | Flags::INACTIVE)
                         .then_some(KnownCameraControlFlag::Disabled);
-                    let flags_vec = vec![
-                        is_inactive,
-                        is_readonly,
-                        is_volatile,
-                        is_disabled,
-                        is_writeonly,
-                    ]
-                    .into_iter()
-                    .flatten()
-                    .collect::<Vec<KnownCameraControlFlag>>();
+                    let flags_vec = [is_readonly, is_writeonly, is_volatile, is_disabled]
+                        .into_iter()
+                        .flatten()
+                        .collect::<Vec<KnownCameraControlFlag>>();
 
                     Ok(CameraControl::new(
                         id_as_kcc,
