@@ -152,6 +152,9 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **MSMF property-error call-site migration (refactor/msmf-use-nokhwa-error-helpers)** —
+  Migrated all 25 `NokhwaError::GetPropertyError { … }` (16) and `NokhwaError::SetPropertyError { … }` (9) struct-literal call sites in `nokhwa-bindings-windows-msmf/src/lib.rs` to the new `NokhwaError::get_property` / `NokhwaError::set_property` shorthand constructors. Bare string literals had redundant `.to_string()` dropped; `format!(…)` / `why.to_string()` / `control.to_string()` calls left unchanged. Display output identical.
+
 - **Migrate test call sites to `NokhwaError::get_property`/`set_property` helpers (refactor/core-tests-use-nokhwa-error-helpers)** —
   Replaced 2 manual `GetPropertyError { … }` / `SetPropertyError { … }` struct-literal constructions in `error_tests.rs`
   with the shorthand constructors. 2 reference sites in the constructor-validation tests intentionally kept manual (load-bearing).
