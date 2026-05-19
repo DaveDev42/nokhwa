@@ -312,42 +312,60 @@ pub mod wmf {
     }
 
     pub fn initialize_mf() -> Result<(), NokhwaError> {
-        if !(INITIALIZED.load(Ordering::SeqCst)) {
-            if let Err(why) = unsafe {
-                CoInitializeEx(None, CO_INIT_MULTITHREADED | CO_INIT_DISABLE_OLE1DDE).ok()
-            } {
-                return Err(NokhwaError::InitializeError {
-                    backend: ApiBackend::MediaFoundation,
-                    error: why.to_string(),
-                });
-            }
+        // Race-free toggle: only the CAS winner runs CoInitializeEx + MFStartup.
+        // Lost races see INITIALIZED == true and return Ok immediately, mirroring
+        // the prior "already initialised" branch. On init failure we roll the
+        // flag back so the next caller can retry rather than being permanently
+        // wedged at INITIALIZED == true with no MF runtime behind it.
+        if INITIALIZED
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return Ok(());
+        }
 
-            if let Err(why) = unsafe { MFStartup(MF_API_VERSION, MFSTARTUP_NOSOCKET) } {
-                unsafe {
-                    CoUninitialize();
-                }
-                return Err(NokhwaError::InitializeError {
-                    backend: ApiBackend::MediaFoundation,
-                    error: why.to_string(),
-                });
-            }
-            INITIALIZED.store(true, Ordering::SeqCst);
+        if let Err(why) =
+            unsafe { CoInitializeEx(None, CO_INIT_MULTITHREADED | CO_INIT_DISABLE_OLE1DDE).ok() }
+        {
+            INITIALIZED.store(false, Ordering::SeqCst);
+            return Err(NokhwaError::InitializeError {
+                backend: ApiBackend::MediaFoundation,
+                error: why.to_string(),
+            });
+        }
+
+        if let Err(why) = unsafe { MFStartup(MF_API_VERSION, MFSTARTUP_NOSOCKET) } {
+            unsafe { CoUninitialize() };
+            INITIALIZED.store(false, Ordering::SeqCst);
+            return Err(NokhwaError::InitializeError {
+                backend: ApiBackend::MediaFoundation,
+                error: why.to_string(),
+            });
         }
         Ok(())
     }
 
     pub fn de_initialize_mf() -> Result<(), NokhwaError> {
-        if INITIALIZED.load(Ordering::SeqCst) {
-            unsafe {
-                if let Err(why) = MFShutdown() {
-                    return Err(NokhwaError::ShutdownError {
-                        backend: ApiBackend::MediaFoundation,
-                        error: why.to_string(),
-                    });
-                }
+        // Mirror of initialize_mf: only the CAS winner runs MFShutdown +
+        // CoUninitialize. Lost races see INITIALIZED == false and bail. If
+        // MFShutdown errors we leave the flag at false anyway — the runtime is
+        // in an unrecoverable state and we should not retry teardown.
+        if INITIALIZED
+            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return Ok(());
+        }
+
+        unsafe {
+            if let Err(why) = MFShutdown() {
                 CoUninitialize();
-                INITIALIZED.store(false, Ordering::SeqCst);
+                return Err(NokhwaError::ShutdownError {
+                    backend: ApiBackend::MediaFoundation,
+                    error: why.to_string(),
+                });
             }
+            CoUninitialize();
         }
         Ok(())
     }

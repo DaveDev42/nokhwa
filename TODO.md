@@ -18,6 +18,15 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   refcount 정확성을 유지하는지 확인. 단일 스레드 동작은 변경 없음.
   `cargo test --features device-test,input-msmf,runner` on Windows hardware.
 
+- [ ] **MSMF INITIALIZED atomic CAS fix (fix/msmf-initialized-atomic-cas)** —
+  `load+store` → `compare_exchange` 전환 (#411과 동일 클래스). 두 스레드가
+  동시에 `initialize_mf`를 호출해도 `CoInitializeEx + MFStartup`이 한 번만
+  실행되고, 마찬가지로 `de_initialize_mf`도 한 번만 `MFShutdown +
+  CoUninitialize` 실행. 단일 스레드 흐름은 변경 없음. Init 실패 시
+  INITIALIZED를 false로 되돌려 다음 호출이 재시도 가능하도록 함.
+  Windows hardware에서 `cargo test --features device-test,input-msmf,runner`로
+  단일 스레드 open/close 시나리오가 여전히 동작하는지 확인.
+
 - [ ] **GStreamer _touch_unsupported cleanup (refactor/gst-remove-touch-unsupported-workaround)** —
   Dropped the dead-code lint workaround function and its companion
   `unsupported` import. macOS does not have GStreamer dev libs locally, so
