@@ -293,7 +293,7 @@ pub(crate) fn find_device(
         .nth(positional_index as usize)
         .ok_or_else(|| NokhwaError::OpenDeviceError {
             device: format!("index={positional_index} name={display_name}"),
-            error: "no matching device".to_string(),
+            error: "device not found".to_string(),
         })
 }
 
