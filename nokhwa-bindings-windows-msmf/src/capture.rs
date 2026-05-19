@@ -92,24 +92,6 @@ impl MediaFoundationCaptureDevice {
         Ok(new_cam)
     }
 
-    /// Gets the list of supported [`KnownCameraControl`]s.
-    ///
-    /// Internal helper. The public surface is [`CameraDevice::controls`],
-    /// which returns the same enumeration as `Vec<CameraControl>` (the
-    /// `KnownCameraControl` ID is a subset of that view).
-    pub(crate) fn supported_camera_controls(&self) -> Vec<KnownCameraControl> {
-        let mut supported_camera_controls: Vec<KnownCameraControl> = vec![];
-
-        for camera_control in all_known_camera_controls() {
-            if let Ok(supported) = self.inner.control(camera_control) {
-                supported_camera_controls.push(supported.control());
-            }
-        }
-        supported_camera_controls
-    }
-}
-
-impl MediaFoundationCaptureDevice {
     /// Refreshes the cached camera format by querying the Media Foundation device.
     /// Kept as an inherent helper after the trait split; used internally by `frame()`.
     fn refresh_camera_format(&mut self) -> Result<(), NokhwaError> {

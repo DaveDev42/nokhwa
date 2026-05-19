@@ -1703,13 +1703,6 @@ mod stub {
                 "MediaFoundation only on Windows".to_string(),
             ))
         }
-
-        /// Returns the list of supported [`KnownCameraControl`]s.
-        #[must_use]
-        #[allow(dead_code)] // stub mirrors the Windows-only inherent helper
-        pub(crate) fn supported_camera_controls(&self) -> Vec<KnownCameraControl> {
-            Vec::new()
-        }
     }
 
     // Shared error for fallible stub methods.
@@ -1829,12 +1822,6 @@ mod stub {
                 Err(err) => assert_not_implemented(&err),
                 Ok(_) => panic!("stub `new` must always error off Windows"),
             }
-        }
-
-        #[test]
-        fn supported_camera_controls_is_empty() {
-            let dev = MediaFoundationCaptureDevice;
-            assert!(dev.supported_camera_controls().is_empty());
         }
 
         #[test]
