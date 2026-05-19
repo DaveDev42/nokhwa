@@ -225,19 +225,13 @@ mod internal {
     fn get_device_format(device: &Device) -> Result<CameraFormat, NokhwaError> {
         match device.format() {
             Ok(format) => {
-                let frame_format =
-                    fourcc_to_frameformat(format.fourcc).ok_or(NokhwaError::GetPropertyError {
-                        property: "FrameFormat".to_string(),
-                        error: "unsupported".to_string(),
-                    })?;
+                let frame_format = fourcc_to_frameformat(format.fourcc)
+                    .ok_or(NokhwaError::get_property("FrameFormat", "unsupported"))?;
 
                 let fps = match device.params() {
                     Ok(params) => interval_to_fps(params.interval)?,
                     Err(why) => {
-                        return Err(NokhwaError::GetPropertyError {
-                            property: "V4L2 FrameRate".to_string(),
-                            error: why.to_string(),
-                        })
+                        return Err(NokhwaError::get_property("V4L2 FrameRate", why.to_string()))
                     }
                 };
 
@@ -247,10 +241,7 @@ mod internal {
                     fps,
                 ))
             }
-            Err(why) => Err(NokhwaError::GetPropertyError {
-                property: "parameters".to_string(),
-                error: why.to_string(),
-            }),
+            Err(why) => Err(NokhwaError::get_property("parameters", why.to_string())),
         }
     }
 
@@ -323,10 +314,7 @@ mod internal {
                     frame_format_vec.dedup();
                     Ok(frame_format_vec)
                 }
-                Err(why) => Err(NokhwaError::GetPropertyError {
-                    property: "FrameFormat".to_string(),
-                    error: why.to_string(),
-                }),
+                Err(why) => Err(NokhwaError::get_property("FrameFormat", why.to_string())),
             }?;
 
             for ff in frame_formats {
@@ -335,10 +323,7 @@ mod internal {
                 };
                 let mut formats = device
                     .enum_framesizes(ff)
-                    .map_err(|why| NokhwaError::GetPropertyError {
-                        property: "ResolutionList".to_string(),
-                        error: why.to_string(),
-                    })?
+                    .map_err(|why| NokhwaError::get_property("ResolutionList", why.to_string()))?
                     .into_iter()
                     .flat_map(|x| {
                         match x.size {
@@ -369,10 +354,10 @@ mod internal {
 
             let format = cam_fmt
                 .fulfill(&camera_formats)
-                .ok_or(NokhwaError::GetPropertyError {
-                    property: "CameraFormat".to_string(),
-                    error: "Failed to fulfill requested CameraFormat".to_string(),
-                })?;
+                .ok_or(NokhwaError::get_property(
+                    "CameraFormat",
+                    "Failed to fulfill requested CameraFormat",
+                ))?;
 
             let current_format = get_device_format(&device)?;
 
@@ -385,30 +370,27 @@ mod internal {
                     format.height(),
                     frameformat_to_fourcc(format.format()),
                 )) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: "Resolution, FrameFormat".to_string(),
-                        value: format.to_string(),
-                        error: why.to_string(),
-                    });
+                    return Err(NokhwaError::set_property(
+                        "Resolution, FrameFormat",
+                        format.to_string(),
+                        why.to_string(),
+                    ));
                 }
             }
 
             if current_format.frame_rate() != format.frame_rate() {
                 if let Err(why) = device.set_params(&Parameters::with_fps(format.frame_rate())) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: "Frame rate".to_string(),
-                        value: format.frame_rate().to_string(),
-                        error: why.to_string(),
-                    });
+                    return Err(NokhwaError::set_property(
+                        "Frame rate",
+                        format.frame_rate().to_string(),
+                        why.to_string(),
+                    ));
                 }
             }
 
             let device_caps = device
                 .query_caps()
-                .map_err(|why| NokhwaError::GetPropertyError {
-                    property: "Device Capabilities".to_string(),
-                    error: why.to_string(),
-                })?;
+                .map_err(|why| NokhwaError::get_property("Device Capabilities", why.to_string()))?;
 
             drop(device);
 
@@ -426,11 +408,11 @@ mod internal {
 
             v4l2.force_refresh_camera_format()?;
             if v4l2.negotiated_format() != format {
-                return Err(NokhwaError::SetPropertyError {
-                    property: "CameraFormat".to_string(),
-                    value: String::new(),
-                    error: "Not same/Rejected".to_string(),
-                });
+                return Err(NokhwaError::set_property(
+                    "CameraFormat",
+                    String::new(),
+                    "Not same/Rejected",
+                ));
             }
 
             Ok(v4l2)
@@ -488,10 +470,7 @@ mod internal {
                     }
                     Ok(resolutions)
                 }
-                Err(why) => Err(NokhwaError::GetPropertyError {
-                    property: "Resolutions".to_string(),
-                    error: why.to_string(),
-                }),
+                Err(why) => Err(NokhwaError::get_property("Resolutions", why.to_string())),
             }
         }
 
@@ -519,10 +498,7 @@ mod internal {
             let device = self.lock_device()?;
             let camera_ctrls = device
                 .query_controls()
-                .map_err(|why| NokhwaError::GetPropertyError {
-                    property: "V4L2 Controls".to_string(),
-                    error: why.to_string(),
-                })?
+                .map_err(|why| NokhwaError::get_property("V4L2 Controls", why.to_string()))?
                 .into_iter()
                 .map(|desc| {
                     let id_as_kcc = id_to_known_camera_control(desc.id);
@@ -621,11 +597,11 @@ mod internal {
                 ControlValueSetter::String(s) => Value::String(s),
                 ControlValueSetter::Bytes(b) => Value::CompoundU8(b),
                 v => {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: v.to_string(),
-                        error: "not supported".to_string(),
-                    })
+                    return Err(NokhwaError::set_property(
+                        id.to_string(),
+                        v.to_string(),
+                        "not supported",
+                    ))
                 }
             };
             self.lock_device()?
@@ -633,20 +609,18 @@ mod internal {
                     id: known_camera_control_to_id(id),
                     value: conv_value,
                 })
-                .map_err(|why| NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: format!("{value:?}"),
-                    error: why.to_string(),
+                .map_err(|why| {
+                    NokhwaError::set_property(id.to_string(), format!("{value:?}"), why.to_string())
                 })?;
             // verify
 
             let control = self.camera_control(id)?;
             if control.value() != value {
-                return Err(NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: format!("{value:?}"),
-                    error: "Rejected".to_string(),
-                });
+                return Err(NokhwaError::set_property(
+                    id.to_string(),
+                    format!("{value:?}"),
+                    "Rejected",
+                ));
             }
             Ok(())
         }
@@ -662,20 +636,15 @@ mod internal {
             let prev_format = match Capture::format(&*device) {
                 Ok(fmt) => fmt,
                 Err(why) => {
-                    return Err(NokhwaError::GetPropertyError {
-                        property: "Resolution, FrameFormat".to_string(),
-                        error: why.to_string(),
-                    })
+                    return Err(NokhwaError::get_property(
+                        "Resolution, FrameFormat",
+                        why.to_string(),
+                    ))
                 }
             };
             let prev_fps = match Capture::params(&*device) {
                 Ok(fps) => fps,
-                Err(why) => {
-                    return Err(NokhwaError::GetPropertyError {
-                        property: "Frame rate".to_string(),
-                        error: why.to_string(),
-                    })
-                }
+                Err(why) => return Err(NokhwaError::get_property("Frame rate", why.to_string())),
             };
 
             let v4l_fcc = match new_fmt.format() {
@@ -691,18 +660,18 @@ mod internal {
             let frame_rate = Parameters::with_fps(new_fmt.frame_rate());
 
             if let Err(why) = Capture::set_format(&*device, &format) {
-                return Err(NokhwaError::SetPropertyError {
-                    property: "Resolution, FrameFormat".to_string(),
-                    value: format.to_string(),
-                    error: why.to_string(),
-                });
+                return Err(NokhwaError::set_property(
+                    "Resolution, FrameFormat",
+                    format.to_string(),
+                    why.to_string(),
+                ));
             }
             if let Err(why) = Capture::set_params(&*device, &frame_rate) {
-                return Err(NokhwaError::SetPropertyError {
-                    property: "Frame rate".to_string(),
-                    value: frame_rate.to_string(),
-                    error: why.to_string(),
-                });
+                return Err(NokhwaError::set_property(
+                    "Frame rate",
+                    frame_rate.to_string(),
+                    why.to_string(),
+                ));
             }
 
             drop(device);
@@ -714,19 +683,18 @@ mod internal {
                         // undo
                         let device = self.lock_device()?;
                         if let Err(why) = Capture::set_format(&*device, &prev_format) {
-                            return Err(NokhwaError::SetPropertyError {
-                                property: format!("Attempt undo due to stream acquisition failure with error {why}. Resolution, FrameFormat"),
-                                value: prev_format.to_string(),
-                                error: why.to_string(),
-                            });
+                            return Err(NokhwaError::set_property(
+                                format!("Attempt undo due to stream acquisition failure with error {why}. Resolution, FrameFormat"),
+                                prev_format.to_string(),
+                                why.to_string(),
+                            ));
                         }
                         if let Err(why) = Capture::set_params(&*device, &prev_fps) {
-                            return Err(NokhwaError::SetPropertyError {
-                                property:
+                            return Err(NokhwaError::set_property(
                                 format!("Attempt undo due to stream acquisition failure with error {why}. Frame rate"),
-                                value: prev_fps.to_string(),
-                                error: why.to_string(),
-                            });
+                                prev_fps.to_string(),
+                                why.to_string(),
+                            ));
                         }
                         Err(why)
                     }
@@ -736,11 +704,11 @@ mod internal {
 
             self.force_refresh_camera_format()?;
             if self.camera_format != new_fmt {
-                return Err(NokhwaError::SetPropertyError {
-                    property: "CameraFormat".to_string(),
-                    value: new_fmt.to_string(),
-                    error: "Rejected".to_string(),
-                });
+                return Err(NokhwaError::set_property(
+                    "CameraFormat",
+                    new_fmt.to_string(),
+                    "Rejected",
+                ));
             }
 
             Ok(())
@@ -763,10 +731,7 @@ mod internal {
                             }
                         }
                         Err(why) => {
-                            return Err(NokhwaError::GetPropertyError {
-                                property: "Frame rate".to_string(),
-                                error: why.to_string(),
-                            })
+                            return Err(NokhwaError::get_property("Frame rate", why.to_string()))
                         }
                     }
                 }
@@ -787,10 +752,7 @@ mod internal {
                     frame_format_vec.dedup();
                     Ok(frame_format_vec)
                 }
-                Err(why) => Err(NokhwaError::GetPropertyError {
-                    property: "FrameFormat".to_string(),
-                    error: why.to_string(),
-                }),
+                Err(why) => Err(NokhwaError::get_property("FrameFormat", why.to_string())),
             }
         }
 
@@ -898,10 +860,10 @@ mod internal {
                     return Ok(supported_control);
                 }
             }
-            Err(NokhwaError::GetPropertyError {
-                property: control.to_string(),
-                error: "not found/not supported".to_string(),
-            })
+            Err(NokhwaError::get_property(
+                control.to_string(),
+                "not found/not supported",
+            ))
         }
     }
 
@@ -992,13 +954,13 @@ mod internal {
     /// `numerator != 1` guard made unreachable.
     fn interval_to_fps(interval: v4l::Fraction) -> Result<u32, NokhwaError> {
         if interval.numerator != 1 {
-            return Err(NokhwaError::GetPropertyError {
-                property: "V4L2 FrameRate".to_string(),
-                error: format!(
+            return Err(NokhwaError::get_property(
+                "V4L2 FrameRate",
+                format!(
                     "Framerate not whole number: {} / {}",
                     interval.denominator, interval.numerator
                 ),
-            });
+            ));
         }
         Ok(interval.denominator)
     }

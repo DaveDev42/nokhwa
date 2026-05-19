@@ -152,6 +152,11 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **V4L property-error call-site migration (refactor/v4l-use-nokhwa-error-helpers)** —
+  Migrated all 26 `NokhwaError::GetPropertyError { … }` / `SetPropertyError { … }` call sites in
+  `nokhwa-bindings-linux-v4l/src/lib.rs` to the `NokhwaError::get_property` / `NokhwaError::set_property`
+  shorthand constructors from PR #427. Display output is byte-identical; no other files touched.
+
 - **`NokhwaError::get_property`/`set_property` shorthand constructors (refactor/core-add-property-error-constructors)** —
   Added two convenience constructors to `nokhwa-core/src/error.rs` matching the existing `general`/`open_stream`/`read_frame`/`stream_shutdown` pattern.
   Foundational for upcoming PRs that will mechanically replace ~90 `NokhwaError::GetPropertyError { … }` / `SetPropertyError { … }` call sites.
