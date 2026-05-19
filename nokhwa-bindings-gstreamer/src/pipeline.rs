@@ -78,12 +78,12 @@ impl PipelineHandle {
 
         let caps_value = caps_for(format, video_format);
 
-        let source = device
-            .create_element(None)
-            .map_err(|e| NokhwaError::OpenDeviceError {
-                device: device.display_name().to_string(),
-                error: format!("Device::create_element failed: {e}"),
-            })?;
+        let source = device.create_element(None).map_err(|e| {
+            NokhwaError::open_device(
+                device.display_name().to_string(),
+                format!("Device::create_element failed: {e}"),
+            )
+        })?;
 
         // Apply extra-controls before state leaves NULL — v4l2src reads
         // this property during the transition to READY and dispatches
@@ -291,9 +291,11 @@ pub(crate) fn find_device(
     devices
         .into_iter()
         .nth(positional_index as usize)
-        .ok_or_else(|| NokhwaError::OpenDeviceError {
-            device: format!("index={positional_index} name={display_name}"),
-            error: "device not found".to_string(),
+        .ok_or_else(|| {
+            NokhwaError::open_device(
+                format!("index={positional_index} name={display_name}"),
+                "device not found",
+            )
         })
 }
 
@@ -314,16 +316,17 @@ pub(crate) fn resolve_format(
     req: &nokhwa_core::types::RequestedFormat,
 ) -> Result<CameraFormat, NokhwaError> {
     if candidates.is_empty() {
-        return Err(NokhwaError::OpenDeviceError {
-            device: "GStreamer device".to_string(),
-            error: "no compatible formats".to_string(),
-        });
+        return Err(NokhwaError::open_device(
+            "GStreamer device",
+            "no compatible formats",
+        ));
     }
-    req.fulfill(candidates)
-        .ok_or_else(|| NokhwaError::OpenDeviceError {
-            device: "GStreamer device".to_string(),
-            error: format!("no format in the device's caps satisfied the request: {candidates:?}"),
-        })
+    req.fulfill(candidates).ok_or_else(|| {
+        NokhwaError::open_device(
+            "GStreamer device",
+            format!("no format in the device's caps satisfied the request: {candidates:?}"),
+        )
+    })
 }
 
 /// Distinct `FrameFormat`s across a candidate list, sorted in

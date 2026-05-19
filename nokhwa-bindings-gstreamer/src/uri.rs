@@ -56,16 +56,14 @@ impl UriPipelineHandle {
         let source = gstreamer::ElementFactory::make("uridecodebin")
             .property("uri", uri)
             .build()
-            .map_err(|e| NokhwaError::OpenDeviceError {
-                device: uri.to_string(),
-                error: format!("uridecodebin factory: {e}"),
+            .map_err(|e| {
+                NokhwaError::open_device(uri.to_string(), format!("uridecodebin factory: {e}"))
             })?;
 
         let convert = gstreamer::ElementFactory::make("videoconvert")
             .build()
-            .map_err(|e| NokhwaError::OpenDeviceError {
-                device: uri.to_string(),
-                error: format!("videoconvert factory: {e}"),
+            .map_err(|e| {
+                NokhwaError::open_device(uri.to_string(), format!("videoconvert factory: {e}"))
             })?;
 
         // Soft caps — let whatever the decoder produces through after
