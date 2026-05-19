@@ -222,10 +222,7 @@ pub mod wmf {
             let fourcc = match unsafe { media_type.GetGUID(&MF_MT_SUBTYPE) } {
                 Ok(fcc) => fcc,
                 Err(why) => {
-                    return Err(NokhwaError::GetPropertyError {
-                        property: "MF_MT_SUBTYPE".to_string(),
-                        error: why.to_string(),
-                    })
+                    return Err(NokhwaError::get_property("MF_MT_SUBTYPE", why.to_string()))
                 }
             };
 
@@ -236,10 +233,10 @@ pub mod wmf {
             let (width, height) = match unsafe { media_type.GetUINT64(&MF_MT_FRAME_SIZE) } {
                 Ok(res_u64) => parse_frame_size(res_u64),
                 Err(why) => {
-                    return Err(NokhwaError::GetPropertyError {
-                        property: "MF_MT_FRAME_SIZE".to_string(),
-                        error: why.to_string(),
-                    })
+                    return Err(NokhwaError::get_property(
+                        "MF_MT_FRAME_SIZE",
+                        why.to_string(),
+                    ))
                 }
             };
 
@@ -334,10 +331,7 @@ pub mod wmf {
 
         let mut attributes: Option<IMFAttributes> = None;
         if let Err(why) = unsafe { MFCreateAttributes(&raw mut attributes, 1) } {
-            return Err(NokhwaError::GetPropertyError {
-                property: "IMFAttributes".to_string(),
-                error: why.to_string(),
-            });
+            return Err(NokhwaError::get_property("IMFAttributes", why.to_string()));
         }
 
         let attributes = match attributes {
@@ -348,21 +342,20 @@ pub mod wmf {
                         &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID,
                     )
                 } {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: "GUID MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE".to_string(),
-                        value: "MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID".to_string(),
-                        error: why.to_string(),
-                    });
+                    return Err(NokhwaError::set_property(
+                        "GUID MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE",
+                        "MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID",
+                        why.to_string(),
+                    ));
                 }
                 attr
             }
             None => {
-                return Err(NokhwaError::SetPropertyError {
-                    property: "GUID MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE".to_string(),
-                    value: "MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID".to_string(),
-                    error: "Call to IMFAttributes::SetGUID failed - IMFAttributes is None"
-                        .to_string(),
-                });
+                return Err(NokhwaError::set_property(
+                    "GUID MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE",
+                    "MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID",
+                    "Call to IMFAttributes::SetGUID failed - IMFAttributes is None",
+                ));
             }
         };
 
@@ -410,10 +403,10 @@ pub mod wmf {
                 &raw mut len_pwstrname,
             )
         } {
-            return Err(NokhwaError::GetPropertyError {
-                property: "MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME".to_string(),
-                error: why.to_string(),
-            });
+            return Err(NokhwaError::get_property(
+                "MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME",
+                why.to_string(),
+            ));
         }
 
         if let Err(why) = unsafe {
@@ -423,23 +416,23 @@ pub mod wmf {
                 &raw mut len_pwstrsymlink,
             )
         } {
-            return Err(NokhwaError::GetPropertyError {
-                property: "MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK".to_string(),
-                error: why.to_string(),
-            });
+            return Err(NokhwaError::get_property(
+                "MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK",
+                why.to_string(),
+            ));
         }
 
         if pwstr_name.is_null() {
-            return Err(NokhwaError::GetPropertyError {
-                property: "MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME".to_string(),
-                error: "Call to IMFActivate::GetAllocatedString failed - PWSTR is null".to_string(),
-            });
+            return Err(NokhwaError::get_property(
+                "MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME",
+                "Call to IMFActivate::GetAllocatedString failed - PWSTR is null",
+            ));
         }
         if pwstr_symlink.is_null() {
-            return Err(NokhwaError::GetPropertyError {
-                property: "MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK".to_string(),
-                error: "Call to IMFActivate::GetAllocatedString failed - PWSTR is null".to_string(),
-            });
+            return Err(NokhwaError::get_property(
+                "MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK",
+                "Call to IMFActivate::GetAllocatedString failed - PWSTR is null",
+            ));
         }
 
         let name = unsafe {
@@ -522,10 +515,8 @@ pub mod wmf {
     }
 
     fn kcc_to_i32_or_err(control: KnownCameraControl) -> Result<MFControlId, NokhwaError> {
-        kcc_to_i32(control).ok_or_else(|| NokhwaError::SetPropertyError {
-            property: "CameraControl".to_string(),
-            value: control.to_string(),
-            error: "Does not exist".to_string(),
+        kcc_to_i32(control).ok_or_else(|| {
+            NokhwaError::set_property("CameraControl", control.to_string(), "Does not exist")
         })
     }
 
@@ -580,16 +571,16 @@ pub mod wmf {
             &raw mut default,
             &raw mut flag,
         ) {
-            return Err(NokhwaError::GetPropertyError {
-                property: format!("{control_id:?}: {control} - Range"),
-                error: why.to_string(),
-            });
+            return Err(NokhwaError::get_property(
+                format!("{control_id:?}: {control} - Range"),
+                why.to_string(),
+            ));
         }
         if let Err(why) = video_proc_amp.Get(id, &raw mut value, &raw mut flag) {
-            return Err(NokhwaError::GetPropertyError {
-                property: format!("{control_id:?}: {control} - Value"),
-                error: why.to_string(),
-            });
+            return Err(NokhwaError::get_property(
+                format!("{control_id:?}: {control} - Value"),
+                why.to_string(),
+            ));
         }
         Ok(ProcAmpReadout {
             min,
@@ -624,16 +615,16 @@ pub mod wmf {
             &raw mut default,
             &raw mut flag,
         ) {
-            return Err(NokhwaError::GetPropertyError {
-                property: format!("{control_id:?}: {control} - Range"),
-                error: why.to_string(),
-            });
+            return Err(NokhwaError::get_property(
+                format!("{control_id:?}: {control} - Range"),
+                why.to_string(),
+            ));
         }
         if let Err(why) = camera_control.Get(id, &raw mut value, &raw mut flag) {
-            return Err(NokhwaError::GetPropertyError {
-                property: format!("{control_id:?}: {control} - Value"),
-                error: why.to_string(),
-            });
+            return Err(NokhwaError::get_property(
+                format!("{control_id:?}: {control} - Value"),
+                why.to_string(),
+            ));
         }
         Ok(ProcAmpReadout {
             min,
@@ -691,11 +682,11 @@ pub mod wmf {
                         if let Err(why) = unsafe {
                             attr.SetUINT32(&MF_READWRITE_DISABLE_CONVERTERS, u32::from(true))
                         } {
-                            return Err(NokhwaError::SetPropertyError {
-                                property: "MF_READWRITE_DISABLE_CONVERTERS".to_string(),
-                                value: u32::from(true).to_string(),
-                                error: why.to_string(),
-                            });
+                            return Err(NokhwaError::set_property(
+                                "MF_READWRITE_DISABLE_CONVERTERS",
+                                u32::from(true).to_string(),
+                                why.to_string(),
+                            ));
                         }
 
                         attr
@@ -783,11 +774,11 @@ pub mod wmf {
                         .cast::<IAMCameraControl>()
                         .cast::<*mut c_void>(),
                 ) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: "MF_SOURCE_READER_MEDIASOURCE".to_string(),
-                        value: "IAMCameraControl".to_string(),
-                        error: why.to_string(),
-                    });
+                    return Err(NokhwaError::set_property(
+                        "MF_SOURCE_READER_MEDIASOURCE",
+                        "IAMCameraControl",
+                        why.to_string(),
+                    ));
                 }
                 receiver.assume_init()
             };
@@ -800,11 +791,11 @@ pub mod wmf {
                     &IAMVideoProcAmp::IID,
                     ptr_receiver.cast::<IAMVideoProcAmp>().cast::<*mut c_void>(),
                 ) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: "MF_SOURCE_READER_MEDIASOURCE".to_string(),
-                        value: "IAMVideoProcAmp".to_string(),
-                        error: why.to_string(),
-                    });
+                    return Err(NokhwaError::set_property(
+                        "MF_SOURCE_READER_MEDIASOURCE",
+                        "IAMVideoProcAmp",
+                        why.to_string(),
+                    ));
                 }
                 receiver.assume_init()
             };
@@ -940,20 +931,20 @@ pub mod wmf {
             match control_id {
                 MFControlId::ProcAmpBoolean(id) | MFControlId::ProcAmpRange(id) => unsafe {
                     if let Err(why) = video_proc_amp.Set(id, ctrl_value, flag.0) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: control.to_string(),
-                            value: ctrl_value.to_string(),
-                            error: why.to_string(),
-                        });
+                        return Err(NokhwaError::set_property(
+                            control.to_string(),
+                            ctrl_value.to_string(),
+                            why.to_string(),
+                        ));
                     }
                 },
                 MFControlId::CCValue(id) | MFControlId::CCRange(id) => unsafe {
                     if let Err(why) = camera_control.Set(id, ctrl_value, flag.0) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: control.to_string(),
-                            value: ctrl_value.to_string(),
-                            error: why.to_string(),
-                        });
+                        return Err(NokhwaError::set_property(
+                            control.to_string(),
+                            ctrl_value.to_string(),
+                            why.to_string(),
+                        ));
                     }
                 },
             }
@@ -977,20 +968,20 @@ pub mod wmf {
                             }
                         }
                         Err(why) => {
-                            return Err(NokhwaError::GetPropertyError {
-                                property: "MF_MT_FRAME_SIZE".to_string(),
-                                error: why.to_string(),
-                            })
+                            return Err(NokhwaError::get_property(
+                                "MF_MT_FRAME_SIZE",
+                                why.to_string(),
+                            ))
                         }
                     };
 
                     let frame_rate = match unsafe { media_type.GetUINT64(&MF_MT_FRAME_RATE) } {
                         Ok(fps) => frame_rate_numerator(fps),
                         Err(why) => {
-                            return Err(NokhwaError::GetPropertyError {
-                                property: "MF_MT_FRAME_RATE".to_string(),
-                                error: why.to_string(),
-                            })
+                            return Err(NokhwaError::get_property(
+                                "MF_MT_FRAME_RATE",
+                                why.to_string(),
+                            ))
                         }
                     };
 
@@ -998,17 +989,11 @@ pub mod wmf {
                         Ok(fcc) => match guid_to_frameformat(fcc) {
                             Some(ff) => ff,
                             None => {
-                                return Err(NokhwaError::GetPropertyError {
-                                    property: "MF_MT_SUBTYPE".to_string(),
-                                    error: "Unknown".to_string(),
-                                })
+                                return Err(NokhwaError::get_property("MF_MT_SUBTYPE", "Unknown"))
                             }
                         },
                         Err(why) => {
-                            return Err(NokhwaError::GetPropertyError {
-                                property: "MF_MT_SUBTYPE".to_string(),
-                                error: why.to_string(),
-                            })
+                            return Err(NokhwaError::get_property("MF_MT_SUBTYPE", why.to_string()))
                         }
                     };
 
@@ -1017,10 +1002,10 @@ pub mod wmf {
 
                     Ok(cfmt)
                 }
-                Err(why) => Err(NokhwaError::GetPropertyError {
-                    property: "MF_SOURCE_READER_FIRST_VIDEO_STREAM".to_string(),
-                    error: why.to_string(),
-                }),
+                Err(why) => Err(NokhwaError::get_property(
+                    "MF_SOURCE_READER_FIRST_VIDEO_STREAM",
+                    why.to_string(),
+                )),
             }
         }
 
@@ -1060,11 +1045,11 @@ pub mod wmf {
                                 return Ok(());
                             }
                             Err(why) => {
-                                last_error = Some(NokhwaError::SetPropertyError {
-                                    property: "MF_SOURCE_READER_FIRST_VIDEO_STREAM".to_string(),
-                                    value: format!("{:?}", parsed.media_type),
-                                    error: why.to_string(),
-                                });
+                                last_error = Some(NokhwaError::set_property(
+                                    "MF_SOURCE_READER_FIRST_VIDEO_STREAM",
+                                    format!("{:?}", parsed.media_type),
+                                    why.to_string(),
+                                ));
                             }
                         }
                     }
