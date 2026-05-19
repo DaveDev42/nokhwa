@@ -254,23 +254,14 @@ impl FrameSource for AVFoundationCaptureDevice {
             return Ok(());
         }
 
-        let Some(session) = &self.session else {
+        // `is_open()` above guarantees all three fields are `Some`; this
+        // destructure folds the three separate guards into one fall-through
+        // error path that should never fire in practice.
+        let (Some(session), Some(output), Some(input)) =
+            (&self.session, &self.data_out, &self.dev_input)
+        else {
             return Err(NokhwaError::GetPropertyError {
-                property: "AVCaptureSession".to_string(),
-                error: "Doesnt Exist".to_string(),
-            });
-        };
-
-        let Some(output) = &self.data_out else {
-            return Err(NokhwaError::GetPropertyError {
-                property: "AVCaptureVideoDataOutput".to_string(),
-                error: "Doesnt Exist".to_string(),
-            });
-        };
-
-        let Some(input) = &self.dev_input else {
-            return Err(NokhwaError::GetPropertyError {
-                property: "AVCaptureDeviceInput".to_string(),
+                property: "AVCaptureSession/Output/Input".to_string(),
                 error: "Doesnt Exist".to_string(),
             });
         };
