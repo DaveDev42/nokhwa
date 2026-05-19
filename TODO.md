@@ -152,6 +152,16 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **AVFoundation numeric-string `CameraIndex` routing (fix/avf-numeric-string-cameraindex-routing)** —
+  `open(CameraIndex::String("0"))` on macOS returned `OpenDeviceError { error: "Device is null" }`
+  because the `CameraIndex::String` arm of `AVCaptureDeviceWrapper::new` passed the string directly
+  to `device_with_unique_id()` instead of treating it as a positional index. Applied the same fix as
+  MSMF PR #387: try `s.parse::<u32>()` at the top of the `String` arm; on success recurse into
+  `Self::new(CameraIndex::Index(index))`, otherwise fall through to the existing unique-ID lookup.
+  Verified on macOS hardware: `open_numeric_string_routes_to_native_backend` now passes;
+  full `device_tests` suite is 35/37 (2 failures are the pre-existing
+  `compatible_formats()` false-positive bug tracked in TODO.md → Open → #35).
+
 - **Migrate `NokhwaError::StructureError` construction sites to `NokhwaError::structure()` (refactor/migrate-structure-call-sites)** —
   Migrated 15 struct-literal construction sites across 6 files (nokhwa-core/src/types.rs ×1, nokhwa-bindings-macos-avfoundation/src/capture.rs ×1, nokhwa-bindings-macos-avfoundation/src/device.rs ×2, nokhwa-bindings-windows-msmf/src/lib.rs ×8, nokhwa-bindings-gstreamer/src/uri.rs ×7 constructions (4 pattern-match arms left untouched), nokhwa-bindings-gstreamer/src/pipeline.rs ×1) to the `NokhwaError::structure()` helper added in #434. Static string `.to_string()` calls dropped; `format!(…)` / `why.to_string()` / dynamic expressions left as-is.
 
