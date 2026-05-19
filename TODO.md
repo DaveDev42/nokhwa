@@ -13,6 +13,14 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Runtime verification pending (compile-verified only)
 
+- [ ] **MSMF control() helper extraction (refactor/msmf-control-extract-helpers)** —
+  Mechanical extraction of `GetRange`+`Get` boilerplate from `control()` into
+  `query_proc_amp` / `query_camera_control` helpers. Behaviour-preserving by
+  construction; error message text unchanged. Verify control read-back on Windows
+  hardware: `cargo test --features device-test,input-msmf,runner` — confirm that
+  Brightness / Contrast / Exposure / Focus / Zoom and other `KnownCameraControl`
+  values round-trip correctly through `control()`.
+
 - [ ] **MSMF CAMERA_REFCNT atomic RMW fix (fix/msmf-camera-refcnt-atomic-rmw)** —
   `fetch_add`/`fetch_sub` 전환. Windows에서 멀티스레드 동시 open/close가
   refcount 정확성을 유지하는지 확인. 단일 스레드 동작은 변경 없음.

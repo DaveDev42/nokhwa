@@ -539,6 +539,104 @@ pub mod wmf {
         stream_epoch: Option<Duration>,
     }
 
+    /// Raw outparams populated by a single `GetRange` + `Get` call pair.
+    struct ProcAmpReadout {
+        min: i32,
+        max: i32,
+        step: i32,
+        default: i32,
+        value: i32,
+        flag: i32,
+    }
+
+    /// Call `IAMVideoProcAmp::GetRange` then `IAMVideoProcAmp::Get` and
+    /// return all six outparams.  Returns `Err` immediately if either call
+    /// fails, with the same error message shape used by `control()`.
+    unsafe fn query_proc_amp(
+        video_proc_amp: &IAMVideoProcAmp,
+        id: i32,
+        control_id: MFControlId,
+        control: KnownCameraControl,
+    ) -> Result<ProcAmpReadout, NokhwaError> {
+        let mut min = 0i32;
+        let mut max = 0i32;
+        let mut step = 0i32;
+        let mut default = 0i32;
+        let mut value = 0i32;
+        let mut flag = 0i32;
+        if let Err(why) = video_proc_amp.GetRange(
+            id,
+            &raw mut min,
+            &raw mut max,
+            &raw mut step,
+            &raw mut default,
+            &raw mut flag,
+        ) {
+            return Err(NokhwaError::GetPropertyError {
+                property: format!("{control_id:?}: {control} - Range"),
+                error: why.to_string(),
+            });
+        }
+        if let Err(why) = video_proc_amp.Get(id, &raw mut value, &raw mut flag) {
+            return Err(NokhwaError::GetPropertyError {
+                property: format!("{control_id:?}: {control} - Value"),
+                error: why.to_string(),
+            });
+        }
+        Ok(ProcAmpReadout {
+            min,
+            max,
+            step,
+            default,
+            value,
+            flag,
+        })
+    }
+
+    /// Call `IAMCameraControl::GetRange` then `IAMCameraControl::Get` and
+    /// return all six outparams.  Returns `Err` immediately if either call
+    /// fails, with the same error message shape used by `control()`.
+    unsafe fn query_camera_control(
+        camera_control: &IAMCameraControl,
+        id: i32,
+        control_id: MFControlId,
+        control: KnownCameraControl,
+    ) -> Result<ProcAmpReadout, NokhwaError> {
+        let mut min = 0i32;
+        let mut max = 0i32;
+        let mut step = 0i32;
+        let mut default = 0i32;
+        let mut value = 0i32;
+        let mut flag = 0i32;
+        if let Err(why) = camera_control.GetRange(
+            id,
+            &raw mut min,
+            &raw mut max,
+            &raw mut step,
+            &raw mut default,
+            &raw mut flag,
+        ) {
+            return Err(NokhwaError::GetPropertyError {
+                property: format!("{control_id:?}: {control} - Range"),
+                error: why.to_string(),
+            });
+        }
+        if let Err(why) = camera_control.Get(id, &raw mut value, &raw mut flag) {
+            return Err(NokhwaError::GetPropertyError {
+                property: format!("{control_id:?}: {control} - Value"),
+                error: why.to_string(),
+            });
+        }
+        Ok(ProcAmpReadout {
+            min,
+            max,
+            step,
+            default,
+            value,
+            flag,
+        })
+    }
+
     impl MediaFoundationDevice {
         pub fn new(index: CameraIndex) -> Result<Self, NokhwaError> {
             initialize_mf()?;
@@ -734,131 +832,54 @@ pub mod wmf {
         pub fn control(&self, control: KnownCameraControl) -> Result<CameraControl, NokhwaError> {
             let (camera_control, video_proc_amp) = self.get_camera_control_services()?;
 
-            let mut min = 0;
-            let mut max = 0;
-            let mut step = 0;
-            let mut default = 0;
-            let mut value = 0;
-            let mut flag = 0;
-
             let control_id = kcc_to_i32(control).ok_or(NokhwaError::SetPropertyError {
                 property: "CameraControl".to_string(),
                 value: control.to_string(),
                 error: "Does not exist".to_string(),
             })?;
 
-            let ctrl_value_set = match control_id {
-                MFControlId::ProcAmpBoolean(id) => unsafe {
-                    if let Err(why) = video_proc_amp.GetRange(
-                        id,
-                        &raw mut min,
-                        &raw mut max,
-                        &raw mut step,
-                        &raw mut default,
-                        &raw mut flag,
-                    ) {
-                        return Err(NokhwaError::GetPropertyError {
-                            property: format!("{control_id:?}: {control} - Range"),
-                            error: why.to_string(),
-                        });
-                    }
-                    if let Err(why) = video_proc_amp.Get(id, &raw mut value, &raw mut flag) {
-                        return Err(NokhwaError::GetPropertyError {
-                            property: format!("{control_id:?}: {control} - Value"),
-                            error: why.to_string(),
-                        });
-                    }
-
-                    let boolval = value != 0;
-                    let booldef = default != 0;
-                    ControlValueDescription::Boolean {
-                        value: boolval,
-                        default: booldef,
-                    }
-                },
-                MFControlId::ProcAmpRange(id) => unsafe {
-                    if let Err(why) = video_proc_amp.GetRange(
-                        id,
-                        &raw mut min,
-                        &raw mut max,
-                        &raw mut step,
-                        &raw mut default,
-                        &raw mut flag,
-                    ) {
-                        return Err(NokhwaError::GetPropertyError {
-                            property: format!("{control_id:?}: {control} - Range"),
-                            error: why.to_string(),
-                        });
-                    }
-                    if let Err(why) = video_proc_amp.Get(id, &raw mut value, &raw mut flag) {
-                        return Err(NokhwaError::GetPropertyError {
-                            property: format!("{control_id:?}: {control} - Value"),
-                            error: why.to_string(),
-                        });
-                    }
-                    ControlValueDescription::IntegerRange {
-                        min: i64::from(min),
-                        max: i64::from(max),
-                        value: i64::from(value),
-                        step: i64::from(step),
-                        default: i64::from(default),
-                    }
-                },
-                MFControlId::CCValue(id) => unsafe {
-                    if let Err(why) = camera_control.GetRange(
-                        id,
-                        &raw mut min,
-                        &raw mut max,
-                        &raw mut step,
-                        &raw mut default,
-                        &raw mut flag,
-                    ) {
-                        return Err(NokhwaError::GetPropertyError {
-                            property: format!("{control_id:?}: {control} - Range"),
-                            error: why.to_string(),
-                        });
-                    }
-                    if let Err(why) = camera_control.Get(id, &raw mut value, &raw mut flag) {
-                        return Err(NokhwaError::GetPropertyError {
-                            property: format!("{control_id:?}: {control} - Value"),
-                            error: why.to_string(),
-                        });
-                    }
-
-                    ControlValueDescription::Integer {
-                        value: i64::from(value),
-                        default: i64::from(default),
-                        step: i64::from(step),
-                    }
-                },
-                MFControlId::CCRange(id) => unsafe {
-                    if let Err(why) = camera_control.GetRange(
-                        id,
-                        &raw mut min,
-                        &raw mut max,
-                        &raw mut step,
-                        &raw mut default,
-                        &raw mut flag,
-                    ) {
-                        return Err(NokhwaError::GetPropertyError {
-                            property: format!("{control_id:?}: {control} - Range"),
-                            error: why.to_string(),
-                        });
-                    }
-                    if let Err(why) = camera_control.Get(id, &raw mut value, &raw mut flag) {
-                        return Err(NokhwaError::GetPropertyError {
-                            property: format!("{control_id:?}: {control} - Value"),
-                            error: why.to_string(),
-                        });
-                    }
-                    ControlValueDescription::IntegerRange {
-                        min: i64::from(min),
-                        max: i64::from(max),
-                        value: i64::from(value),
-                        step: i64::from(step),
-                        default: i64::from(default),
-                    }
-                },
+            let (ctrl_value_set, flag) = match control_id {
+                MFControlId::ProcAmpBoolean(id) => {
+                    let r = unsafe { query_proc_amp(&video_proc_amp, id, control_id, control)? };
+                    let desc = ControlValueDescription::Boolean {
+                        value: r.value != 0,
+                        default: r.default != 0,
+                    };
+                    (desc, r.flag)
+                }
+                MFControlId::ProcAmpRange(id) => {
+                    let r = unsafe { query_proc_amp(&video_proc_amp, id, control_id, control)? };
+                    let desc = ControlValueDescription::IntegerRange {
+                        min: i64::from(r.min),
+                        max: i64::from(r.max),
+                        value: i64::from(r.value),
+                        step: i64::from(r.step),
+                        default: i64::from(r.default),
+                    };
+                    (desc, r.flag)
+                }
+                MFControlId::CCValue(id) => {
+                    let r =
+                        unsafe { query_camera_control(&camera_control, id, control_id, control)? };
+                    let desc = ControlValueDescription::Integer {
+                        value: i64::from(r.value),
+                        default: i64::from(r.default),
+                        step: i64::from(r.step),
+                    };
+                    (desc, r.flag)
+                }
+                MFControlId::CCRange(id) => {
+                    let r =
+                        unsafe { query_camera_control(&camera_control, id, control_id, control)? };
+                    let desc = ControlValueDescription::IntegerRange {
+                        min: i64::from(r.min),
+                        max: i64::from(r.max),
+                        value: i64::from(r.value),
+                        step: i64::from(r.step),
+                        default: i64::from(r.default),
+                    };
+                    (desc, r.flag)
+                }
             };
 
             let is_manual = if flag == CameraControl_Flags_Manual.0 {
