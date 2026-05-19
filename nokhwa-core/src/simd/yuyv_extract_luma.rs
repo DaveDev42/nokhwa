@@ -40,7 +40,6 @@ pub(crate) fn yuyv_extract_luma_simd(src: &[u8], dst: &mut [u8]) {
     yuyv_extract_luma_scalar(src, dst);
 }
 
-#[allow(dead_code)]
 pub(crate) fn yuyv_extract_luma_scalar(src: &[u8], dst: &mut [u8]) {
     for (chunk, out) in src.chunks_exact(4).zip(dst.chunks_exact_mut(2)) {
         out[0] = chunk[0]; // Y0
