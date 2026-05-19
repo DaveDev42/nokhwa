@@ -521,6 +521,14 @@ pub mod wmf {
         Some(control_id)
     }
 
+    fn kcc_to_i32_or_err(control: KnownCameraControl) -> Result<MFControlId, NokhwaError> {
+        kcc_to_i32(control).ok_or_else(|| NokhwaError::SetPropertyError {
+            property: "CameraControl".to_string(),
+            value: control.to_string(),
+            error: "Does not exist".to_string(),
+        })
+    }
+
     pub struct MediaFoundationDevice {
         is_open: Cell<bool>,
         device_specifier: CameraInfo,
@@ -832,11 +840,7 @@ pub mod wmf {
         pub fn control(&self, control: KnownCameraControl) -> Result<CameraControl, NokhwaError> {
             let (camera_control, video_proc_amp) = self.get_camera_control_services()?;
 
-            let control_id = kcc_to_i32(control).ok_or(NokhwaError::SetPropertyError {
-                property: "CameraControl".to_string(),
-                value: control.to_string(),
-                error: "Does not exist".to_string(),
-            })?;
+            let control_id = kcc_to_i32_or_err(control)?;
 
             let (ctrl_value_set, flag) = match control_id {
                 MFControlId::ProcAmpBoolean(id) => {
@@ -905,11 +909,7 @@ pub mod wmf {
             let current_value = self.control(control)?;
             let (camera_control, video_proc_amp) = self.get_camera_control_services()?;
 
-            let control_id = kcc_to_i32(control).ok_or(NokhwaError::SetPropertyError {
-                property: "CameraControl".to_string(),
-                value: control.to_string(),
-                error: "Does not exist".to_string(),
-            })?;
+            let control_id = kcc_to_i32_or_err(control)?;
 
             let ctrl_value = match value {
                 ControlValueSetter::Integer(i) => i as i32,
