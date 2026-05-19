@@ -680,11 +680,7 @@ impl AVCaptureDeviceWrapper {
         }
         device_lock_for_configuration(&self.inner).map_err(|e| {
             let desc = e.localizedDescription();
-            NokhwaError::SetPropertyError {
-                property: "lockForConfiguration".to_string(),
-                value: "Locked".to_string(),
-                error: desc.to_string(),
-            }
+            NokhwaError::set_property("lockForConfiguration", "Locked", desc.to_string())
         })?;
         self.locked = true;
         Ok(())
@@ -733,11 +729,11 @@ impl AVCaptureDeviceWrapper {
 
         let (Some(format), Some(min_duration)) = (selected_format, selected_min_frame_duration)
         else {
-            return Err(NokhwaError::SetPropertyError {
-                property: "CameraFormat".to_string(),
-                value: descriptor.to_string(),
-                error: "Not Found/Rejected/Unsupported".to_string(),
-            });
+            return Err(NokhwaError::set_property(
+                "CameraFormat",
+                descriptor.to_string(),
+                "Not Found/Rejected/Unsupported",
+            ));
         };
 
         device_set_active_format(&self.inner, &format);
@@ -1219,10 +1215,8 @@ impl AVCaptureDeviceWrapper {
             KnownCameraControl::Gain => {
                 let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
-                let (r, g, b) = value.as_rgb().ok_or(NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: value.to_string(),
-                    error: "Expected RGB".to_string(),
+                let (r, g, b) = value.as_rgb().ok_or_else(|| {
+                    NokhwaError::set_property(id.to_string(), value.to_string(), "Expected RGB")
                 })?;
 
                 verify_or_error(ctrlvalue, value, &id)?;
@@ -1258,11 +1252,11 @@ impl AVCaptureDeviceWrapper {
 
                 Ok(())
             }
-            KnownCameraControl::Iris => Err(NokhwaError::SetPropertyError {
-                property: id.to_string(),
-                value: value.to_string(),
-                error: "Read Only".to_string(),
-            }),
+            KnownCameraControl::Iris => Err(NokhwaError::set_property(
+                id.to_string(),
+                value.to_string(),
+                "Read Only",
+            )),
             KnownCameraControl::Focus => {
                 let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
@@ -1281,10 +1275,12 @@ impl AVCaptureDeviceWrapper {
 
                     let setter = value
                         .as_point()
-                        .ok_or(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Expected Point".to_string(),
+                        .ok_or_else(|| {
+                            NokhwaError::set_property(
+                                id.to_string(),
+                                value.to_string(),
+                                "Expected Point",
+                            )
                         })
                         .map(|(x, y)| CGPoint {
                             x: *x as CGFloat,
@@ -1315,10 +1311,12 @@ impl AVCaptureDeviceWrapper {
 
                     let setter = value
                         .as_point()
-                        .ok_or(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Expected Point".to_string(),
+                        .ok_or_else(|| {
+                            NokhwaError::set_property(
+                                id.to_string(),
+                                value.to_string(),
+                                "Expected Point",
+                            )
                         })
                         .map(|(x, y)| CGPoint {
                             x: *x as CGFloat,
@@ -1379,17 +1377,17 @@ impl AVCaptureDeviceWrapper {
 
                     Ok(())
                 }
-                _ => Err(NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: value.to_string(),
-                    error: "Unknown Control".to_string(),
-                }),
+                _ => Err(NokhwaError::set_property(
+                    id.to_string(),
+                    value.to_string(),
+                    "Unknown Control",
+                )),
             },
-            _ => Err(NokhwaError::SetPropertyError {
-                property: id.to_string(),
-                value: value.to_string(),
-                error: "Unknown Control".to_string(),
-            }),
+            _ => Err(NokhwaError::set_property(
+                id.to_string(),
+                value.to_string(),
+                "Unknown Control",
+            )),
         }
     }
 
@@ -1412,10 +1410,7 @@ impl AVCaptureDeviceWrapper {
         a.sort_by_key(CameraFormat::frame_rate);
 
         if a.is_empty() {
-            Err(NokhwaError::GetPropertyError {
-                property: "activeFormat".to_string(),
-                error: "None??".to_string(),
-            })
+            Err(NokhwaError::get_property("activeFormat", "None??"))
         } else {
             Ok(a[a.len() - 1])
         }
@@ -1444,18 +1439,18 @@ fn check_control_flags(
     value: &ControlValueSetter,
 ) -> Result<(), NokhwaError> {
     if ctrl.flag().contains(&KnownCameraControlFlag::ReadOnly) {
-        return Err(NokhwaError::SetPropertyError {
-            property: id.to_string(),
-            value: value.to_string(),
-            error: "Read Only".to_string(),
-        });
+        return Err(NokhwaError::set_property(
+            id.to_string(),
+            value.to_string(),
+            "Read Only",
+        ));
     }
     if ctrl.flag().contains(&KnownCameraControlFlag::Disabled) {
-        return Err(NokhwaError::SetPropertyError {
-            property: id.to_string(),
-            value: value.to_string(),
-            error: "Disabled".to_string(),
-        });
+        return Err(NokhwaError::set_property(
+            id.to_string(),
+            value.to_string(),
+            "Disabled",
+        ));
     }
     Ok(())
 }
@@ -1465,24 +1460,17 @@ fn get_and_check_control<'a>(
     id: &KnownCameraControl,
     value: &ControlValueSetter,
 ) -> Result<&'a CameraControl, NokhwaError> {
-    let ctrlvalue = controls.get(id).ok_or(NokhwaError::SetPropertyError {
-        property: id.to_string(),
-        value: value.to_string(),
-        error: "Control does not exist".to_string(),
+    let ctrlvalue = controls.get(id).ok_or_else(|| {
+        NokhwaError::set_property(id.to_string(), value.to_string(), "Control does not exist")
     })?;
     check_control_flags(ctrlvalue, id, value)?;
     Ok(ctrlvalue)
 }
 
 fn extract_float(value: &ControlValueSetter, id: &KnownCameraControl) -> Result<f64, NokhwaError> {
-    value
-        .as_float()
-        .copied()
-        .ok_or(NokhwaError::SetPropertyError {
-            property: id.to_string(),
-            value: value.to_string(),
-            error: "Expected float".to_string(),
-        })
+    value.as_float().copied().ok_or_else(|| {
+        NokhwaError::set_property(id.to_string(), value.to_string(), "Expected float")
+    })
 }
 
 fn extract_integer(
@@ -1492,36 +1480,22 @@ fn extract_integer(
     value
         .as_integer()
         .copied()
-        .ok_or(NokhwaError::SetPropertyError {
-            property: id.to_string(),
-            value: value.to_string(),
-            error: "Expected i64".to_string(),
-        })
+        .ok_or_else(|| NokhwaError::set_property(id.to_string(), value.to_string(), "Expected i64"))
 }
 
 fn extract_enum(value: &ControlValueSetter, id: &KnownCameraControl) -> Result<i64, NokhwaError> {
-    value
-        .as_enum()
-        .copied()
-        .ok_or(NokhwaError::SetPropertyError {
-            property: id.to_string(),
-            value: value.to_string(),
-            error: "Expected Enum".to_string(),
-        })
+    value.as_enum().copied().ok_or_else(|| {
+        NokhwaError::set_property(id.to_string(), value.to_string(), "Expected Enum")
+    })
 }
 
 fn extract_boolean(
     value: &ControlValueSetter,
     id: &KnownCameraControl,
 ) -> Result<bool, NokhwaError> {
-    value
-        .as_boolean()
-        .copied()
-        .ok_or(NokhwaError::SetPropertyError {
-            property: id.to_string(),
-            value: value.to_string(),
-            error: "Expected bool".to_string(),
-        })
+    value.as_boolean().copied().ok_or_else(|| {
+        NokhwaError::set_property(id.to_string(), value.to_string(), "Expected bool")
+    })
 }
 
 fn verify_or_error(
@@ -1532,10 +1506,10 @@ fn verify_or_error(
     if ctrl.description().verify_setter(value) {
         Ok(())
     } else {
-        Err(NokhwaError::SetPropertyError {
-            property: id.to_string(),
-            value: value.to_string(),
-            error: "Failed to verify value".to_string(),
-        })
+        Err(NokhwaError::set_property(
+            id.to_string(),
+            value.to_string(),
+            "Failed to verify value",
+        ))
     }
 }

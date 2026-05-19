@@ -152,6 +152,12 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **AVFoundation property-error helper migration (refactor/avf-use-nokhwa-error-helpers)** —
+  Migrated all 23 `NokhwaError::GetPropertyError { … }` / `SetPropertyError { … }` call sites
+  in the AVFoundation crate (device.rs: 18, capture.rs: 2, session.rs: 3, types.rs: 1) to the
+  `NokhwaError::get_property(…)` / `NokhwaError::set_property(…)` shorthand constructors. Error
+  message text preserved verbatim; Display output unchanged.
+
 - **MSMF property-error call-site migration (refactor/msmf-use-nokhwa-error-helpers)** —
   Migrated all 25 `NokhwaError::GetPropertyError { … }` (16) and `NokhwaError::SetPropertyError { … }` (9) struct-literal call sites in `nokhwa-bindings-windows-msmf/src/lib.rs` to the new `NokhwaError::get_property` / `NokhwaError::set_property` shorthand constructors. Bare string literals had redundant `.to_string()` dropped; `format!(…)` / `why.to_string()` / `control.to_string()` calls left unchanged. Display output identical.
 

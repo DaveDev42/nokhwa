@@ -120,10 +120,7 @@ impl AVFoundationCaptureDevice {
             }
         }
 
-        Err(NokhwaError::GetPropertyError {
-            property: control.to_string(),
-            error: "Not Found".to_string(),
-        })
+        Err(NokhwaError::get_property(control.to_string(), "Not Found"))
     }
 }
 
@@ -260,10 +257,10 @@ impl FrameSource for AVFoundationCaptureDevice {
         let (Some(session), Some(output), Some(input)) =
             (&self.session, &self.data_out, &self.dev_input)
         else {
-            return Err(NokhwaError::GetPropertyError {
-                property: "AVCaptureSession/Output/Input".to_string(),
-                error: "Doesnt Exist".to_string(),
-            });
+            return Err(NokhwaError::get_property(
+                "AVCaptureSession/Output/Input",
+                "Doesnt Exist",
+            ));
         };
 
         session_remove_output(session, output);

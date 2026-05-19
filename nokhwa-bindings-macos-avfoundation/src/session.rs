@@ -117,11 +117,11 @@ pub fn output_set_frame_format(
         FrameFormat::NV12 => kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
         FrameFormat::RAWRGB => kCMPixelFormat_24RGB,
         FrameFormat::RAWBGR => {
-            return Err(NokhwaError::SetPropertyError {
-                property: "setVideoSettings".to_string(),
-                value: "set frame format".to_string(),
-                error: "Unsupported frame format BGR".to_string(),
-            });
+            return Err(NokhwaError::set_property(
+                "setVideoSettings",
+                "set frame format",
+                "Unsupported frame format BGR",
+            ));
         }
     };
 
@@ -172,11 +172,11 @@ pub fn session_add_input(
         unsafe { session.addInput(input_ref) };
         return Ok(());
     }
-    Err(NokhwaError::SetPropertyError {
-        property: "AVCaptureDeviceInput".to_string(),
-        value: "add new input".to_string(),
-        error: "Rejected".to_string(),
-    })
+    Err(NokhwaError::set_property(
+        "AVCaptureDeviceInput",
+        "add new input",
+        "Rejected",
+    ))
 }
 
 pub fn session_remove_input(session: &AVCaptureSession, input: &AVCaptureDeviceInput) {
@@ -193,11 +193,11 @@ pub fn session_add_output(
         unsafe { session.addOutput(output_ref) };
         return Ok(());
     }
-    Err(NokhwaError::SetPropertyError {
-        property: "AVCaptureVideoDataOutput".to_string(),
-        value: "add new output".to_string(),
-        error: "Rejected".to_string(),
-    })
+    Err(NokhwaError::set_property(
+        "AVCaptureVideoDataOutput",
+        "add new output",
+        "Rejected",
+    ))
 }
 
 pub fn session_remove_output(session: &AVCaptureSession, output: &AVCaptureVideoDataOutput) {

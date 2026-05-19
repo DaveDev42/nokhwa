@@ -107,10 +107,10 @@ impl TryFrom<&NSString> for AVMediaTypeLocal {
             } else if value.isEqualToString(AVMediaTypeVideo.unwrap()) {
                 Ok(Self::Video)
             } else {
-                Err(NokhwaError::GetPropertyError {
-                    property: "AVMediaType".to_string(),
-                    error: format!("Invalid AVMediaType {value}"),
-                })
+                Err(NokhwaError::get_property(
+                    "AVMediaType",
+                    format!("Invalid AVMediaType {value}"),
+                ))
             }
         }
     }
