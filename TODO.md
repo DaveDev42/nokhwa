@@ -152,6 +152,11 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **`kcc_to_i32_or_err` helper extraction (refactor/msmf-extract-kcc-to-i32-or-err)** —
+  Deduped the identical 5-line `kcc_to_i32(…).ok_or(NokhwaError::SetPropertyError { … })?`
+  block shared by `control()` and `set_control()` into a private helper. Error message
+  text (`property: "CameraControl"`, `error: "Does not exist"`) preserved verbatim.
+
 - **`CameraRunner::send_cmd` helper extraction (refactor/runner-extract-send-cmd)** —
   Deduped the identical `self.cmd.send(…).map_err(…)` body shared by `trigger` and
   `set_control` into a private `send_cmd` method. Error message text preserved verbatim;
