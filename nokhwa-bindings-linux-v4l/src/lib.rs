@@ -561,13 +561,15 @@ mod internal {
                             value: current,
                             default: None,
                         },
-                        (ty, val) => return Err(io::Error::new(
-                            ErrorKind::Unsupported,
-                            format!(
+                        (ty, val) => {
+                            return Err(io::Error::new(
+                                ErrorKind::Unsupported,
+                                format!(
                                 "v4l control descriptor type {ty:?} does not match value {val:?}; \
                                      unsupported variant"
                             ),
-                        )),
+                            ))
+                        }
                     };
 
                     // V4L2 distinguishes DISABLED (permanently unusable) from
