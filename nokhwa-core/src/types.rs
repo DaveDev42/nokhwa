@@ -426,10 +426,10 @@ impl FromStr for FrameFormat {
             "RAWRGB" => Ok(FrameFormat::RAWRGB),
             "RAWBGR" => Ok(FrameFormat::RAWBGR),
             "NV12" => Ok(FrameFormat::NV12),
-            _ => Err(NokhwaError::StructureError {
-                structure: "FrameFormat".to_string(),
-                error: format!("No match for {s}"),
-            }),
+            _ => Err(NokhwaError::structure(
+                "FrameFormat",
+                format!("No match for {s}"),
+            )),
         }
     }
 }

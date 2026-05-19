@@ -365,10 +365,10 @@ pub mod wmf {
         if let Err(why) = unsafe {
             MFEnumDeviceSources(&attributes, unused_mf_activate.as_mut_ptr(), &raw mut count)
         } {
-            return Err(NokhwaError::StructureError {
-                structure: "MFEnumDeviceSources".to_string(),
-                error: why.to_string(),
-            });
+            return Err(NokhwaError::structure(
+                "MFEnumDeviceSources",
+                why.to_string(),
+            ));
         }
 
         let mut device_list = vec![];
@@ -438,18 +438,12 @@ pub mod wmf {
         let name = unsafe {
             pwstr_name
                 .to_string()
-                .map_err(|x| NokhwaError::StructureError {
-                    structure: "PWSTR/String - Name".to_string(),
-                    error: x.to_string(),
-                })?
+                .map_err(|x| NokhwaError::structure("PWSTR/String - Name", x.to_string()))?
         };
         let symlink = unsafe {
             pwstr_symlink
                 .to_string()
-                .map_err(|x| NokhwaError::StructureError {
-                    structure: "PWSTR/String - Symlink".to_string(),
-                    error: x.to_string(),
-                })?
+                .map_err(|x| NokhwaError::structure("PWSTR/String - Symlink", x.to_string()))?
         };
 
         Ok(CameraInfo::new(
@@ -667,16 +661,16 @@ pub mod wmf {
                     let source_reader_attr = {
                         let mut attr_opt: Option<IMFAttributes> = None;
                         if let Err(why) = unsafe { MFCreateAttributes(&raw mut attr_opt, 3) } {
-                            return Err(NokhwaError::StructureError {
-                                structure: "MFCreateAttributes".to_string(),
-                                error: why.to_string(),
-                            });
+                            return Err(NokhwaError::structure(
+                                "MFCreateAttributes",
+                                why.to_string(),
+                            ));
                         }
                         let Some(attr) = attr_opt else {
-                            return Err(NokhwaError::StructureError {
-                                structure: "MFCreateAttributes".to_string(),
-                                error: "Attributee Alloc Failure".to_string(),
-                            });
+                            return Err(NokhwaError::structure(
+                                "MFCreateAttributes",
+                                "Attributee Alloc Failure",
+                            ));
                         };
 
                         if let Err(why) = unsafe {
@@ -697,10 +691,10 @@ pub mod wmf {
                     } {
                         Ok(sr) => sr,
                         Err(why) => {
-                            return Err(NokhwaError::StructureError {
-                                structure: "MFCreateSourceReaderFromMediaSource".to_string(),
-                                error: why.to_string(),
-                            })
+                            return Err(NokhwaError::structure(
+                                "MFCreateSourceReaderFromMediaSource",
+                                why.to_string(),
+                            ))
                         }
                     };
 
@@ -903,10 +897,10 @@ pub mod wmf {
                 ControlValueSetter::Integer(i) => i as i32,
                 ControlValueSetter::Boolean(b) => i32::from(b),
                 v => {
-                    return Err(NokhwaError::StructureError {
-                        structure: format!("ControlValueSetter {v}"),
-                        error: "invalid value type".to_string(),
-                    })
+                    return Err(NokhwaError::structure(
+                        format!("ControlValueSetter {v}"),
+                        "invalid value type",
+                    ))
                 }
             };
 
@@ -920,10 +914,10 @@ pub mod wmf {
                         CameraControl_Flags_Manual
                     }
                 })
-                .ok_or(NokhwaError::StructureError {
-                    structure: "KnownCameraControlFlag".to_string(),
-                    error: "could not cast to i32".to_string(),
-                })?;
+                .ok_or(NokhwaError::structure(
+                    "KnownCameraControlFlag",
+                    "could not cast to i32",
+                ))?;
 
             match control_id {
                 MFControlId::ProcAmpBoolean(id) | MFControlId::ProcAmpRange(id) => unsafe {

@@ -221,44 +221,33 @@ impl Drop for UriPipelineHandle {
 /// document the limitation.
 #[allow(clippy::cast_possible_truncation)]
 fn sample_format(sample: &gstreamer::Sample) -> Result<CameraFormat, NokhwaError> {
-    let caps = sample.caps().ok_or_else(|| NokhwaError::StructureError {
-        structure: "sample caps".to_string(),
-        error: "first sample had no caps".to_string(),
-    })?;
+    let caps = sample
+        .caps()
+        .ok_or_else(|| NokhwaError::structure("sample caps", "first sample had no caps"))?;
     let structure = caps
         .structure(0)
-        .ok_or_else(|| NokhwaError::StructureError {
-            structure: "sample caps structure".to_string(),
-            error: "caps has no structure".to_string(),
-        })?;
+        .ok_or_else(|| NokhwaError::structure("sample caps structure", "caps has no structure"))?;
     let format_name = structure
         .get::<&str>("format")
-        .map_err(|e| NokhwaError::StructureError {
-            structure: "format".to_string(),
-            error: e.to_string(),
-        })?;
+        .map_err(|e| NokhwaError::structure("format", e.to_string()))?;
     let frame_format = video_format_to_frame_format(VideoFormat::from_string(format_name))
-        .ok_or_else(|| NokhwaError::StructureError {
-            structure: "format".to_string(),
-            error: format!("videoconvert produced unsupported format: {format_name}"),
+        .ok_or_else(|| {
+            NokhwaError::structure(
+                "format",
+                format!("videoconvert produced unsupported format: {format_name}"),
+            )
         })?;
     let width = structure
         .get::<i32>("width")
-        .map_err(|e| NokhwaError::StructureError {
-            structure: "width".to_string(),
-            error: e.to_string(),
-        })?;
+        .map_err(|e| NokhwaError::structure("width", e.to_string()))?;
     let height = structure
         .get::<i32>("height")
-        .map_err(|e| NokhwaError::StructureError {
-            structure: "height".to_string(),
-            error: e.to_string(),
-        })?;
+        .map_err(|e| NokhwaError::structure("height", e.to_string()))?;
     if width <= 0 || height <= 0 {
-        return Err(NokhwaError::StructureError {
-            structure: "resolution".to_string(),
-            error: format!("invalid dimensions {width}x{height}"),
-        });
+        return Err(NokhwaError::structure(
+            "resolution",
+            format!("invalid dimensions {width}x{height}"),
+        ));
     }
     // Framerate is optional for URL streams — some RTSP sources
     // advertise 0/1 or skip it entirely. 30fps is a sensible default
