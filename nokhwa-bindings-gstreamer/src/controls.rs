@@ -147,20 +147,20 @@ pub(crate) fn set_live_property(
     value: &ControlValueSetter,
 ) -> Result<(), NokhwaError> {
     let int_value = match value {
-        ControlValueSetter::Integer(i) => {
-            i32::try_from(*i).map_err(|_| NokhwaError::SetPropertyError {
-                property: property.to_string(),
-                value: i.to_string(),
-                error: "i64 value exceeds i32 range expected by v4l2src property".to_string(),
-            })?
-        }
+        ControlValueSetter::Integer(i) => i32::try_from(*i).map_err(|_| {
+            NokhwaError::set_property(
+                property.to_string(),
+                i.to_string(),
+                "i64 value exceeds i32 range expected by v4l2src property",
+            )
+        })?,
         ControlValueSetter::Boolean(b) => i32::from(*b),
         other => {
-            return Err(NokhwaError::SetPropertyError {
-                property: property.to_string(),
-                value: other.to_string(),
-                error: "unsupported ControlValueSetter variant for live property".to_string(),
-            });
+            return Err(NokhwaError::set_property(
+                property.to_string(),
+                other.to_string(),
+                "unsupported ControlValueSetter variant for live property",
+            ));
         }
     };
     source.set_property(property, int_value);
@@ -192,11 +192,11 @@ pub(crate) fn v4l2_cid_value(cid: &str, value: &ControlValueSetter) -> Result<i6
     match value {
         ControlValueSetter::Integer(i) => Ok(*i),
         ControlValueSetter::Boolean(b) => Ok(i64::from(*b)),
-        other => Err(NokhwaError::SetPropertyError {
-            property: cid.to_string(),
-            value: other.to_string(),
-            error: "unsupported ControlValueSetter variant for V4L2 CID".to_string(),
-        }),
+        other => Err(NokhwaError::set_property(
+            cid.to_string(),
+            other.to_string(),
+            "unsupported ControlValueSetter variant for V4L2 CID",
+        )),
     }
 }
 

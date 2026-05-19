@@ -287,27 +287,27 @@ mod internal {
                 // URL-mode sources don't have controls — errors cleanly
                 // rather than silently accepting a write that would
                 // never be applied.
-                return Err(NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: value.to_string(),
-                    error: "GStreamer URL-mode sources do not support controls".to_string(),
-                });
+                return Err(NokhwaError::set_property(
+                    id.to_string(),
+                    value.to_string(),
+                    "GStreamer URL-mode sources do not support controls",
+                ));
             };
-            let handle = control_handle(id).ok_or_else(|| NokhwaError::SetPropertyError {
-                property: id.to_string(),
-                value: value.to_string(),
-                error: "KnownCameraControl::Other is not mapped by the GStreamer backend"
-                    .to_string(),
+            let handle = control_handle(id).ok_or_else(|| {
+                NokhwaError::set_property(
+                    id.to_string(),
+                    value.to_string(),
+                    "KnownCameraControl::Other is not mapped by the GStreamer backend",
+                )
             })?;
             match handle {
                 GstControlHandle::Property(name) => {
                     let Some(ActivePipeline::Local(pipeline)) = &self.pipeline else {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: name.to_string(),
-                            value: value.to_string(),
-                            error: "pipeline not open; open() before set_control for live controls"
-                                .to_string(),
-                        });
+                        return Err(NokhwaError::set_property(
+                            name.to_string(),
+                            value.to_string(),
+                            "pipeline not open; open() before set_control for live controls",
+                        ));
                     };
                     set_live_property(pipeline.source(), name, &value)
                 }
@@ -353,20 +353,19 @@ mod internal {
 
         fn set_format(&mut self, f: CameraFormat) -> Result<(), NokhwaError> {
             let BackendSource::Local(local) = &mut self.source else {
-                return Err(NokhwaError::SetPropertyError {
-                    property: "CameraFormat".to_string(),
-                    value: format!("{f:?}"),
-                    error: "GStreamer URL-mode sources negotiate format from the stream; \
-                            set_format is not meaningful"
-                        .to_string(),
-                });
+                return Err(NokhwaError::set_property(
+                    "CameraFormat",
+                    format!("{f:?}"),
+                    "GStreamer URL-mode sources negotiate format from the stream; \
+                            set_format is not meaningful",
+                ));
             };
             if !local.formats.contains(&f) {
-                return Err(NokhwaError::SetPropertyError {
-                    property: "CameraFormat".to_string(),
-                    value: format!("{f:?}"),
-                    error: "not in the device's compatible format list".to_string(),
-                });
+                return Err(NokhwaError::set_property(
+                    "CameraFormat",
+                    format!("{f:?}"),
+                    "not in the device's compatible format list",
+                ));
             }
             let was_open = matches!(self.pipeline, Some(ActivePipeline::Local(_)));
             self.pipeline = None;
