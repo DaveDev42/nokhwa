@@ -495,14 +495,18 @@ impl CameraRunner {
         self.events.as_ref()
     }
 
+    fn send_cmd(&self, cmd: Command) -> Result<(), NokhwaError> {
+        self.cmd
+            .send(cmd)
+            .map_err(|e| NokhwaError::general(format!("runner thread gone: {e}")))
+    }
+
     /// Trigger a shutter capture on the worker. No-op for pure stream backends.
     ///
     /// # Errors
     /// Returns [`NokhwaError`] if the worker thread is no longer running.
     pub fn trigger(&self) -> Result<(), NokhwaError> {
-        self.cmd
-            .send(Command::Trigger)
-            .map_err(|e| NokhwaError::general(format!("runner thread gone: {e}")))
+        self.send_cmd(Command::Trigger)
     }
 
     /// Set a camera control on the worker thread.
@@ -514,9 +518,7 @@ impl CameraRunner {
         id: KnownCameraControl,
         value: ControlValueSetter,
     ) -> Result<(), NokhwaError> {
-        self.cmd
-            .send(Command::SetControl(id, value))
-            .map_err(|e| NokhwaError::general(format!("runner thread gone: {e}")))
+        self.send_cmd(Command::SetControl(id, value))
     }
 
     /// Stop the worker thread and join it.
