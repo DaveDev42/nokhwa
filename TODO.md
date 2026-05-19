@@ -161,6 +161,9 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   `nokhwa-bindings-linux-v4l/src/lib.rs` to the `NokhwaError::get_property` / `NokhwaError::set_property`
   shorthand constructors from PR #427. Display output is byte-identical; no other files touched.
 
+- **GStreamer `SetPropertyError` → `NokhwaError::set_property` migration (refactor/gstreamer-use-nokhwa-error-helpers)** —
+  Migrated all 9 constructor call sites across `controls.rs` (3), `pipeline.rs` (1), and `lib.rs` (5) to use the `NokhwaError::set_property` shorthand introduced in #427. Match-arm patterns in tests unchanged.
+
 - **`NokhwaError::get_property`/`set_property` shorthand constructors (refactor/core-add-property-error-constructors)** —
   Added two convenience constructors to `nokhwa-core/src/error.rs` matching the existing `general`/`open_stream`/`read_frame`/`stream_shutdown` pattern.
   Foundational for upcoming PRs that will mechanically replace ~90 `NokhwaError::GetPropertyError { … }` / `SetPropertyError { … }` call sites.

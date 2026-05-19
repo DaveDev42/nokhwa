@@ -69,11 +69,11 @@ impl PipelineHandle {
         extra_controls: Option<gstreamer::Structure>,
     ) -> Result<Self, NokhwaError> {
         let video_format = frame_format_to_video_format(format.format()).ok_or_else(|| {
-            NokhwaError::SetPropertyError {
-                property: "FrameFormat".to_string(),
-                value: format!("{:?}", format.format()),
-                error: "not supported by GStreamer session-2 pipeline".to_string(),
-            }
+            NokhwaError::set_property(
+                "FrameFormat",
+                format!("{:?}", format.format()),
+                "not supported by GStreamer session-2 pipeline",
+            )
         })?;
 
         let caps_value = caps_for(format, video_format);
