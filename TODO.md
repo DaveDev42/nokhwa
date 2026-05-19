@@ -152,6 +152,14 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **Strip stale `#[allow]` suppressions in MSMF/V4L stubs (refactor/strip-stale-clippy-allows)** —
+  Removed 4 stale allows: `missing_errors_doc` / `unused_self` / `needless_pass_by_value` from
+  the non-Windows `pub mod wmf` stub (all three already covered crate-wide or didn't fire),
+  and `cast_possible_truncation` from V4L's `known_camera_control_to_id` stub (body is
+  literal `0`, no cast; covered crate-wide). Kept `must_use_candidate` on `wmf`
+  (5 methods fire without it) and `cast_lossless` on `id_to_known_camera_control`
+  (`id as u128` fires under `#[deny(clippy::pedantic)]`).
+
 - **AVFoundation property-error helper migration (refactor/avf-use-nokhwa-error-helpers)** —
   Migrated all 23 `NokhwaError::GetPropertyError { … }` / `SetPropertyError { … }` call sites
   in the AVFoundation crate (device.rs: 18, capture.rs: 2, session.rs: 3, types.rs: 1) to the
