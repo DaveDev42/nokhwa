@@ -14,12 +14,6 @@
 * limitations under the License.
 */
 
-// hello, future peng here
-// whatever is written here will induce horrors uncomprehendable.
-// save yourselves. write apple code in swift and bind it to rust.
-
-// <some change so we can call this 0.10.4>
-
 #![deny(clippy::pedantic)]
 #![warn(clippy::all)]
 #![allow(clippy::module_name_repetitions)]
@@ -63,8 +57,6 @@ pub use objc2::rc::Retained;
 pub use objc2_av_foundation::{AVCaptureDeviceInput, AVCaptureSession, AVCaptureVideoDataOutput};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub use types::{AVAuthorizationStatus, AVCaptureDeviceTypeLocal, AVMediaTypeLocal};
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-pub use util::{CompressionData, DataPipe};
 
 /// Non-Apple stub for `AVFoundationCaptureDevice`.
 ///
