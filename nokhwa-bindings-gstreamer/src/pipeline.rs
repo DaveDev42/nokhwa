@@ -253,10 +253,10 @@ pub(crate) fn snapshot_video_devices() -> Result<Vec<gstreamer::Device>, NokhwaE
         .add_filter(Some("Video/Source"), Some(&caps))
         .is_none()
     {
-        return Err(NokhwaError::StructureError {
-            structure: "DeviceMonitor filter Video/Source".to_string(),
-            error: "add_filter returned None".to_string(),
-        });
+        return Err(NokhwaError::structure(
+            "DeviceMonitor filter Video/Source",
+            "add_filter returned None",
+        ));
     }
     monitor
         .start()

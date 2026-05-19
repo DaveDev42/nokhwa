@@ -523,10 +523,7 @@ impl AVCaptureDeviceFormatWrapper {
         let media_type = format_media_type(format);
         let media_type_local = AVMediaTypeLocal::try_from(media_type.as_ref())?;
         if media_type_local != AVMediaTypeLocal::Video {
-            return Err(NokhwaError::StructureError {
-                structure: "AVMediaType".to_string(),
-                error: "Not Video".to_string(),
-            });
+            return Err(NokhwaError::structure("AVMediaType", "Not Video"));
         }
 
         let frame_rate_ranges = format_frame_rate_ranges(format);
@@ -553,10 +550,10 @@ impl AVCaptureDeviceFormatWrapper {
 
         #[allow(non_upper_case_globals)]
         let Some(fourcc) = raw_fcc_to_frameformat(fcc_raw) else {
-            return Err(NokhwaError::StructureError {
-                structure: "FourCharCode".to_string(),
-                error: format!("Unknown FourCharCode {fcc_raw:?}"),
-            });
+            return Err(NokhwaError::structure(
+                "FourCharCode",
+                format!("Unknown FourCharCode {fcc_raw:?}"),
+            ));
         };
 
         Ok(AVCaptureDeviceFormatWrapper {

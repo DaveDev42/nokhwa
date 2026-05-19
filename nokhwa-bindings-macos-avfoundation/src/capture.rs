@@ -75,13 +75,8 @@ impl AVFoundationCaptureDevice {
         device.set_all(camera_fmt)?;
 
         let device_descriptor = device.info().clone();
-        let buffername =
-            CString::new(format!("{device_descriptor}_INDEX{index}_")).map_err(|why| {
-                NokhwaError::StructureError {
-                    structure: "CString Buffername".to_string(),
-                    error: why.to_string(),
-                }
-            })?;
+        let buffername = CString::new(format!("{device_descriptor}_INDEX{index}_"))
+            .map_err(|why| NokhwaError::structure("CString Buffername", why.to_string()))?;
 
         let (send, recv) = std::sync::mpsc::channel();
         Ok(AVFoundationCaptureDevice {

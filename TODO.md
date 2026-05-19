@@ -158,6 +158,9 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **Migrate `NokhwaError::StructureError` construction sites to `NokhwaError::structure()` (refactor/migrate-structure-call-sites)** —
+  Migrated 15 struct-literal construction sites across 6 files (nokhwa-core/src/types.rs ×1, nokhwa-bindings-macos-avfoundation/src/capture.rs ×1, nokhwa-bindings-macos-avfoundation/src/device.rs ×2, nokhwa-bindings-windows-msmf/src/lib.rs ×8, nokhwa-bindings-gstreamer/src/uri.rs ×7 constructions (4 pattern-match arms left untouched), nokhwa-bindings-gstreamer/src/pipeline.rs ×1) to the `NokhwaError::structure()` helper added in #434. Static string `.to_string()` calls dropped; `format!(…)` / `why.to_string()` / dynamic expressions left as-is.
+
 - **`NokhwaError::open_device` call-site migration (refactor/migrate-open-device-call-sites)** —
   Migrated all 14 `NokhwaError::OpenDeviceError { … }` struct-literal construction sites across
   v4l (1), avfoundation/capture.rs (1), avfoundation/device.rs (2), msmf (3), gstreamer/uri.rs (2),
