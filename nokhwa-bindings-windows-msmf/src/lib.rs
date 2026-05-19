@@ -119,8 +119,15 @@ pub mod wmf {
         [0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71],
     );
 
-    const MEDIA_FOUNDATION_FIRST_VIDEO_STREAM: u32 = 0xFFFF_FFFC;
     const MF_SOURCE_READER_MEDIASOURCE: u32 = 0xFFFF_FFFF;
+
+    /// Mirror of windows-rs's `MF_SOURCE_READER_FIRST_VIDEO_STREAM.0` cast to
+    /// `u32` for the `IMFSourceReader` stream-index APIs. The original is an
+    /// `i32` sentinel (`-4`); `as u32` reinterprets to `0xFFFF_FFFC`, which is
+    /// the value Media Foundation expects. Kept as a single const so the
+    /// `clippy::cast_sign_loss` suppression isn't sprinkled across the file.
+    #[allow(clippy::cast_sign_loss)]
+    const MF_FIRST_VIDEO_STREAM: u32 = MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32;
 
     // const CAM_CTRL_AUTO: i32 = 0x0001;
     // const CAM_CTRL_MANUAL: i32 = 0x0002;
@@ -249,7 +256,7 @@ pub mod wmf {
         let mut index = 0;
 
         while let Ok(media_type) =
-            unsafe { source_reader.GetNativeMediaType(MEDIA_FOUNDATION_FIRST_VIDEO_STREAM, index) }
+            unsafe { source_reader.GetNativeMediaType(MF_FIRST_VIDEO_STREAM, index) }
         {
             index += 1;
 
@@ -960,7 +967,7 @@ pub mod wmf {
         pub fn format_refreshed(&mut self) -> Result<CameraFormat, NokhwaError> {
             match unsafe {
                 self.source_reader
-                    .GetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32)
+                    .GetCurrentMediaType(MF_FIRST_VIDEO_STREAM)
             } {
                 Ok(media_type) => {
                     let resolution = match unsafe { media_type.GetUINT64(&MF_MT_FRAME_SIZE) } {
@@ -1042,7 +1049,7 @@ pub mod wmf {
                     if *frame_rate == format.frame_rate() {
                         let result = unsafe {
                             self.source_reader.SetCurrentMediaType(
-                                MEDIA_FOUNDATION_FIRST_VIDEO_STREAM,
+                                MF_FIRST_VIDEO_STREAM,
                                 None,
                                 &parsed.media_type,
                             )
@@ -1056,7 +1063,7 @@ pub mod wmf {
                             }
                             Err(why) => {
                                 last_error = Some(NokhwaError::SetPropertyError {
-                                    property: "MEDIA_FOUNDATION_FIRST_VIDEO_STREAM".to_string(),
+                                    property: "MF_SOURCE_READER_FIRST_VIDEO_STREAM".to_string(),
                                     value: format!("{:?}", parsed.media_type),
                                     error: why.to_string(),
                                 });
@@ -1083,7 +1090,7 @@ pub mod wmf {
         pub fn start_stream(&mut self) -> Result<(), NokhwaError> {
             if let Err(why) = unsafe {
                 self.source_reader
-                    .SetStreamSelection(MEDIA_FOUNDATION_FIRST_VIDEO_STREAM, true)
+                    .SetStreamSelection(MF_FIRST_VIDEO_STREAM, true)
             } {
                 return Err(NokhwaError::OpenStreamError {
                     message: why.to_string(),
@@ -1115,7 +1122,7 @@ pub mod wmf {
                 loop {
                     if let Err(why) = unsafe {
                         self.source_reader.ReadSample(
-                            MEDIA_FOUNDATION_FIRST_VIDEO_STREAM,
+                            MF_FIRST_VIDEO_STREAM,
                             0,
                             None,
                             Some(&raw mut stream_flags),
@@ -1216,9 +1223,7 @@ pub mod wmf {
         fn drop(&mut self) {
             // swallow errors
             unsafe {
-                let _ = self
-                    .source_reader
-                    .Flush(MEDIA_FOUNDATION_FIRST_VIDEO_STREAM);
+                let _ = self.source_reader.Flush(MF_FIRST_VIDEO_STREAM);
 
                 // Release the IMFSourceReader *before* tearing down the
                 // Media Foundation platform: an MF COM interface whose
