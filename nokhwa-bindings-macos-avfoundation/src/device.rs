@@ -591,7 +591,7 @@ impl AVCaptureDeviceWrapper {
                     Some(device) => Ok(Self::from_id(&device.misc(), Some(index.clone()))?),
                     None => Err(NokhwaError::OpenDeviceError {
                         device: idx.to_string(),
-                        error: "Not Found".to_string(),
+                        error: "device not found".to_string(),
                     }),
                 }
             }

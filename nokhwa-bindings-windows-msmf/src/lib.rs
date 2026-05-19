@@ -659,7 +659,7 @@ pub mod wmf {
                             None => {
                                 return Err(NokhwaError::OpenDeviceError {
                                     device: index.to_string(),
-                                    error: "No device".to_string(),
+                                    error: "device not found".to_string(),
                                 })
                             }
                         };
@@ -741,7 +741,7 @@ pub mod wmf {
                         Some(index) => Self::new(CameraIndex::Index(index)),
                         None => Err(NokhwaError::OpenDeviceError {
                             device: s,
-                            error: "Not Found".to_string(),
+                            error: "device not found".to_string(),
                         }),
                     }
                 }
