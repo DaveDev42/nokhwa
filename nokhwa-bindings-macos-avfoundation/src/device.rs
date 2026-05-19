@@ -592,7 +592,19 @@ impl AVCaptureDeviceWrapper {
                     )),
                 }
             }
-            CameraIndex::String(id) => Ok(Self::from_id(id, None)?),
+            CameraIndex::String(id) => {
+                // A pure-numeric string is a positional index, not an AVF
+                // unique ID — `open(CameraIndex::String("0"))` must reach the
+                // same device as `open(CameraIndex::Index(0))`. The session
+                // layer routes URL-like strings (rtsp://, http://, file://)
+                // to GStreamer before they arrive here, so anything that
+                // reaches this arm is either a number or an AVF unique-ID
+                // string.
+                if let Ok(index) = id.parse::<u32>() {
+                    return Self::new(&CameraIndex::Index(index));
+                }
+                Ok(Self::from_id(id, None)?)
+            }
         }
     }
 
