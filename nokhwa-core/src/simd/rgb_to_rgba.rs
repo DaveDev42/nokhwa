@@ -59,6 +59,8 @@ pub(crate) fn bgr_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
     bgr_to_rgba_scalar(src, dst);
 }
 
+// Fallback path used only on non-aarch64/non-x86_64 targets; dead on the
+// architectures we actually ship, hence the lint suppression.
 #[allow(dead_code)]
 fn rgb_to_rgba_scalar(src: &[u8], dst: &mut [u8]) {
     for (rgb, rgba) in src.chunks_exact(3).zip(dst.chunks_exact_mut(4)) {
