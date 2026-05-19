@@ -152,7 +152,7 @@ pub fn open(index: CameraIndex, req: OpenRequest) -> Result<OpenedCamera, Nokhwa
     // with a native backend compiled in.
     #[cfg(feature = "input-gstreamer")]
     if let CameraIndex::String(s) = &index {
-        if looks_like_uri_scheme(s) {
+        if nokhwa_core::looks_like_url_scheme(s) {
             use crate::backends::capture::GStreamerCaptureDevice;
             let dev = GStreamerCaptureDevice::new(&index, requested)?;
             return Ok(OpenedCamera::from_device(Box::new(dev)));
@@ -199,20 +199,6 @@ pub fn open(index: CameraIndex, req: OpenRequest) -> Result<OpenedCamera, Nokhwa
             "no native backend available for this platform/feature configuration",
         ))
     }
-}
-
-/// Cheap URL-scheme sniff used by [`open`] to route URL-like strings
-/// through the `GStreamer` backend. Kept in sync with the scheme list in
-/// `nokhwa-bindings-gstreamer::uri::looks_like_uri` — if you add one
-/// there, add it here too.
-#[cfg(feature = "input-gstreamer")]
-fn looks_like_uri_scheme(s: &str) -> bool {
-    const SCHEMES: &[&str] = &[
-        "rtsp://", "rtsps://", "rtmp://", "rtmps://", "http://", "https://", "file://", "srt://",
-        "udp://", "tcp://",
-    ];
-    let lower = s.to_ascii_lowercase();
-    SCHEMES.iter().any(|s| lower.starts_with(s))
 }
 
 /// An opened camera, dispatched by backend capability.
@@ -761,9 +747,9 @@ macro_rules! __nokhwa_take_events_pick {
 // are `#[doc(hidden)] pub` so the expansion can see them; do not rely on them
 // directly in application code.
 
-#[cfg(all(test, feature = "input-gstreamer"))]
+#[cfg(test)]
 mod uri_scheme_tests {
-    use super::looks_like_uri_scheme;
+    use nokhwa_core::looks_like_url_scheme;
 
     #[test]
     fn detects_all_known_schemes() {
@@ -779,7 +765,7 @@ mod uri_scheme_tests {
             "udp://239.0.0.1:5004",
             "tcp://example.com:1234",
         ] {
-            assert!(looks_like_uri_scheme(s), "expected URL: {s}");
+            assert!(looks_like_url_scheme(s), "expected URL: {s}");
         }
     }
 
@@ -798,7 +784,7 @@ mod uri_scheme_tests {
             "rtsp",      // missing `://`
             "http:/foo", // single slash
         ] {
-            assert!(!looks_like_uri_scheme(s), "expected non-URL: {s}");
+            assert!(!looks_like_url_scheme(s), "expected non-URL: {s}");
         }
     }
 
@@ -810,16 +796,10 @@ mod uri_scheme_tests {
             "FILE:///tmp/x",
             "RtMpS://example.com",
         ] {
-            assert!(looks_like_uri_scheme(s), "expected URL (mixed case): {s}");
+            assert!(looks_like_url_scheme(s), "expected URL (mixed case): {s}");
         }
     }
 
-    // Mirror of `nokhwa-bindings-gstreamer::uri::tests::scheme_list_shape_is_stable`.
-    // The two scheme lists are kept in sync by the doc comment on
-    // `looks_like_uri_scheme`; this test pins the shape from the
-    // session.rs side so a divergence between the two implementations
-    // is visible at the user-facing crate level too. Same prefix set,
-    // same negative cases.
     #[test]
     fn scheme_list_shape_is_stable() {
         let mirror = [
@@ -828,13 +808,13 @@ mod uri_scheme_tests {
         ];
         for prefix in mirror {
             assert!(
-                looks_like_uri_scheme(prefix),
+                looks_like_url_scheme(prefix),
                 "{prefix} should be a URL prefix"
             );
         }
         for unsupported in ["ftp://", "ws://", "wss://", "data:", "mms://"] {
             assert!(
-                !looks_like_uri_scheme(unsupported),
+                !looks_like_url_scheme(unsupported),
                 "{unsupported} unexpectedly recognised"
             );
         }

@@ -108,3 +108,23 @@ pub mod testing;
 #[cfg(feature = "wgpu-types")]
 #[cfg_attr(feature = "docs-features", doc(cfg(feature = "wgpu-types")))]
 pub mod wgpu;
+
+/// Cheap URL-scheme sniff used by the top-level `open()` and the
+/// `GStreamer` URI pipeline to decide whether a string is a URL.
+///
+/// Recognises the multimedia schemes that `uridecodebin` accepts
+/// (`rtsp`, `rtsps`, `rtmp`, `rtmps`, `http`, `https`, `file`, `srt`,
+/// `udp`, `tcp`). Anything else is treated as a display-name lookup
+/// against the live device monitor.
+///
+/// Comparison is case-insensitive — `RTSP://...` and `rtsp://...`
+/// both match.
+#[must_use]
+pub fn looks_like_url_scheme(s: &str) -> bool {
+    const SCHEMES: &[&str] = &[
+        "rtsp://", "rtsps://", "rtmp://", "rtmps://", "http://", "https://", "file://", "srt://",
+        "udp://", "tcp://",
+    ];
+    let lower = s.to_ascii_lowercase();
+    SCHEMES.iter().any(|scheme| lower.starts_with(scheme))
+}
