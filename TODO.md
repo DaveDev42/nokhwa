@@ -13,6 +13,11 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Runtime verification pending (compile-verified only)
 
+- [ ] **MSMF CAMERA_REFCNT atomic RMW fix (fix/msmf-camera-refcnt-atomic-rmw)** —
+  `fetch_add`/`fetch_sub` 전환. Windows에서 멀티스레드 동시 open/close가
+  refcount 정확성을 유지하는지 확인. 단일 스레드 동작은 변경 없음.
+  `cargo test --features device-test,input-msmf,runner` on Windows hardware.
+
 - [ ] **GStreamer cleanup bundle (refactor/gst-snapshot-and-init-helpers)** —
   `ensure_gst_init()` + `snapshot_video_devices()` consolidation has only
   `docs-only` + CI cross-platform compile coverage. Verify on a Linux box

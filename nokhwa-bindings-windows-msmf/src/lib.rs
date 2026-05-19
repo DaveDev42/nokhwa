@@ -623,8 +623,8 @@ pub mod wmf {
                         }
                     };
 
-                    // increment refcnt
-                    CAMERA_REFCNT.store(CAMERA_REFCNT.load(Ordering::SeqCst) + 1, Ordering::SeqCst);
+                    // increment refcnt (fetch_add is an atomic RMW; no load+store race)
+                    CAMERA_REFCNT.fetch_add(1, Ordering::SeqCst);
 
                     Ok(MediaFoundationDevice {
                         is_open: Cell::new(false),
@@ -1227,11 +1227,12 @@ pub mod wmf {
                 // this body, so the ordering has to be forced by hand.
                 ManuallyDrop::drop(&mut self.source_reader);
 
-                // decrement refcnt
-                if CAMERA_REFCNT.load(Ordering::SeqCst) > 0 {
-                    CAMERA_REFCNT.store(CAMERA_REFCNT.load(Ordering::SeqCst) - 1, Ordering::SeqCst);
-                }
-                if CAMERA_REFCNT.load(Ordering::SeqCst) == 0 {
+                // decrement refcnt: fetch_sub returns the *previous* value, so == 1
+                // means the count just reached 0 → tear down Media Foundation.
+                // Note: underflow (drop called more times than new) would be a
+                // separate logic bug; wrapping subtraction is intentional here and
+                // de_initialize_mf() would not be called for any count != 1.
+                if CAMERA_REFCNT.fetch_sub(1, Ordering::SeqCst) == 1 {
                     #[allow(let_underscore_drop)]
                     let _ = de_initialize_mf();
                 }
