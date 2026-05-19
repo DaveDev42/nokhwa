@@ -64,10 +64,7 @@ fn open_device_error_display_exact_format() {
 
 #[test]
 fn get_property_error_display_exact_format() {
-    let e = NokhwaError::GetPropertyError {
-        property: "Brightness".into(),
-        error: "not supported".into(),
-    };
+    let e = NokhwaError::get_property("Brightness", "not supported");
     assert_eq!(
         format!("{e}"),
         "Could not get device property Brightness: not supported"
@@ -76,11 +73,7 @@ fn get_property_error_display_exact_format() {
 
 #[test]
 fn set_property_error_display_exact_format() {
-    let e = NokhwaError::SetPropertyError {
-        property: "Exposure".into(),
-        value: "9999".into(),
-        error: "out of range".into(),
-    };
+    let e = NokhwaError::set_property("Exposure", "9999", "out of range");
     assert_eq!(
         format!("{e}"),
         "Could not set device property Exposure with value 9999: out of range"
