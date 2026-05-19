@@ -1236,8 +1236,7 @@ pub mod wmf {
                 // separate logic bug; wrapping subtraction is intentional here and
                 // de_initialize_mf() would not be called for any count != 1.
                 if CAMERA_REFCNT.fetch_sub(1, Ordering::SeqCst) == 1 {
-                    #[allow(let_underscore_drop)]
-                    let _ = de_initialize_mf();
+                    de_initialize_mf().ok();
                 }
             }
         }
