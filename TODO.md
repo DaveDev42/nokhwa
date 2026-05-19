@@ -47,6 +47,11 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   Brightness/Gamma/WhiteBalance/Sharpness/PowerLineFrequency/Focus/Exposure/Iris/Saturation
   `set_control()` paths to confirm error messages and behavior are unchanged.
 
+- [ ] **MSMF FIRST_VIDEO_STREAM const unification (refactor/msmf-unify-first-video-stream-const)** —
+  로컬 상수를 windows-rs import로 통일. 값 동일하지만 Windows에서 enum/format 열거가
+  변함없이 동작하는지 확인: `cargo test --features device-test,input-msmf,runner` on
+  a Windows box with a webcam attached.
+
 ### Infrastructure / CI
 
 - [ ] **Provision `RELEASE_PLEASE_TOKEN` repo secret.** The
