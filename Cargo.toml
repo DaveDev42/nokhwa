@@ -3,6 +3,7 @@ name        = "nokhwa"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "A simple-to-use, cross-platform Rust webcam capture library with a type-safe frame API"
@@ -20,11 +21,12 @@ members = [
 ]
 
 [workspace.package]
-version    = "0.14.11" # x-release-please-version
-authors    = [ "l1npengtul <l1npengtul@protonmail.com>", "Dave Choi <dave.dev@icloud.com>" ]
-edition    = "2021"
-license    = "Apache-2.0"
-repository = "https://github.com/DaveDev42/nokhwa"
+version      = "0.14.11" # x-release-please-version
+authors      = [ "l1npengtul <l1npengtul@protonmail.com>", "Dave Choi <dave.dev@icloud.com>" ]
+edition      = "2021"
+rust-version = "1.95"
+license      = "Apache-2.0"
+repository   = "https://github.com/DaveDev42/nokhwa"
 exclude = [
     "examples/threaded-capture",
 ]
