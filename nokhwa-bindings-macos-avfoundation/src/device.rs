@@ -1162,89 +1162,41 @@ impl AVCaptureDeviceWrapper {
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         match id {
             KnownCameraControl::Brightness => {
-                let isoctrl = controls.get(&id).ok_or(NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: value.to_string(),
-                    error: "Control does not exist".to_string(),
-                })?;
-
-                check_control_flags(isoctrl, &id, value)?;
+                let isoctrl = get_and_check_control(&controls, &id, value)?;
 
                 let current_duration = exposure_duration_current();
-                let new_iso = *value.as_float().ok_or(NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: value.to_string(),
-                    error: "Expected float".to_string(),
-                })? as c_float;
+                let new_iso = extract_float(value, &id)? as c_float;
 
-                if !isoctrl.description().verify_setter(value) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Failed to verify value".to_string(),
-                    });
-                }
+                verify_or_error(isoctrl, value, &id)?;
 
                 device_set_exposure_custom(&self.inner, current_duration, new_iso);
 
                 Ok(())
             }
             KnownCameraControl::Gamma => {
-                let duration_ctrl = controls.get(&id).ok_or(NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: value.to_string(),
-                    error: "Control does not exist".to_string(),
-                })?;
-
-                check_control_flags(duration_ctrl, &id, value)?;
+                let duration_ctrl = get_and_check_control(&controls, &id, value)?;
 
                 let current_duration = device_exposure_duration(&self.inner);
                 let current_iso = iso_current();
                 let new_duration = CMTime {
-                    value: *value.as_integer().ok_or(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Expected i64".to_string(),
-                    })?,
+                    value: extract_integer(value, &id)?,
                     timescale: current_duration.timescale,
                     flags: current_duration.flags,
                     epoch: current_duration.epoch,
                 };
 
-                if !duration_ctrl.description().verify_setter(value) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Failed to verify value".to_string(),
-                    });
-                }
+                verify_or_error(duration_ctrl, value, &id)?;
 
                 device_set_exposure_custom(&self.inner, new_duration, current_iso);
 
                 Ok(())
             }
             KnownCameraControl::WhiteBalance => {
-                let wb_enum_value = controls.get(&id).ok_or(NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: value.to_string(),
-                    error: "Control does not exist".to_string(),
-                })?;
+                let wb_enum_value = get_and_check_control(&controls, &id, value)?;
 
-                check_control_flags(wb_enum_value, &id, value)?;
+                let setter = extract_enum(value, &id)?;
 
-                let setter = *value.as_enum().ok_or(NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: value.to_string(),
-                    error: "Expected Enum".to_string(),
-                })?;
-
-                if !wb_enum_value.description().verify_setter(value) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Failed to verify value".to_string(),
-                    });
-                }
+                verify_or_error(wb_enum_value, value, &id)?;
 
                 device_set_white_balance_mode(
                     &self.inner,
@@ -1254,40 +1206,18 @@ impl AVCaptureDeviceWrapper {
                 Ok(())
             }
             KnownCameraControl::BacklightComp => {
-                let ctrlvalue = controls.get(&id).ok_or(NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: value.to_string(),
-                    error: "Control does not exist".to_string(),
-                })?;
+                let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
-                check_control_flags(ctrlvalue, &id, value)?;
+                let setter = extract_boolean(value, &id)?;
 
-                let setter = *value.as_boolean().ok_or(NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: value.to_string(),
-                    error: "Expected Boolean".to_string(),
-                })?;
-
-                if !ctrlvalue.description().verify_setter(value) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Failed to verify value".to_string(),
-                    });
-                }
+                verify_or_error(ctrlvalue, value, &id)?;
 
                 device_set_auto_low_light_boost(&self.inner, setter);
 
                 Ok(())
             }
             KnownCameraControl::Gain => {
-                let ctrlvalue = controls.get(&id).ok_or(NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: value.to_string(),
-                    error: "Control does not exist".to_string(),
-                })?;
-
-                check_control_flags(ctrlvalue, &id, value)?;
+                let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
                 let (r, g, b) = value.as_rgb().ok_or(NokhwaError::SetPropertyError {
                     property: id.to_string(),
@@ -1295,13 +1225,7 @@ impl AVCaptureDeviceWrapper {
                     error: "Expected RGB".to_string(),
                 })?;
 
-                if !ctrlvalue.description().verify_setter(value) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Failed to verify value".to_string(),
-                    });
-                }
+                verify_or_error(ctrlvalue, value, &id)?;
 
                 let gains = AVCaptureWhiteBalanceGains {
                     redGain: *r as c_float,
@@ -1313,54 +1237,22 @@ impl AVCaptureDeviceWrapper {
                 Ok(())
             }
             KnownCameraControl::Zoom => {
-                let ctrlvalue = controls.get(&id).ok_or(NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: value.to_string(),
-                    error: "Control does not exist".to_string(),
-                })?;
+                let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
-                check_control_flags(ctrlvalue, &id, value)?;
+                let setter = extract_float(value, &id)? as CGFloat;
 
-                let setter = *value.as_float().ok_or(NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: value.to_string(),
-                    error: "Expected float".to_string(),
-                })? as CGFloat;
-
-                if !ctrlvalue.description().verify_setter(value) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Failed to verify value".to_string(),
-                    });
-                }
+                verify_or_error(ctrlvalue, value, &id)?;
 
                 device_ramp_to_video_zoom_factor(&self.inner, setter, 1.0_f32);
 
                 Ok(())
             }
             KnownCameraControl::Exposure => {
-                let ctrlvalue = controls.get(&id).ok_or(NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: value.to_string(),
-                    error: "Control does not exist".to_string(),
-                })?;
+                let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
-                check_control_flags(ctrlvalue, &id, value)?;
+                let setter = extract_enum(value, &id)?;
 
-                let setter = *value.as_enum().ok_or(NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: value.to_string(),
-                    error: "Expected Enum".to_string(),
-                })?;
-
-                if !ctrlvalue.description().verify_setter(value) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Failed to verify value".to_string(),
-                    });
-                }
+                verify_or_error(ctrlvalue, value, &id)?;
 
                 device_set_exposure_mode(&self.inner, AVCaptureExposureMode(setter as isize));
 
@@ -1372,27 +1264,11 @@ impl AVCaptureDeviceWrapper {
                 error: "Read Only".to_string(),
             }),
             KnownCameraControl::Focus => {
-                let ctrlvalue = controls.get(&id).ok_or(NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: value.to_string(),
-                    error: "Control does not exist".to_string(),
-                })?;
+                let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
-                check_control_flags(ctrlvalue, &id, value)?;
+                let setter = extract_enum(value, &id)?;
 
-                let setter = *value.as_enum().ok_or(NokhwaError::SetPropertyError {
-                    property: id.to_string(),
-                    value: value.to_string(),
-                    error: "Expected Enum".to_string(),
-                })?;
-
-                if !ctrlvalue.description().verify_setter(value) {
-                    return Err(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Failed to verify value".to_string(),
-                    });
-                }
+                verify_or_error(ctrlvalue, value, &id)?;
 
                 device_set_focus_mode(&self.inner, AVCaptureFocusMode(setter as isize));
 
@@ -1415,13 +1291,7 @@ impl AVCaptureDeviceWrapper {
                             y: *y as CGFloat,
                         })?;
 
-                    if !ctrlvalue.description().verify_setter(value) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Failed to verify value".to_string(),
-                        });
-                    }
+                    verify_or_error(ctrlvalue, value, &id)?;
 
                     device_set_focus_poi(&self.inner, setter);
 
@@ -1431,19 +1301,9 @@ impl AVCaptureDeviceWrapper {
                     // Focus manual lens position
                     let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
-                    let setter = *value.as_float().ok_or(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Expected float".to_string(),
-                    })? as c_float;
+                    let setter = extract_float(value, &id)? as c_float;
 
-                    if !ctrlvalue.description().verify_setter(value) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Failed to verify value".to_string(),
-                        });
-                    }
+                    verify_or_error(ctrlvalue, value, &id)?;
 
                     device_set_focus_mode_locked_with_lens_position(&self.inner, setter);
 
@@ -1465,13 +1325,7 @@ impl AVCaptureDeviceWrapper {
                             y: *y as CGFloat,
                         })?;
 
-                    if !ctrlvalue.description().verify_setter(value) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Failed to verify value".to_string(),
-                        });
-                    }
+                    verify_or_error(ctrlvalue, value, &id)?;
 
                     device_set_exposure_poi(&self.inner, setter);
 
@@ -1481,20 +1335,9 @@ impl AVCaptureDeviceWrapper {
                     // Face-driven auto exposure
                     let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
-                    let setter: bool =
-                        *value.as_boolean().ok_or(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Expected Boolean".to_string(),
-                        })?;
+                    let setter = extract_boolean(value, &id)?;
 
-                    if !ctrlvalue.description().verify_setter(value) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Failed to verify value".to_string(),
-                        });
-                    }
+                    verify_or_error(ctrlvalue, value, &id)?;
 
                     device_set_auto_adjusts_face_driven_auto_exposure(&self.inner, setter);
 
@@ -1504,19 +1347,9 @@ impl AVCaptureDeviceWrapper {
                     // Exposure target bias
                     let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
-                    let setter = *value.as_float().ok_or(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Expected Float".to_string(),
-                    })? as c_float;
+                    let setter = extract_float(value, &id)? as c_float;
 
-                    if !ctrlvalue.description().verify_setter(value) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Failed to verify value".to_string(),
-                        });
-                    }
+                    verify_or_error(ctrlvalue, value, &id)?;
 
                     device_set_exposure_target_bias(&self.inner, setter);
 
@@ -1526,19 +1359,9 @@ impl AVCaptureDeviceWrapper {
                     // Torch mode
                     let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
-                    let setter = *value.as_enum().ok_or(NokhwaError::SetPropertyError {
-                        property: id.to_string(),
-                        value: value.to_string(),
-                        error: "Expected Enum".to_string(),
-                    })?;
+                    let setter = extract_enum(value, &id)?;
 
-                    if !ctrlvalue.description().verify_setter(value) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Failed to verify value".to_string(),
-                        });
-                    }
+                    verify_or_error(ctrlvalue, value, &id)?;
 
                     device_set_torch_mode(&self.inner, AVCaptureTorchMode(setter as isize));
 
@@ -1548,20 +1371,9 @@ impl AVCaptureDeviceWrapper {
                     // Geometric distortion correction
                     let ctrlvalue = get_and_check_control(&controls, &id, value)?;
 
-                    let setter: bool =
-                        *value.as_boolean().ok_or(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Expected Boolean".to_string(),
-                        })?;
+                    let setter = extract_boolean(value, &id)?;
 
-                    if !ctrlvalue.description().verify_setter(value) {
-                        return Err(NokhwaError::SetPropertyError {
-                            property: id.to_string(),
-                            value: value.to_string(),
-                            error: "Failed to verify value".to_string(),
-                        });
-                    }
+                    verify_or_error(ctrlvalue, value, &id)?;
 
                     device_set_geometric_distortion_correction_enabled(&self.inner, setter);
 
@@ -1660,4 +1472,70 @@ fn get_and_check_control<'a>(
     })?;
     check_control_flags(ctrlvalue, id, value)?;
     Ok(ctrlvalue)
+}
+
+fn extract_float(value: &ControlValueSetter, id: &KnownCameraControl) -> Result<f64, NokhwaError> {
+    value
+        .as_float()
+        .copied()
+        .ok_or(NokhwaError::SetPropertyError {
+            property: id.to_string(),
+            value: value.to_string(),
+            error: "Expected float".to_string(),
+        })
+}
+
+fn extract_integer(
+    value: &ControlValueSetter,
+    id: &KnownCameraControl,
+) -> Result<i64, NokhwaError> {
+    value
+        .as_integer()
+        .copied()
+        .ok_or(NokhwaError::SetPropertyError {
+            property: id.to_string(),
+            value: value.to_string(),
+            error: "Expected i64".to_string(),
+        })
+}
+
+fn extract_enum(value: &ControlValueSetter, id: &KnownCameraControl) -> Result<i64, NokhwaError> {
+    value
+        .as_enum()
+        .copied()
+        .ok_or(NokhwaError::SetPropertyError {
+            property: id.to_string(),
+            value: value.to_string(),
+            error: "Expected Enum".to_string(),
+        })
+}
+
+fn extract_boolean(
+    value: &ControlValueSetter,
+    id: &KnownCameraControl,
+) -> Result<bool, NokhwaError> {
+    value
+        .as_boolean()
+        .copied()
+        .ok_or(NokhwaError::SetPropertyError {
+            property: id.to_string(),
+            value: value.to_string(),
+            error: "Expected bool".to_string(),
+        })
+}
+
+fn verify_or_error(
+    ctrl: &CameraControl,
+    value: &ControlValueSetter,
+    id: &KnownCameraControl,
+) -> Result<(), NokhwaError> {
+    if ctrl.description().verify_setter(value) {
+        Ok(())
+    } else {
+        Err(NokhwaError::SetPropertyError {
+            property: id.to_string(),
+            value: value.to_string(),
+            error: "Failed to verify value".to_string(),
+        })
+    }
 }
