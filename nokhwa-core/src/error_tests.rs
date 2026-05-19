@@ -52,10 +52,7 @@ fn structure_error_display_exact_format() {
 
 #[test]
 fn open_device_error_display_exact_format() {
-    let e = NokhwaError::OpenDeviceError {
-        device: "/dev/video2".into(),
-        error: "permission denied".into(),
-    };
+    let e = NokhwaError::open_device("/dev/video2", "permission denied");
     assert_eq!(
         format!("{e}"),
         "Could not open device /dev/video2: permission denied"
@@ -294,10 +291,7 @@ fn debug_format_timeout_variant_exact_format() {
 
 #[test]
 fn debug_format_open_device_struct_variant_exact_format() {
-    let e = NokhwaError::OpenDeviceError {
-        device: "cam0".to_string(),
-        error: "ENOENT".to_string(),
-    };
+    let e = NokhwaError::open_device("cam0", "ENOENT");
     assert_eq!(
         format!("{e:?}"),
         "OpenDeviceError { device: \"cam0\", error: \"ENOENT\" }"

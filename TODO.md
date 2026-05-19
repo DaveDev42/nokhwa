@@ -158,6 +158,14 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **`NokhwaError::open_device` call-site migration (refactor/migrate-open-device-call-sites)** —
+  Migrated all 14 `NokhwaError::OpenDeviceError { … }` struct-literal construction sites across
+  v4l (1), avfoundation/capture.rs (1), avfoundation/device.rs (2), msmf (3), gstreamer/uri.rs (2),
+  gstreamer/pipeline.rs (4), and nokhwa-core/error_tests.rs (2) to use the new
+  `NokhwaError::open_device(device, error)` shorthand constructor from PR #434. Bare `&'static str`
+  literals had redundant `.to_string()` dropped; `format!(…)` / `why.to_string()` calls left unchanged.
+  Pattern-match arms untouched. Display output identical.
+
 - **AVFoundation `DeclaredClass` + `Ivars` migration (refactor/avf-callback-declared-class)** —
   Replaced the deprecated `ClassBuilder` + `add_ivar` + `get_ivar` / `get_mut_ivar` / `#[allow(deprecated)]`
   pattern in `callback.rs` with the modern `define_class!` macro (`#[ivars = CaptureCallbackIvars]`,

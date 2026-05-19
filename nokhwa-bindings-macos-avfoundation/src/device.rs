@@ -589,10 +589,10 @@ impl AVCaptureDeviceWrapper {
 
                 match devices.get(*idx as usize) {
                     Some(device) => Ok(Self::from_id(&device.misc(), Some(index.clone()))?),
-                    None => Err(NokhwaError::OpenDeviceError {
-                        device: idx.to_string(),
-                        error: "device not found".to_string(),
-                    }),
+                    None => Err(NokhwaError::open_device(
+                        idx.to_string(),
+                        "device not found",
+                    )),
                 }
             }
             CameraIndex::String(id) => Ok(Self::from_id(id, None)?),
@@ -602,10 +602,8 @@ impl AVCaptureDeviceWrapper {
     pub fn from_id(id: &str, index_hint: Option<CameraIndex>) -> Result<Self, NokhwaError> {
         let nsstr_id = objc2_foundation::NSString::from_str(id);
         let capture = device_with_unique_id(&nsstr_id);
-        let capture = capture.ok_or_else(|| NokhwaError::OpenDeviceError {
-            device: id.to_string(),
-            error: "Device is null".to_string(),
-        })?;
+        let capture =
+            capture.ok_or_else(|| NokhwaError::open_device(id.to_string(), "Device is null"))?;
 
         let camera_info = get_raw_device_info(
             index_hint.unwrap_or_else(|| CameraIndex::String(id.to_string())),

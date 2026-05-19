@@ -649,18 +649,18 @@ pub mod wmf {
                                         (media_source, activate_to_descriptors(index, &activate)?)
                                     }
                                     Err(why) => {
-                                        return Err(NokhwaError::OpenDeviceError {
-                                            device: index.to_string(),
-                                            error: why.to_string(),
-                                        })
+                                        return Err(NokhwaError::open_device(
+                                            index.to_string(),
+                                            why.to_string(),
+                                        ))
                                     }
                                 }
                             }
                             None => {
-                                return Err(NokhwaError::OpenDeviceError {
-                                    device: index.to_string(),
-                                    error: "device not found".to_string(),
-                                })
+                                return Err(NokhwaError::open_device(
+                                    index.to_string(),
+                                    "device not found",
+                                ))
                             }
                         };
 
@@ -739,10 +739,7 @@ pub mod wmf {
 
                     match id_eq {
                         Some(index) => Self::new(CameraIndex::Index(index)),
-                        None => Err(NokhwaError::OpenDeviceError {
-                            device: s,
-                            error: "device not found".to_string(),
-                        }),
+                        None => Err(NokhwaError::open_device(s, "device not found")),
                     }
                 }
             }
