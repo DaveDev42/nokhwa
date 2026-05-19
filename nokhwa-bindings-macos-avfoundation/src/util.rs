@@ -6,8 +6,6 @@ use crate::ffi::{
     kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, OSType,
 };
 use nokhwa_core::types::FrameFormat;
-use std::borrow::Cow;
-use std::sync::mpsc::{Receiver, Sender};
 
 #[allow(non_upper_case_globals)]
 pub(crate) fn raw_fcc_to_frameformat(raw: OSType) -> Option<FrameFormat> {
@@ -22,9 +20,6 @@ pub(crate) fn raw_fcc_to_frameformat(raw: OSType) -> Option<FrameFormat> {
         _ => None,
     }
 }
-
-pub type CompressionData<'a> = (Cow<'a, [u8]>, FrameFormat, Option<std::time::Duration>);
-pub type DataPipe<'a> = (Sender<CompressionData<'a>>, Receiver<CompressionData<'a>>);
 
 #[cfg(test)]
 mod tests {

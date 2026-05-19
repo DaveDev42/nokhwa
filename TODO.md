@@ -110,6 +110,11 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **AVF DataPipe/CompressionData removal (refactor/avf-remove-unused-datapipe-and-legacy-comments)** —
+  compile-only refactor; no external callers existed. Verify AVF capture
+  still works normally on macOS with a webcam:
+  `cargo test --features device-test,input-avfoundation,runner`.
+
 - **`workflow_dispatch` auto-dispatch experiment reverted** (#398,
   #399, then this revert PR) — attempted to skip the
   `RELEASE_PLEASE_TOKEN` PAT by having `release-please.yml`
