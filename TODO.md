@@ -61,39 +61,33 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   Linux hardware that `controls()` still surfaces the same flag set on a
   webcam exercising AUTO_GAIN / GAIN gating.
 
-- [ ] **AVFoundation backends (0.14.1–0.14.3 window)** — hotplug + open +
-  frame-pull have only the `Build (macos)` compile check. Run
-  `cargo test --features device-test,input-avfoundation,runner` on a
-  Mac with a webcam (the self-hosted `macos-camera` runner is one such
-  machine; a local run is equally valid), plus `cargo run --example
-  hotplug_probe` for the hotplug path.
-- [ ] **AVFoundation DeclaredClass + Ivars migration (refactor/avf-callback-declared-class)** —
-  Migrated `callback.rs` from the deprecated `ClassBuilder` + `add_ivar` + `get_ivar` /
-  `get_mut_ivar` pattern to the modern `define_class!` macro with `#[ivars = CaptureCallbackIvars]`
-  and `unsafe impl AVCaptureVideoDataOutputSampleBufferDelegate`. Compile-checked via
-  `Build (macos)` + clippy. Verify frame delivery still works on Mac hardware:
-  `cargo test --features device-test,input-avfoundation,runner`.
 - [ ] **MSMF COM service helper refactor (refactor/msmf-com-service-helper)** —
   `get_camera_control_services()` consolidation has only the `Build (windows)`
   compile check. Verify control read/write on physical Windows hardware
   (`cargo test --features device-test,input-msmf,runner` on a Win box with a webcam).
-- [ ] **AVFoundation cleanup bundle (refactor/avf-helper-extraction)** —
-  `disabled_if_unsupported()` extraction and `pub(crate)` narrowing have only
-  `Build (macos)` + clippy compile coverage. Verify on Mac with a webcam:
-  `cargo test --features device-test,input-avfoundation,runner` + `cargo
-  run --example hotplug_probe`.
-- [ ] **AVFoundation set_control extract helpers (refactor/avf-set-control-extract-helpers)** —
-  `extract_float`/`extract_integer`/`extract_enum`/`extract_boolean`/`verify_or_error`
-  helpers replace ~15 inline copies of the same error-wrapping pattern. Compile-checked
-  via `Build (macos)` + clippy only. Verify per-control round-trip on Mac hardware:
-  `cargo test --features device-test,input-avfoundation,runner`. Specifically exercise
-  Brightness/Gamma/WhiteBalance/Sharpness/PowerLineFrequency/Focus/Exposure/Iris/Saturation
-  `set_control()` paths to confirm error messages and behavior are unchanged.
-
 - [ ] **MSMF FIRST_VIDEO_STREAM const unification (refactor/msmf-unify-first-video-stream-const)** —
   로컬 상수를 windows-rs import로 통일. 값 동일하지만 Windows에서 enum/format 열거가
   변함없이 동작하는지 확인: `cargo test --features device-test,input-msmf,runner` on
   a Windows box with a webcam attached.
+
+### AVFoundation bugs (discovered 2026-05-20 during verification)
+
+- [ ] **AVF numeric-string `CameraIndex` doesn't route to native backend** —
+  `CameraIndex::String("0")` returns `OpenDeviceError { device: "0", error: "Device is null" }`
+  instead of opening the camera at positional index 0. MSMF was fixed to handle this in
+  PR #387 (`fix(msmf): dedup compatible_format_list and treat numeric-string CameraIndex as positional`).
+  AVF needs the same treatment.
+  - Failing test: `open_numeric_string_routes_to_native_backend` in `nokhwa/tests/device_tests.rs` (~line 614).
+  - Likely fix: `src/session.rs` `open()` routing, or AVF `CaptureDevice::new` index parsing in
+    `nokhwa-bindings-macos-avfoundation/src/`.
+
+- [ ] **AVF `compatible_formats()` reports formats that `set_format()` cannot actually set** —
+  On FaceTime HD, `compatible_formats()` includes `CameraFormat { resolution: 1920x1080, format: NV12, frame_rate: 15 }`
+  but `set_format()` rejects it with "Not Found/Rejected/Unsupported". `compatible_formats()` should
+  only report formats the device can actually negotiate.
+  - Failing tests: `negotiated_format_after_set_format_matches` (~line 969) and
+    `set_format_from_compatible_round_trip` (~line 565) in `nokhwa/tests/device_tests.rs`.
+  - Likely fix: AVF `compatible_formats()` enumeration logic in `nokhwa-bindings-macos-avfoundation/src/`.
 
 ### Infrastructure / CI
 
@@ -176,7 +170,7 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   stores the sender pointer in a typed `CaptureCallbackIvars { arc_sender: Cell<*const c_void> }`
   and `AVCaptureVideoCallback.delegate` is a `Retained<MyCaptureCallback>` (ARC-managed) instead of
   a raw `*mut AnyObject`. Session dispatch via `msg_send!` unchanged; `inner()` exposes the raw pointer.
-  Runtime verification pending on macOS hardware: `cargo test --features device-test,input-avfoundation,runner`.
+  Runtime-verified 2026-05-20 on macOS (FaceTime HD): 34/37 device-tests pass; the 3 failures are pre-existing AVF bugs unrelated to this refactor — see Open.
 
 - **`NokhwaError::open_device`/`process_frame`/`structure` shorthand constructors (feat/core-add-open-device-process-frame-structure-constructors)** —
   Added three convenience constructors to `nokhwa-core/src/error.rs` following the pattern of
@@ -240,10 +234,24 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   `set_control` into a private `send_cmd` method. Error message text preserved verbatim;
   the test-pinned prefix `"runner thread gone: "` is unchanged.
 
+- **AVFoundation backends (0.14.1–0.14.3 window) runtime-verified** —
+  hotplug + open + frame-pull verified 2026-05-20 on macOS (FaceTime HD):
+  `cargo test --features device-test,input-avfoundation,runner` → 34/37 pass;
+  `cargo run --example hotplug_probe` started cleanly and listened for camera events.
+  3 failures are pre-existing AVF bugs unrelated to these releases — see Open.
+
+- **AVFoundation cleanup bundle (refactor/avf-helper-extraction)** —
+  `disabled_if_unsupported()` extraction and `pub(crate)` narrowing.
+  Runtime-verified 2026-05-20 on macOS (FaceTime HD): 34/37 device-tests pass; the 3 failures are pre-existing AVF bugs unrelated to this refactor — see Open.
+
+- **AVFoundation set_control extract helpers (refactor/avf-set-control-extract-helpers)** —
+  `extract_float`/`extract_integer`/`extract_enum`/`extract_boolean`/`verify_or_error`
+  helpers replace ~15 inline copies of the same error-wrapping pattern.
+  Runtime-verified 2026-05-20 on macOS (FaceTime HD): 34/37 device-tests pass; the 3 failures are pre-existing AVF bugs unrelated to this refactor — see Open.
+
 - **AVF DataPipe/CompressionData removal (refactor/avf-remove-unused-datapipe-and-legacy-comments)** —
-  compile-only refactor; no external callers existed. Verify AVF capture
-  still works normally on macOS with a webcam:
-  `cargo test --features device-test,input-avfoundation,runner`.
+  compile-only refactor; no external callers existed.
+  Runtime-verified 2026-05-20 on macOS (FaceTime HD): 34/37 device-tests pass; the 3 failures are pre-existing AVF bugs unrelated to this refactor — see Open.
 
 - **`workflow_dispatch` auto-dispatch experiment reverted** (#398,
   #399, then this revert PR) — attempted to skip the
