@@ -67,6 +67,12 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   Mac with a webcam (the self-hosted `macos-camera` runner is one such
   machine; a local run is equally valid), plus `cargo run --example
   hotplug_probe` for the hotplug path.
+- [ ] **AVFoundation DeclaredClass + Ivars migration (refactor/avf-callback-declared-class)** —
+  Migrated `callback.rs` from the deprecated `ClassBuilder` + `add_ivar` + `get_ivar` /
+  `get_mut_ivar` pattern to the modern `define_class!` macro with `#[ivars = CaptureCallbackIvars]`
+  and `unsafe impl AVCaptureVideoDataOutputSampleBufferDelegate`. Compile-checked via
+  `Build (macos)` + clippy. Verify frame delivery still works on Mac hardware:
+  `cargo test --features device-test,input-avfoundation,runner`.
 - [ ] **MSMF COM service helper refactor (refactor/msmf-com-service-helper)** —
   `get_camera_control_services()` consolidation has only the `Build (windows)`
   compile check. Verify control read/write on physical Windows hardware
@@ -151,6 +157,15 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   dispatches through `uridecodebin`.
 
 ## Shipped recently (for context)
+
+- **AVFoundation `DeclaredClass` + `Ivars` migration (refactor/avf-callback-declared-class)** —
+  Replaced the deprecated `ClassBuilder` + `add_ivar` + `get_ivar` / `get_mut_ivar` / `#[allow(deprecated)]`
+  pattern in `callback.rs` with the modern `define_class!` macro (`#[ivars = CaptureCallbackIvars]`,
+  `unsafe impl AVCaptureVideoDataOutputSampleBufferDelegate`). The `MyCaptureCallback` struct now
+  stores the sender pointer in a typed `CaptureCallbackIvars { arc_sender: Cell<*const c_void> }`
+  and `AVCaptureVideoCallback.delegate` is a `Retained<MyCaptureCallback>` (ARC-managed) instead of
+  a raw `*mut AnyObject`. Session dispatch via `msg_send!` unchanged; `inner()` exposes the raw pointer.
+  Runtime verification pending on macOS hardware: `cargo test --features device-test,input-avfoundation,runner`.
 
 - **`NokhwaError::open_device`/`process_frame`/`structure` shorthand constructors (feat/core-add-open-device-process-frame-structure-constructors)** —
   Added three convenience constructors to `nokhwa-core/src/error.rs` following the pattern of

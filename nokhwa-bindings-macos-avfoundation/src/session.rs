@@ -99,7 +99,7 @@ pub fn output_add_delegate(
     unsafe {
         let _: () = objc2::msg_send![
             output,
-            setSampleBufferDelegate: delegate.delegate,
+            setSampleBufferDelegate: delegate.inner(),
             queue: delegate.queue().0
         ];
     };
