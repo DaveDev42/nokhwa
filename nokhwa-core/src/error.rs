@@ -131,6 +131,38 @@ impl NokhwaError {
             error: error.into(),
         }
     }
+
+    /// Shorthand for `NokhwaError::OpenDeviceError { device, error }`.
+    #[must_use]
+    pub fn open_device(device: impl Into<String>, error: impl Into<String>) -> Self {
+        Self::OpenDeviceError {
+            device: device.into(),
+            error: error.into(),
+        }
+    }
+
+    /// Shorthand for `NokhwaError::ProcessFrameError { src, destination, error }`.
+    #[must_use]
+    pub fn process_frame(
+        src: FrameFormat,
+        destination: impl Into<String>,
+        error: impl Into<String>,
+    ) -> Self {
+        Self::ProcessFrameError {
+            src,
+            destination: destination.into(),
+            error: error.into(),
+        }
+    }
+
+    /// Shorthand for `NokhwaError::StructureError { structure, error }`.
+    #[must_use]
+    pub fn structure(structure: impl Into<String>, error: impl Into<String>) -> Self {
+        Self::StructureError {
+            structure: structure.into(),
+            error: error.into(),
+        }
+    }
 }
 
 #[cfg(test)]
