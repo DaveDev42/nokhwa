@@ -39,6 +39,13 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   `Build (macos)` + clippy compile coverage. Verify on Mac with a webcam:
   `cargo test --features device-test,input-avfoundation,runner` + `cargo
   run --example hotplug_probe`.
+- [ ] **AVFoundation set_control extract helpers (refactor/avf-set-control-extract-helpers)** —
+  `extract_float`/`extract_integer`/`extract_enum`/`extract_boolean`/`verify_or_error`
+  helpers replace ~15 inline copies of the same error-wrapping pattern. Compile-checked
+  via `Build (macos)` + clippy only. Verify per-control round-trip on Mac hardware:
+  `cargo test --features device-test,input-avfoundation,runner`. Specifically exercise
+  Brightness/Gamma/WhiteBalance/Sharpness/PowerLineFrequency/Focus/Exposure/Iris/Saturation
+  `set_control()` paths to confirm error messages and behavior are unchanged.
 
 ### Infrastructure / CI
 
