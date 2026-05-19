@@ -129,47 +129,6 @@ pub mod wmf {
     #[allow(clippy::cast_sign_loss)]
     const MF_FIRST_VIDEO_STREAM: u32 = MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32;
 
-    // const CAM_CTRL_AUTO: i32 = 0x0001;
-    // const CAM_CTRL_MANUAL: i32 = 0x0002;
-
-    // macro_rules! define_controls {
-    //     ( $( ($key:expr => ($property:ident, $min:ident, $max:ident, $step:ident, $default:ident, $flag:ident)) )* ) => {
-    //         $(
-    //         $key => {
-    //             if let Err(why) = unsafe {
-    //                     video_proc_amp.GetRange(
-    //                         $property.0,
-    //                         &mut $min,
-    //                         &mut $max,
-    //                         &mut $step,
-    //                         &mut $default,
-    //                         &mut $flag,
-    //                     )
-    //                 } {
-    //                     return Err(NokhwaError::GetPropertyError {
-    //                         property: stringify!($key).to_string(),
-    //                         error: why.to_string()
-    //                     });
-    //                 }
-    //         }
-    //         )*
-    //     };
-    //     ( $( ($key:expr : ($property:ident, $value:ident, $flag:ident)) )* ) => {
-    //         $(
-    //         $key => {
-    //             if let Err(why) = unsafe {
-    //                 video_proc_amp.Get($property.0, &mut $value, &mut $flag)
-    //                 } {
-    //                     return Err(NokhwaError::GetPropertyError {
-    //                         property: stringify!($key).to_string(),
-    //                         error: why.to_string()
-    //                     });
-    //                 }
-    //         }
-    //         )*
-    //     };
-    // }
-
     fn guid_to_frameformat(guid: GUID) -> Option<FrameFormat> {
         match guid {
             MF_VIDEO_FORMAT_NV12 => Some(FrameFormat::NV12),
