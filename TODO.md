@@ -404,6 +404,17 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **`hotplug_probe` prints real elapsed time and honours its 15-second budget (fix/hotplug-probe-real-elapsed)** —
+  the probe looped `for i in 0..30` calling `poll.next_timeout(Duration::from_millis(500))` and
+  printed each event's timestamp as `i * 500` ms. `next_timeout` returns *early* when an event
+  arrives, so the loop index was not a clock: printed timestamps drifted ahead of reality once
+  events landed, and — more importantly — every early return shortened the total listening window
+  well below the advertised 15 seconds (30 instant returns would exit in milliseconds). Now the
+  probe measures real elapsed time from a fixed `Instant` start, prints `start.elapsed()` for each
+  event, and runs a `while start.elapsed() < Duration::from_secs(15)` loop so it always listens for
+  the full budget regardless of how many events arrive. Examples-only; built + ran the full window
+  on macOS (`input-avfoundation`).
+
 - **`capture` Stream demo treats a frame-receive timeout as transient, not fatal (fix/capture-stream-timeout-not-fatal)** —
   the `Stream` subcommand in `examples/capture` pulled frames in a `loop` with
   `frames.recv_timeout(Duration::from_secs(2))` and returned an error on *any* `Err`,
