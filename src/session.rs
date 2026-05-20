@@ -501,6 +501,11 @@ impl HybridCamera {
     }
     /// # Errors
     /// Propagates the backend's error.
+    pub fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
+        FrameSource::frame_raw(&mut *self.inner)
+    }
+    /// # Errors
+    /// Propagates the backend's error.
     pub fn close(&mut self) -> Result<(), NokhwaError> {
         FrameSource::close(&mut *self.inner)
     }
