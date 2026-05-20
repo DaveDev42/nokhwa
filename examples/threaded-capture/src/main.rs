@@ -15,11 +15,11 @@
  */
 
 use nokhwa::error::NokhwaError;
-use nokhwa::format_types::Mjpeg;
-use nokhwa::frame::{Frame, IntoRgba};
-use nokhwa::utils::{ApiBackend, CameraIndex};
+use nokhwa::format_types::{Mjpeg, Nv12, RawBgr, RawRgb, Yuyv};
+use nokhwa::frame::{Frame, IntoRgba, RgbaConversion};
+use nokhwa::utils::{ApiBackend, CameraIndex, FrameFormat};
 use nokhwa::{
-    nokhwa_initialize, query, CameraRunner, open, OpenRequest, RunnerConfig,
+    nokhwa_initialize, open, query, Buffer, CameraRunner, OpenRequest, RunnerConfig,
 };
 use std::time::Duration;
 
@@ -53,8 +53,7 @@ fn main() -> Result<(), NokhwaError> {
             "callback: received buffer of {} bytes",
             buffer.buffer().len()
         );
-        let frame: Frame<Mjpeg> = Frame::new(buffer);
-        let image = frame.into_rgba().materialize()?;
+        let image = decode_to_rgba(buffer)?.materialize()?;
         println!(
             "poll: {}x{} ({} bytes)",
             image.width(),
@@ -64,4 +63,21 @@ fn main() -> Result<(), NokhwaError> {
     }
 
     runner.stop()
+}
+
+/// Wrap a `Buffer` in the typed `Frame<F>` matching its own fourcc and
+/// start a lazy RGBA conversion. Dispatching on the buffer's format
+/// avoids the panic that `Frame::<Mjpeg>::new` raises when the backend
+/// negotiates a non-MJPEG format (most Linux webcams pick YUYV).
+fn decode_to_rgba(buf: Buffer) -> Result<RgbaConversion, NokhwaError> {
+    match buf.source_frame_format() {
+        FrameFormat::MJPEG => Ok(Frame::<Mjpeg>::try_new(buf)?.into_rgba()),
+        FrameFormat::YUYV => Ok(Frame::<Yuyv>::try_new(buf)?.into_rgba()),
+        FrameFormat::NV12 => Ok(Frame::<Nv12>::try_new(buf)?.into_rgba()),
+        FrameFormat::RAWRGB => Ok(Frame::<RawRgb>::try_new(buf)?.into_rgba()),
+        FrameFormat::RAWBGR => Ok(Frame::<RawBgr>::try_new(buf)?.into_rgba()),
+        FrameFormat::GRAY => Err(NokhwaError::general(
+            "threaded-capture does not support GRAY/Luma cameras",
+        )),
+    }
 }
