@@ -264,11 +264,10 @@ mod internal {
             // the distinction between "no controls at all" and "ask
             // me again after `open()`" stays visible.
             let Some(pipeline) = &self.pipeline else {
-                return Err(NokhwaError::ReadFrameError {
-                    message: "GStreamer controls() requires an open pipeline; call open() first"
-                        .to_string(),
-                    format: None,
-                });
+                return Err(NokhwaError::get_property(
+                    "controls",
+                    "GStreamer controls() requires an open pipeline; call open() first",
+                ));
             };
             // URL sources have an `uridecodebin` source element that
             // exposes none of the v4l2-style control properties;
@@ -318,17 +317,25 @@ mod internal {
                     // already open we tear it down and restart so the
                     // change lands immediately; matches what the MSMF
                     // backend does for non-live property writes.
+                    //
+                    // The staged insert happens unconditionally so the
+                    // value is present on the next successful `open()`
+                    // even if the restart below fails.
                     let int_value = v4l2_cid_value(cid, &value)?;
                     local
                         .pending_extra_controls
                         .insert(cid.to_string(), int_value);
                     if matches!(self.pipeline, Some(ActivePipeline::Local(_))) {
-                        self.pipeline = None;
-                        self.pipeline = Some(ActivePipeline::Local(PipelineHandle::start(
+                        // Build the replacement pipeline before tearing
+                        // down the current one. On failure the old
+                        // pipeline keeps running and the device stays
+                        // in a usable streaming state.
+                        let new_pipeline = PipelineHandle::start(
                             &local.device,
                             local.negotiated,
                             build_extra_controls(&local.pending_extra_controls),
-                        )?));
+                        )?;
+                        self.pipeline = Some(ActivePipeline::Local(new_pipeline));
                     }
                     Ok(())
                 }
@@ -368,14 +375,23 @@ mod internal {
                 ));
             }
             let was_open = matches!(self.pipeline, Some(ActivePipeline::Local(_)));
-            self.pipeline = None;
-            local.negotiated = f;
             if was_open {
-                self.pipeline = Some(ActivePipeline::Local(PipelineHandle::start(
+                // Build the new pipeline first. Only commit `negotiated`
+                // and replace `self.pipeline` after the start succeeds so
+                // that a failure leaves the device in its prior state
+                // (old format, old pipeline still running).
+                let new_pipeline = PipelineHandle::start(
                     &local.device,
-                    local.negotiated,
+                    f,
                     build_extra_controls(&local.pending_extra_controls),
-                )?));
+                )?;
+                local.negotiated = f;
+                self.pipeline = Some(ActivePipeline::Local(new_pipeline));
+            } else {
+                // Pipeline not open: just record the desired format;
+                // it takes effect on the next `open()`.
+                local.negotiated = f;
+                self.pipeline = None;
             }
             Ok(())
         }

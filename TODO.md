@@ -66,6 +66,23 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   Windows hardware에서 `cargo test --features device-test,input-msmf,runner`로
   단일 스레드 open/close 시나리오가 여전히 동작하는지 확인.
 
+- [ ] **GStreamer restart-state fixes + controls() error variant (fix/gstreamer-pipeline-restart-state)** —
+  Three bug fixes in `nokhwa-bindings-gstreamer/src/lib.rs`, compile-verified only on macOS
+  (no GStreamer dev libs). (G1) `controls()` previously returned `ReadFrameError` when the
+  pipeline was closed; changed to `GetPropertyError` (semantically correct: property
+  introspection, not frame capture). (G2) `set_format()` previously mutated
+  `local.negotiated` before the restart succeeded, leaving the device with an incorrect
+  format on failure; now builds the replacement pipeline first and only commits the new
+  format + pipeline on success. (G3) `set_control(V4l2Cid)` previously set
+  `self.pipeline = None` before the restart, leaving the device closed on failure; now
+  builds the replacement pipeline before overwriting `self.pipeline` so the old pipeline
+  keeps running on failure. Verify on a Linux box with `v4l2loopback` or a real webcam:
+  `cargo test -p nokhwa-bindings-gstreamer --features input-gstreamer` and
+  `cargo test --features device-test,input-gstreamer` — confirm that `controls()` errors
+  cleanly on a closed pipeline, that `set_format()` with a bad format leaves the device
+  streaming the old format, and that a failed `set_control(V4l2Cid)` leaves the device
+  still streaming.
+
 - [ ] **GStreamer _touch_unsupported cleanup (refactor/gst-remove-touch-unsupported-workaround)** —
   Dropped the dead-code lint workaround function and its companion
   `unsupported` import. macOS does not have GStreamer dev libs locally, so
