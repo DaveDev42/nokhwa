@@ -38,6 +38,16 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   stream → drop (and rapid open/close cycles) leak no `Sender` and never fault during
   teardown: `cargo test --features device-test,input-avfoundation,runner`.
 
+- [ ] **MSMF capture timestamp accepts PTS 0 + overflow-safe (fix/msmf-capture-timestamp-zero-and-overflow)** —
+  `raw_bytes` computed `capture_ts` under `if sample_time_100ns > 0`, dropping a legitimate
+  first-frame presentation time of exactly `0` (returned `None`). The inner
+  `u64::try_from(sample_time_100ns).unwrap_or(0)` was also dead (the `> 0` guard already
+  excluded negatives) and the `* 100` could wrap in release. Replaced with a single
+  `u64::try_from(...).ok().and_then(checked_mul(100))…` chain: PTS `>= 0` maps to a stamp,
+  negative PTS → `None`, and the 100ns→ns scale uses `checked_mul`. Compile-checked in CI
+  (Windows). Verify on Windows hardware that frame timestamps are monotonic and that the
+  first frame carries a stamp: `cargo test --features device-test,input-msmf,runner`.
+
 - [ ] **MSMF `set_control` forces manual mode when writing an explicit value (fix/msmf-set-control-force-manual)** —
   `set_control` read the device's current auto/manual flag via `self.control(control)?` and forwarded
   that same flag to `IAMVideoProcAmp::Set`/`IAMCameraControl::Set`. When the device was in Auto mode,
