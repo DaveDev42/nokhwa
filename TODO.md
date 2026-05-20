@@ -147,6 +147,14 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **AVF active_format() reports negotiated fps from activeVideoMinFrameDuration (fix/avf-active-format-fps)** —
+  `active_format()` now reads `activeVideoMinFrameDuration` (the CMTime set by `set_all()`) and
+  converts it to fps (timescale/value), falling back to the format maximum only when the CMTime is
+  invalid (unset). Previously always returned the max fps from the format's ranges, so a format
+  with ranges [1–30] and [1–60] would report 60 fps even after negotiating 30. FaceTime HD has
+  single-range formats (one max fps per format), so the bug cannot manifest on this camera — no
+  regression (37/37 device-tests pass). Multi-range case is logic-verified.
+
 - **AVF control-layer triple fix: lock leak + inverted exposure flags + exposure POI active arg (fix/avf-control-flags-lock-leak)** —
   `set_all()` now unlocks on format-not-found early return (Bug A). `Gamma`/`Brightness` exposure
   controls now correctly mark `ReadOnly` when custom exposure is unsupported, writable when supported
