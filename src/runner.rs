@@ -446,8 +446,16 @@ impl CameraRunner {
             let (ev_cmd_tx, ev_cmd_rx) = channel::<()>();
             let event_tick = cfg.event_tick;
             let handle = thread::spawn(move || loop {
-                if let Ok(()) = ev_cmd_rx.try_recv() {
-                    break;
+                // Break on an explicit stop signal *or* a closed command
+                // channel. The latter covers the case where the main worker
+                // unwinds (e.g. a `frame()` panic) before it can send the
+                // signal: `ev_cmd_tx` is dropped, `try_recv` reports
+                // `Disconnected`, and the event thread exits instead of
+                // depending on the user-side event receiver being dropped to
+                // make `ev_tx.send` fail.
+                match ev_cmd_rx.try_recv() {
+                    Ok(()) | Err(TryRecvError::Disconnected) => break,
+                    Err(TryRecvError::Empty) => {}
                 }
                 if let Some(event) = poll.next_timeout(event_tick) {
                     if ev_tx.send(event).is_err() {
