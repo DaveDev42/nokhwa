@@ -90,7 +90,18 @@ pub trait FrameSource: CameraDevice {
         let cfmt = self.negotiated_format();
         let resolution = cfmt.resolution();
         let pxwidth = cfmt.format().decoded_pixel_byte_width();
-        let bpp = if alpha { pxwidth + 1 } else { pxwidth };
+        // GRAY decodes to full RGBA (4 bpp) when alpha is requested, not
+        // pxwidth+1=2. Every other format is 3 bpp RGB → 4 bpp RGBA via
+        // pxwidth+1, which is correct for those formats.
+        let bpp = if alpha {
+            if pxwidth == 1 {
+                4
+            } else {
+                pxwidth + 1
+            }
+        } else {
+            pxwidth
+        };
         (resolution.width() as usize) * (resolution.height() as usize) * bpp
     }
 

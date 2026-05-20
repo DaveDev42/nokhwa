@@ -449,22 +449,21 @@ fn decoded_buffer_size_gray_alpha_off_is_one_byte_per_pixel() {
 }
 
 #[test]
-fn decoded_buffer_size_gray_alpha_on_is_two_bytes_per_pixel() {
+fn decoded_buffer_size_gray_alpha_on_is_four_bytes_per_pixel() {
+    // GRAY+alpha decodes to RGBA: 4 bpp, not 2 (the old pxwidth+1 formula
+    // was wrong for GRAY because decoded_pixel_byte_width() returns 1 for
+    // GRAY, making pxwidth+1=2 instead of 4).
     let s = stub(FrameFormat::GRAY, 1920, 1080);
-    assert_eq!(s.decoded_buffer_size(true), 1920 * 1080 * 2);
+    assert_eq!(s.decoded_buffer_size(true), 1920 * 1080 * 4);
 }
 
 #[test]
-fn decoded_buffer_size_gray_alpha_on_smallest_resolution_is_two_bytes() {
-    // 1×1 GRAY + alpha is the only `decoded_buffer_size` configuration
-    // where `pxwidth + 1` evaluates to 2 (rather than 4, which is the
-    // 3-byte-format case). A future refactor that hard-codes
-    // "non-RGB formats get alpha=1 → bpp=2 ≡ wrong" or that conflates
-    // GRAY's 1-byte-per-pixel width with the 3-byte-per-pixel formats
-    // would fail this case while passing the existing 1920×1080
-    // GRAY+alpha test (large resolution masks the per-pixel formula).
+fn decoded_buffer_size_gray_alpha_on_smallest_resolution_is_four_bytes() {
+    // 1×1 GRAY+alpha must be 4 bytes (one RGBA pixel), not 2. This case
+    // previously validated the bug: pxwidth+1 = 1+1 = 2 for GRAY while
+    // convert_to_rgba actually produces w·h·4 bytes.
     let s = stub(FrameFormat::GRAY, 1, 1);
-    assert_eq!(s.decoded_buffer_size(true), 2);
+    assert_eq!(s.decoded_buffer_size(true), 4);
 }
 
 #[test]
