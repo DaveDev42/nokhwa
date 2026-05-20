@@ -123,15 +123,19 @@ impl UriPipelineHandle {
             }
             // Only link video pads — uridecodebin also produces audio
             // pads for streams that carry audio, which we don't want.
-            let is_video = new_pad
+            //
+            // `current_caps()` is the caps already set on the pad; on a
+            // freshly-added dynamic pad it can still be `None` until the
+            // first caps event flows, even though the pad is a decoded
+            // video output. Fall back to `query_caps(None)` (which forces
+            // a caps query) so we don't silently decline to link a valid
+            // video pad and then time out waiting for a first sample.
+            let caps = new_pad
                 .current_caps()
-                .and_then(|caps| {
-                    caps.structure(0).map(|s| {
-                        let name = s.name();
-                        name.starts_with("video/")
-                    })
-                })
-                .unwrap_or(false);
+                .unwrap_or_else(|| new_pad.query_caps(None));
+            let is_video = caps
+                .structure(0)
+                .is_some_and(|s| s.name().starts_with("video/"));
             if !is_video {
                 return;
             }

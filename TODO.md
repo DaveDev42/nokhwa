@@ -13,6 +13,19 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Runtime verification pending (compile-verified only)
 
+- [ ] **GStreamer URI pad-added falls back to `query_caps` (fix/gstreamer-uri-pad-caps-fallback)** —
+  the `uridecodebin` `pad-added` callback in `nokhwa-bindings-gstreamer/src/uri.rs` filtered
+  video pads using only `new_pad.current_caps()`. On a freshly-added dynamic pad `current_caps()`
+  can still be `None` until the first caps event flows, so a valid decoded video pad could be
+  silently declined — leaving `videoconvert` unlinked and the open path timing out after the 10s
+  `FIRST_SAMPLE_TIMEOUT` with a spurious "stream unreachable" error. Now falls back to
+  `new_pad.query_caps(None)` when `current_caps()` is `None`, then checks `structure(0)` for a
+  `video/` mime prefix as before (audio pads are still declined). Behind `feature = "backend"`,
+  which needs system GStreamer libs absent on the macOS dev box, so only compile-checked in CI
+  (`Feature check (input-gstreamer)` + `Build & test (input-gstreamer, …)`). Verify against a
+  real URL source — an `rtsp://` cam and a `file://*.mp4` — that the first sample arrives without
+  the timeout, and that an audio-only URL still errors cleanly rather than linking an audio pad.
+
 - [ ] **AVF callback drops unknown formats + checks lock return (fix/avf-callback-unknown-format-and-lock-check)** —
   The sample-buffer callback did `raw_fcc_to_frameformat(pixel_format).unwrap_or(FrameFormat::YUYV)`,
   so any unrecognised pixel format was forced through the YUYV (2 bpp) repack path, producing a
