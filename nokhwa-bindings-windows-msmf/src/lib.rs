@@ -48,8 +48,7 @@ pub mod wmf {
     };
     use windows::Win32::Media::DirectShow::{CameraControl_Flags_Auto, CameraControl_Flags_Manual};
     use windows::Win32::Media::MediaFoundation::{
-        MFCreateSample, MF_SOURCE_READERF_ENDOFSTREAM, MF_SOURCE_READERF_ERROR,
-        MF_SOURCE_READER_FIRST_VIDEO_STREAM,
+        MF_SOURCE_READERF_ENDOFSTREAM, MF_SOURCE_READERF_ERROR, MF_SOURCE_READER_FIRST_VIDEO_STREAM,
     };
     use windows::{
         core::{Interface, GUID, PWSTR},
@@ -1082,15 +1081,10 @@ pub mod wmf {
 
         pub fn raw_bytes(&mut self) -> Result<(Cow<'_, [u8]>, Option<Duration>), NokhwaError> {
             let frame_fmt = Some(self.device_format.format());
-            let mut imf_sample: Option<IMFSample> = match unsafe { MFCreateSample() } {
-                Ok(sample) => Some(sample),
-                Err(why) => {
-                    return Err(NokhwaError::ReadFrameError {
-                        message: why.to_string(),
-                        format: frame_fmt,
-                    });
-                }
-            };
+            // ReadSample populates this outparam directly; pre-allocating an
+            // IMFSample with MFCreateSample() was wasted work — the driver COM-
+            // releases the pre-created object and replaces it with the captured one.
+            let mut imf_sample: Option<IMFSample> = None;
             let mut stream_flags = 0;
             let mut sample_time_100ns: i64 = 0;
             {
