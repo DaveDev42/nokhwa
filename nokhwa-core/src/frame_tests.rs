@@ -4,8 +4,8 @@ use crate::error::NokhwaError;
 use crate::format_types::Mjpeg;
 use crate::format_types::{Gray, Nv12, RawBgr, RawRgb, Yuyv};
 use crate::frame::{
-    convert_to_rgb, convert_to_rgb_buffer, convert_to_rgba, convert_to_rgba_buffer, Frame,
-    IntoLuma, IntoRgb, IntoRgba,
+    convert_to_luma, convert_to_rgb, convert_to_rgb_buffer, convert_to_rgba,
+    convert_to_rgba_buffer, Frame, IntoLuma, IntoRgb, IntoRgba,
 };
 use crate::types::{FrameFormat, Resolution};
 use std::time::Duration;
@@ -1754,4 +1754,134 @@ fn convert_to_rgb_buffer_rawrgb_rejects_non_multiple_of_3_data() {
         "RGB",
         "RAWRGB data length not a multiple of 3",
     );
+}
+
+// ---------------------------------------------------------------------------
+// C1a: convert_to_rgb_buffer GRAY — data.len() != w*h guard
+// ---------------------------------------------------------------------------
+
+// Before the fix, a GRAY buffer whose length didn't match the declared
+// resolution would skip the w*h check and land directly in the dest-size
+// check (`dest.len() != data.len() * 3`), silently producing wrong-
+// dimensioned output. Now the w*h guard fires first.
+
+#[test]
+fn convert_to_rgb_buffer_gray_rejects_resolution_mismatch() {
+    // Resolution 2×2 expects 4 bytes; supply 3 — the w*h guard must fire.
+    let data = vec![10u8, 20, 30];
+    let mut dest = vec![0u8; 9]; // 3 * 3 = 9 would satisfy the OLD dest check
+    let err = convert_to_rgb_buffer(FrameFormat::GRAY, Resolution::new(2, 2), &data, &mut dest)
+        .unwrap_err();
+    assert_process_frame_err(
+        err,
+        FrameFormat::GRAY,
+        "RGB",
+        "GRAY data length 3 does not match resolution 4",
+    );
+}
+
+#[test]
+fn convert_to_rgb_buffer_gray_correct_size_ok() {
+    // 2×2 GRAY → RGB: data.len() == 4 == w*h, dest.len() == 12 == 4*3. Must succeed.
+    let data = vec![10u8, 50, 200, 255];
+    let mut dest = vec![0u8; 12];
+    convert_to_rgb_buffer(FrameFormat::GRAY, Resolution::new(2, 2), &data, &mut dest)
+        .expect("GRAY rgb_buffer happy path");
+    assert_eq!(
+        dest,
+        vec![10, 10, 10, 50, 50, 50, 200, 200, 200, 255, 255, 255]
+    );
+}
+
+// ---------------------------------------------------------------------------
+// C1b: convert_to_rgba GRAY — data.len() != w*h guard
+// ---------------------------------------------------------------------------
+
+#[test]
+fn convert_to_rgba_gray_rejects_resolution_mismatch() {
+    // Resolution 2×2 expects 4 bytes; supply 5.
+    let data = vec![10u8, 20, 30, 40, 50];
+    let err = convert_to_rgba(FrameFormat::GRAY, Resolution::new(2, 2), &data).unwrap_err();
+    assert_process_frame_err(
+        err,
+        FrameFormat::GRAY,
+        "RGBA",
+        "GRAY data length 5 does not match resolution 4",
+    );
+}
+
+#[test]
+fn convert_to_rgba_gray_correct_size_ok() {
+    // 2×2 GRAY → RGBA. Each pixel becomes [Y, Y, Y, 255].
+    let data = vec![10u8, 50, 200, 255];
+    let rgba = convert_to_rgba(FrameFormat::GRAY, Resolution::new(2, 2), &data)
+        .expect("GRAY rgba happy path");
+    assert_eq!(rgba.len(), 16);
+    assert_eq!(
+        rgba,
+        vec![10, 10, 10, 255, 50, 50, 50, 255, 200, 200, 200, 255, 255, 255, 255, 255]
+    );
+}
+
+// ---------------------------------------------------------------------------
+// C1b also: convert_to_rgba_buffer GRAY — data.len() != w*h guard
+// ---------------------------------------------------------------------------
+
+#[test]
+fn convert_to_rgba_buffer_gray_rejects_resolution_mismatch() {
+    // Resolution 2×2 expects 4 bytes; supply 6.
+    let data = vec![10u8, 20, 30, 40, 50, 60];
+    let mut dest = vec![0u8; 24]; // 6 * 4 — would pass OLD dest check
+    let err = convert_to_rgba_buffer(FrameFormat::GRAY, Resolution::new(2, 2), &data, &mut dest)
+        .unwrap_err();
+    assert_process_frame_err(
+        err,
+        FrameFormat::GRAY,
+        "RGBA",
+        "GRAY data length 6 does not match resolution 4",
+    );
+}
+
+#[test]
+fn convert_to_rgba_buffer_gray_correct_size_ok() {
+    // 2×2 GRAY → RGBA buffer. Each pixel becomes [Y, Y, Y, 255].
+    let data = vec![10u8, 50, 200, 255];
+    let mut dest = vec![0u8; 16];
+    convert_to_rgba_buffer(FrameFormat::GRAY, Resolution::new(2, 2), &data, &mut dest)
+        .expect("GRAY rgba_buffer happy path");
+    assert_eq!(
+        dest,
+        vec![10, 10, 10, 255, 50, 50, 50, 255, 200, 200, 200, 255, 255, 255, 255, 255]
+    );
+}
+
+// ---------------------------------------------------------------------------
+// C2: convert_to_luma GRAY — data.len() != w*h guard
+// ---------------------------------------------------------------------------
+
+// Before the fix, GRAY luma passthrough (`Ok(data.to_vec())`) had no size
+// validation at all. A mismatched-length buffer would silently return a
+// Vec with the wrong number of pixels, causing ImageBuffer::from_raw to
+// fail or to accept wrong-dimensioned data.
+
+#[test]
+fn convert_to_luma_gray_rejects_resolution_mismatch() {
+    // Resolution 3×3 expects 9 bytes; supply 7.
+    let data = vec![10u8; 7];
+    let err = convert_to_luma(FrameFormat::GRAY, Resolution::new(3, 3), &data).unwrap_err();
+    assert_process_frame_err(
+        err,
+        FrameFormat::GRAY,
+        "Luma",
+        "GRAY data length 7 does not match resolution 9",
+    );
+}
+
+#[test]
+fn convert_to_luma_gray_correct_size_ok() {
+    // 2×2 GRAY → Luma: passthrough, same bytes.
+    let data = vec![10u8, 50, 200, 255];
+    let luma = convert_to_luma(FrameFormat::GRAY, Resolution::new(2, 2), &data)
+        .expect("GRAY luma happy path");
+    assert_eq!(luma, data);
 }

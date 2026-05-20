@@ -228,6 +228,15 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **`nokhwa-core` GRAY/NV12 luma buffer dimension validation (fix/core-gray-nv12-luma-dimension-guards)** —
+  C1: `convert_to_rgb_buffer` / `convert_to_rgba` / `convert_to_rgba_buffer` GRAY arms were missing
+  the `data.len() == w*h` guard present in `convert_to_rgb`'s GRAY arm — added to all three, matching
+  the existing message style. C2: `convert_to_luma` GRAY arm returned `Ok(data.to_vec())` with no size
+  validation — added the same `w*h` guard. C3: `buf_nv12_extract_luma` skipped the even-dimension check
+  present in `buf_nv12_to_rgb`, so `y_size * 3 / 2` truncated for odd dimensions — added the identical
+  `!width.is_multiple_of(2) || !height.is_multiple_of(2)` guard with target label "Luma".
+  All fixes are pure logic, covered by 11 new unit tests; 399/399 `nokhwa-core` tests pass in CI.
+
 - **MSMF `set_control` forces manual mode when writing explicit value (fix/msmf-set-control-force-manual)** —
   `set_control` was forwarding the device's current auto/manual flag to the driver's `Set` call.
   When the device was in Auto mode, writing an explicit value sent `CameraControl_Flags_Auto` and

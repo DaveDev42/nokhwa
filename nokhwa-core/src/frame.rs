@@ -438,6 +438,17 @@ pub(crate) fn convert_to_rgb_buffer(
         }
         FrameFormat::RAWBGR => buf_bgr_to_rgb(resolution, data, dest),
         FrameFormat::GRAY => {
+            let expected = resolution.width() as usize * resolution.height() as usize;
+            if data.len() != expected {
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "RGB",
+                    format!(
+                        "GRAY data length {} does not match resolution {expected}",
+                        data.len()
+                    ),
+                ));
+            }
             if dest.len() != data.len() * 3 {
                 return Err(NokhwaError::process_frame(fcc, "RGB", "Bad buffer length"));
             }
@@ -486,6 +497,17 @@ pub(crate) fn convert_to_rgba(
             Ok(rgba)
         }
         FrameFormat::GRAY => {
+            let expected = resolution.width() as usize * resolution.height() as usize;
+            if data.len() != expected {
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "RGBA",
+                    format!(
+                        "GRAY data length {} does not match resolution {expected}",
+                        data.len()
+                    ),
+                ));
+            }
             let mut rgba = vec![0u8; data.len() * 4];
             for (dst, &pxv) in rgba.chunks_exact_mut(4).zip(data.iter()) {
                 dst.copy_from_slice(&[pxv, pxv, pxv, 255]);
@@ -550,6 +572,17 @@ pub(crate) fn convert_to_rgba_buffer(
             Ok(())
         }
         FrameFormat::GRAY => {
+            let expected = resolution.width() as usize * resolution.height() as usize;
+            if data.len() != expected {
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "RGBA",
+                    format!(
+                        "GRAY data length {} does not match resolution {expected}",
+                        data.len()
+                    ),
+                ));
+            }
             if dest.len() != data.len() * 4 {
                 return Err(NokhwaError::process_frame(fcc, "RGBA", "Bad buffer length"));
             }
@@ -576,7 +609,20 @@ pub(crate) fn convert_to_luma(
     data: &[u8],
 ) -> Result<Vec<u8>, NokhwaError> {
     match fcc {
-        FrameFormat::GRAY => Ok(data.to_vec()),
+        FrameFormat::GRAY => {
+            let expected = resolution.width() as usize * resolution.height() as usize;
+            if data.len() != expected {
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "Luma",
+                    format!(
+                        "GRAY data length {} does not match resolution {expected}",
+                        data.len()
+                    ),
+                ));
+            }
+            Ok(data.to_vec())
+        }
         // Direct Y-channel extraction for YUYV and NV12
         FrameFormat::YUYV => {
             let mut dest = vec![0u8; resolution.width() as usize * resolution.height() as usize];

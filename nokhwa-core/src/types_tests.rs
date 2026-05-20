@@ -3111,6 +3111,56 @@ fn buf_nv12_extract_luma_rejects_input_and_dest_size_mismatches() {
     assert_process_frame_error(err, FrameFormat::NV12);
 }
 
+// C3: buf_nv12_extract_luma must reject odd dimensions, just like buf_nv12_to_rgb.
+// Before the fix, `y_size * 3 / 2` truncated for odd pixel counts (e.g. 3×3 = 9
+// pixels → 9 * 3 / 2 = 13 bytes expected instead of the correct 13.5, which is
+// not an integer). This made the size-validation imprecise and allowed silent
+// extraction on invalid NV12 layouts.
+#[test]
+fn buf_nv12_extract_luma_rejects_odd_width() {
+    // 3×2: width is odd — matches the `buf_nv12_to_rgb` guard style.
+    // NV12 with odd dimensions is not a valid layout.
+    let res = Resolution::new(3, 2);
+    // Provide a plausibly-sized buffer (3*2*3/2 = 9 bytes). The parity
+    // check must fire regardless of whether the buffer size looks right.
+    let data = vec![0u8; 9];
+    let mut dest = vec![0u8; 6];
+    let err = buf_nv12_extract_luma(res, &data, &mut dest).expect_err("odd width must be rejected");
+    assert_process_frame_error(err, FrameFormat::NV12);
+}
+
+#[test]
+fn buf_nv12_extract_luma_rejects_odd_height() {
+    // 2×3: height is odd.
+    let res = Resolution::new(2, 3);
+    let data = vec![0u8; 9];
+    let mut dest = vec![0u8; 6];
+    let err =
+        buf_nv12_extract_luma(res, &data, &mut dest).expect_err("odd height must be rejected");
+    assert_process_frame_error(err, FrameFormat::NV12);
+}
+
+#[test]
+fn buf_nv12_extract_luma_even_dimensions_ok() {
+    // 4×4 (even width, even height): parity guard passes, and with the
+    // right-sized buffers the extraction must succeed and copy the Y plane.
+    let res = Resolution::new(4, 4);
+    let mut data = Vec::with_capacity(24);
+    for y in 1..=16u8 {
+        data.push(y);
+    }
+    for uv in 100..108u8 {
+        data.push(uv);
+    }
+    let mut dest = vec![0u8; 16];
+    buf_nv12_extract_luma(res, &data, &mut dest).expect("even 4×4 must succeed");
+    assert_eq!(
+        dest,
+        (1..=16u8).collect::<Vec<_>>(),
+        "Y plane must be copied verbatim with no UV bleed"
+    );
+}
+
 #[test]
 fn buf_bgr_to_rgb_rejects_size_mismatches() {
     // BGR-to-RGB is a flat 3-bytes-per-pixel byte shuffle; any pixel
