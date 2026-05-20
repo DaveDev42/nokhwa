@@ -331,7 +331,7 @@ mod internal {
                         FrameSizeEnum::Discrete(d) => [Resolution::new(d.width, d.height)].to_vec(),
                         FrameSizeEnum::Stepwise(s) => {
                             let mut v = Vec::new();
-                            Self::expand_stepwise_resolutions(
+                            expand_stepwise_resolutions(
                                 s.min_width,
                                 s.max_width,
                                 s.step_width,
