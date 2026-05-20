@@ -175,20 +175,22 @@ impl FrameSource for MediaFoundationCaptureDevice {
 
     fn frame(&mut self) -> Result<Buffer, NokhwaError> {
         self.refresh_camera_format()?;
+        // Take ownership of the bytes immediately so the `&mut self.inner`
+        // borrow held by the returned `Cow` ends here — only then can we
+        // read `negotiated_format()` (a shared borrow of `self.inner`).
         let (bytes, capture_ts) = self.inner.raw_bytes()?;
+        let bytes = bytes.into_owned();
         // Snapshot the format *after* the read: `raw_bytes` refreshes the
         // cached format if the driver renegotiated mid-stream, so reading it
         // here tags the buffer with the format the bytes are actually in.
         let self_ctrl = self.negotiated_format();
         let ts = capture_ts.map(|ts| (ts, TimestampKind::MonotonicClock));
-        Ok(match bytes {
-            Cow::Owned(vec) => {
-                Buffer::from_vec_with_timestamp(self_ctrl.resolution(), vec, self_ctrl.format(), ts)
-            }
-            Cow::Borrowed(slice) => {
-                Buffer::with_timestamp(self_ctrl.resolution(), slice, self_ctrl.format(), ts)
-            }
-        })
+        Ok(Buffer::from_vec_with_timestamp(
+            self_ctrl.resolution(),
+            bytes,
+            self_ctrl.format(),
+            ts,
+        ))
     }
 
     fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
