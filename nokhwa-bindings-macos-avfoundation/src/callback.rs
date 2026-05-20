@@ -271,11 +271,21 @@ define_class!(
             }
 
             let pixel_format = unsafe { CVPixelBufferGetPixelFormatType(image_buffer) };
-            let frame_format = raw_fcc_to_frameformat(pixel_format).unwrap_or(FrameFormat::YUYV);
-
-            unsafe {
-                CVPixelBufferLockBaseAddress(image_buffer, 0);
+            // Drop frames whose pixel format we don't recognise rather than
+            // forcing them through the YUYV (2 bpp) repack path: an unknown
+            // format reinterpreted as packed YUYV yields a wrong-length, garbage
+            // frame. The negotiated capture format is constrained at `set_all`,
+            // so a known format is the steady-state expectation.
+            let Some(frame_format) = raw_fcc_to_frameformat(pixel_format) else {
+                return;
             };
+
+            // Bail without touching plane data (and without a mismatched Unlock)
+            // if the base-address lock fails — the plane pointers would be
+            // invalid. kCVReturnSuccess is 0.
+            if unsafe { CVPixelBufferLockBaseAddress(image_buffer, 0) } != 0 {
+                return;
+            }
 
             // Repack honoring planar layout + per-row stride. Returns a
             // tight-packed buffer in the canonical layout the decoders
