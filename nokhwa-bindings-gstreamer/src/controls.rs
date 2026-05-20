@@ -168,22 +168,32 @@ pub(crate) fn set_live_property(
 }
 
 /// Build a GstStructure usable as `v4l2src`'s `extra-controls`
-/// property from a pending-controls map. Returns `None` if the map is
-/// empty so the caller can skip setting the property at all (empty
-/// extra-controls is a no-op but triggers a warning).
+/// property from a pending-controls map. Returns `Ok(None)` if the
+/// map is empty so the caller can skip setting the property at all
+/// (empty extra-controls is a no-op but triggers a warning).
+///
+/// Returns `Err` if any stored `i64` value falls outside the `i32`
+/// range expected by v4l2src (V4L2 CIDs are `__s32`-valued).
 pub(crate) fn build_extra_controls(
     pending: &BTreeMap<String, i64>,
-) -> Option<gstreamer::Structure> {
+) -> Result<Option<gstreamer::Structure>, NokhwaError> {
     if pending.is_empty() {
-        return None;
+        return Ok(None);
     }
     // v4l2src expects the structure name to be "c" (as in
     // `controls`); any other name is ignored silently.
     let mut builder = gstreamer::Structure::builder("c");
     for (k, v) in pending {
-        builder = builder.field(k.as_str(), *v as i32);
+        let v32 = i32::try_from(*v).map_err(|_| {
+            NokhwaError::set_property(
+                k.clone(),
+                v.to_string(),
+                "i64 value exceeds i32 range expected by v4l2src extra-controls",
+            )
+        })?;
+        builder = builder.field(k.as_str(), v32);
     }
-    Some(builder.build())
+    Ok(Some(builder.build()))
 }
 
 /// Translate a [`ControlValueSetter`] into the integer payload used by
@@ -336,7 +346,7 @@ mod tests {
         // Empty pending → caller skips the property set entirely
         // (setting an empty `extra-controls` triggers a v4l2src warning
         // at PAUSED transition).
-        assert!(build_extra_controls(&BTreeMap::new()).is_none());
+        assert!(build_extra_controls(&BTreeMap::new()).unwrap().is_none());
     }
 
     #[test]
@@ -344,7 +354,9 @@ mod tests {
         ensure_gst_init();
         let mut pending = BTreeMap::new();
         pending.insert("zoom_absolute".to_string(), 5);
-        let structure = build_extra_controls(&pending).expect("Some for non-empty pending");
+        let structure = build_extra_controls(&pending)
+            .expect("Ok for valid values")
+            .expect("Some for non-empty pending");
         // v4l2src ignores the structure if the name is anything other
         // than "c" — pin the spelling.
         assert_eq!(structure.name(), "c");
@@ -357,23 +369,38 @@ mod tests {
         pending.insert("zoom_absolute".to_string(), 5);
         pending.insert("focus_absolute".to_string(), 100);
         pending.insert("exposure_time_absolute".to_string(), 250);
-        let structure = build_extra_controls(&pending).unwrap();
+        let structure = build_extra_controls(&pending).unwrap().unwrap();
         assert_eq!(structure.get::<i32>("zoom_absolute").unwrap(), 5);
         assert_eq!(structure.get::<i32>("focus_absolute").unwrap(), 100);
         assert_eq!(structure.get::<i32>("exposure_time_absolute").unwrap(), 250);
     }
 
     #[test]
-    fn build_extra_controls_truncates_i64_to_i32() {
-        // V4L2 CIDs are `__s32`-valued; a caller passing an out-of-range
-        // i64 today gets a silent `as i32` truncation. This is documented
-        // (only) by this test — if/when we change the signature to
-        // surface the overflow, update this test.
+    fn build_extra_controls_errors_on_i64_outside_i32_range() {
+        // V4L2 CIDs are `__s32`-valued; an out-of-range i64 must now
+        // produce a `SetPropertyError` naming the offending CID, the
+        // raw i64, and the canonical error string rather than silently
+        // wrapping/truncating.
         ensure_gst_init();
         let mut pending = BTreeMap::new();
-        pending.insert("focus_absolute".to_string(), i64::from(i32::MAX) + 1);
-        let structure = build_extra_controls(&pending).unwrap();
-        assert_eq!(structure.get::<i32>("focus_absolute").unwrap(), i32::MIN);
+        let bad_value = i64::from(i32::MAX) + 1;
+        pending.insert("focus_absolute".to_string(), bad_value);
+        let err = build_extra_controls(&pending).unwrap_err();
+        match err {
+            NokhwaError::SetPropertyError {
+                property,
+                value,
+                error,
+            } => {
+                assert_eq!(property, "focus_absolute");
+                assert_eq!(value, bad_value.to_string());
+                assert_eq!(
+                    error,
+                    "i64 value exceeds i32 range expected by v4l2src extra-controls"
+                );
+            }
+            other => panic!("expected SetPropertyError, got {other:?}"),
+        }
     }
 
     #[test]
@@ -459,12 +486,12 @@ mod tests {
     /// are therefore pure functions of the input.
     ///
     /// Branch 1 — `Integer(i)` with `i` outside `i32` range. The
-    /// sibling `v4l2_cid_value` is `i64`-passthrough (the `as i32`
-    /// truncation only happens later inside `build_extra_controls`,
-    /// pinned by `build_extra_controls_truncates_i64_to_i32`).
+    /// sibling `v4l2_cid_value` is `i64`-passthrough (the overflow
+    /// check happens later inside `build_extra_controls`, which now
+    /// returns `Err` — pinned by `build_extra_controls_errors_on_i64_outside_i32_range`).
     /// `set_live_property` instead errors *eagerly* — pin that
-    /// divergence so a future refactor that unifies the two by
-    /// silently truncating here doesn't quietly drop user values.
+    /// divergence so a future refactor that unifies the two doesn't
+    /// quietly drop user values.
     /// Pin all three fields of the resulting `SetPropertyError`
     /// (property name, the raw i64 stringified into `value`, canonical
     /// error string) verbatim. The `value` field on this branch is

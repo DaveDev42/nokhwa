@@ -333,7 +333,7 @@ mod internal {
                         let new_pipeline = PipelineHandle::start(
                             &local.device,
                             local.negotiated,
-                            build_extra_controls(&local.pending_extra_controls),
+                            build_extra_controls(&local.pending_extra_controls)?,
                         )?;
                         self.pipeline = Some(ActivePipeline::Local(new_pipeline));
                     }
@@ -383,7 +383,7 @@ mod internal {
                 let new_pipeline = PipelineHandle::start(
                     &local.device,
                     f,
-                    build_extra_controls(&local.pending_extra_controls),
+                    build_extra_controls(&local.pending_extra_controls)?,
                 )?;
                 local.negotiated = f;
                 self.pipeline = Some(ActivePipeline::Local(new_pipeline));
@@ -427,7 +427,7 @@ mod internal {
                     self.pipeline = Some(ActivePipeline::Local(PipelineHandle::start(
                         &local.device,
                         local.negotiated,
-                        build_extra_controls(&local.pending_extra_controls),
+                        build_extra_controls(&local.pending_extra_controls)?,
                     )?));
                 }
                 BackendSource::Uri(uri) => {

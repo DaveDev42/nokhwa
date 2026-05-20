@@ -183,9 +183,12 @@ impl TokioCameraRunner {
     /// Returns [`NokhwaError`] only if the `spawn_blocking` task panics.
     pub async fn stop(mut self) -> Result<(), NokhwaError> {
         // `abort()` on spawn_blocking tasks is advisory — see the
-        // crate-level note. Forwarders actually exit when their
-        // `sync_rx.recv()` returns Err, which happens as soon as the
-        // sync runner's `Drop` closes its senders below.
+        // crate-level note. Forwarders actually exit because the async
+        // receivers are dropped below: once `self.frames/pictures/events`
+        // are set to `None`, the next `blocking_send` inside each
+        // forwarder returns `Err` and the loop exits. The `abort()` call
+        // is belt-and-suspenders to signal the tokio scheduler; the actual
+        // exit mechanism is the broken async sender, not `sync_rx.recv()`.
         for f in self.forwarders.drain(..) {
             f.abort();
         }
