@@ -1,4 +1,4 @@
-//! GStreamer backend controls (session 3).
+//! GStreamer backend controls.
 //!
 //! ## Scope
 //!

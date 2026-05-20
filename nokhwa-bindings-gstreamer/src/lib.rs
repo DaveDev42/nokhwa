@@ -27,8 +27,8 @@
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::cast_possible_wrap)]
 // Long fns in this crate are the pipeline-construction path in
-// `PipelineHandle::start` (sessions 2/5) and the open() routing in
-// `lib.rs::new`. Splitting them by line count alone would harm
+// `PipelineHandle::start` (local + URL sources) and the open() routing
+// in `lib.rs::new`. Splitting them by line count alone would harm
 // readability more than it helps.
 #![allow(clippy::too_many_lines)]
 // `doc_markdown` fires on every unbackticked identifier (`GStreamer`,
@@ -130,8 +130,7 @@ mod internal {
     /// URL-based source metadata: the URI we build a pipeline around.
     /// `negotiated` is populated after the first successful `open()`
     /// because URL streams don't advertise caps before we connect.
-    /// Session-5 added this branch for `rtsp://` / `http://` /
-    /// `file://` etc.
+    /// This branch handles `rtsp://` / `http://` / `file://` etc.
     struct UriSource {
         uri: String,
         /// `None` until the first successful `open()` — no pre-flight

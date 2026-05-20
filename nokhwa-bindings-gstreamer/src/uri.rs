@@ -1,7 +1,7 @@
 //! URL/URI detection + pipeline construction for the GStreamer
-//! backend's session-5 "open by URL" mode.
+//! backend's "open by URL" mode.
 //!
-//! The device-monitor path (sessions 2/3) covers local cameras; this
+//! The device-monitor path covers local cameras; this
 //! module covers `rtsp://` / `rtmp://` / `http(s)://` / `file://` and
 //! similar URIs that don't show up in `DeviceMonitor`. One pipeline
 //! shape covers all of them because GStreamer's [`uridecodebin`]

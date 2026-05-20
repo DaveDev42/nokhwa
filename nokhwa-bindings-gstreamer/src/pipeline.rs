@@ -1,4 +1,4 @@
-//! GStreamer pipeline lifecycle for session-2 streaming.
+//! GStreamer pipeline lifecycle for local-device streaming.
 //!
 //! Pipeline shape:
 //!
@@ -72,7 +72,7 @@ impl PipelineHandle {
             NokhwaError::set_property(
                 "FrameFormat",
                 format!("{:?}", format.format()),
-                "not supported by GStreamer session-2 pipeline",
+                "not supported by the GStreamer pipeline",
             )
         })?;
 
@@ -142,19 +142,32 @@ impl PipelineHandle {
             .link(&sink_element)
             .map_err(|err| element_err("link convert->appsink", &err.to_string()))?;
 
-        let state_change =
-            pipeline
-                .set_state(State::Playing)
-                .map_err(|e| NokhwaError::OpenStreamError {
+        // On any startup failure the pipeline may already be in
+        // PAUSED/PLAYING with the source element (the camera device
+        // handle) reffed. Dropping the local `pipeline` binding does
+        // NOT release those elements — GStreamer only tears them down on
+        // the transition back to NULL — and `PipelineHandle::Drop` can't
+        // run because `Self` isn't constructed yet. Force NULL before
+        // returning so the device handle isn't leaked.
+        let state_change = match pipeline.set_state(State::Playing) {
+            Ok(sc) => sc,
+            Err(e) => {
+                let _ = pipeline.set_state(State::Null);
+                return Err(NokhwaError::OpenStreamError {
                     message: format!("set_state(Playing): {e}"),
                     backend: Some(nokhwa_core::types::ApiBackend::GStreamer),
-                })?;
+                });
+            }
+        };
         if state_change == gstreamer::StateChangeSuccess::Async {
             let (res, _, _) = pipeline.state(gstreamer::ClockTime::from_seconds(5));
-            res.map_err(|e| NokhwaError::OpenStreamError {
-                message: format!("async state wait: {e}"),
-                backend: Some(nokhwa_core::types::ApiBackend::GStreamer),
-            })?;
+            if let Err(e) = res {
+                let _ = pipeline.set_state(State::Null);
+                return Err(NokhwaError::OpenStreamError {
+                    message: format!("async state wait: {e}"),
+                    backend: Some(nokhwa_core::types::ApiBackend::GStreamer),
+                });
+            }
         }
 
         Ok(Self {

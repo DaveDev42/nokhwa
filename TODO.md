@@ -199,6 +199,16 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Backlog
 
+- [ ] **`CameraRunner` stream-only frame-error observability.** In
+  `src/runner.rs::spawn_stream`, a persistent `cam.frame()` error only drives
+  exponential backoff + (optional) logging; the error is never surfaced to the
+  consumer, and stream-only runners have no events channel (`events: None`). A
+  slow/unplugged camera looks identical to "no frames yet". Fixing it properly
+  means adding an error/event channel to the stream-only runner surface — a
+  config + public-API change, not a contained bug fix. Deferred until there's a
+  consumer that needs programmatic error detection (today: rely on frame
+  starvation + `logging` feature).
+
 - [ ] **WASM / browser backend.** Blocked on five design decisions, no
   active consumer:
   - interop library (`tsify` vs `serde-wasm-bindgen` vs hand-rolled)
@@ -243,6 +253,17 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   dispatches through `uridecodebin`.
 
 ## Shipped recently (for context)
+
+- **GStreamer: force pipeline to NULL on startup failure (fix/gstreamer-pipeline-null-on-open-error)** —
+  `PipelineHandle::new` returned `Err` on `set_state(Playing)` failure / async-state-wait timeout
+  *before* constructing `Self`, so `PipelineHandle::Drop` never ran and the local `Pipeline` binding
+  was dropped while still in PAUSED/PLAYING. GStreamer only releases reffed elements (including the
+  source = camera device handle) on the NULL transition, so a slow/failing open leaked the device
+  handle until GC. Both error paths now call `pipeline.set_state(State::Null)` before returning. Also
+  scrubbed a leftover "session-2" dev-phase label from the module doc comment. Compile/clippy-verified
+  on macOS (gstreamer-rs checks without system libs). Runtime verification pending on Linux:
+  `cargo test --features device-test,input-gstreamer` — confirm a camera that fails to reach PLAYING
+  doesn't leave the device busy for subsequent opens.
 
 - **Examples: scrub internal dev-phase jargon from doc comments (docs/examples-drop-session-jargon)** —
   `gstreamer_probe.rs`, `stream_camera.rs`, and `msmf_probe.rs` doc comments referenced internal
