@@ -296,24 +296,49 @@ impl CameraRunner {
             make_channel::<Buffer>(cfg.frames_capacity, cfg.overflow);
         let (cmd_tx, cmd_rx) = channel::<Command>();
         let poll_interval = cfg.poll_interval;
-        let join = thread::spawn(move || loop {
-            match cmd_rx.try_recv() {
-                Ok(Command::Die) | Err(TryRecvError::Disconnected) => break,
-                Ok(Command::SetControl(id, v)) => {
-                    let _ = cam.set_control(id, v);
-                }
-                Ok(Command::Trigger) | Err(TryRecvError::Empty) => {}
-            }
-            match cam.frame() {
-                Ok(buf) => {
-                    // If the consumer dropped the receiver, treat it as a
-                    // shutdown signal rather than spinning forever.
-                    if frame_tx.send(buf).is_err() {
-                        break;
+        let join = thread::spawn(move || {
+            // Consecutive `frame()` error count — drives exponential backoff.
+            let mut err_count: u32 = 0;
+            loop {
+                match cmd_rx.try_recv() {
+                    Ok(Command::Die) | Err(TryRecvError::Disconnected) => break,
+                    Ok(Command::SetControl(id, v)) => {
+                        let _ = cam.set_control(id, v);
                     }
+                    Ok(Command::Trigger) | Err(TryRecvError::Empty) => {}
                 }
-                Err(_) => {
-                    thread::sleep(poll_interval);
+                match cam.frame() {
+                    Ok(buf) => {
+                        // If the consumer dropped the receiver, treat it as a
+                        // shutdown signal rather than spinning forever.
+                        if frame_tx.send(buf).is_err() {
+                            break;
+                        }
+                        // Successful frame: reset the backoff.
+                        err_count = 0;
+                    }
+                    Err(err) => {
+                        // Exponential backoff: sleep poll_interval * 2^min(n, 7)
+                        // (caps at ×128, i.e. ~1.3 s with the 10 ms default).
+                        // Prevents a ~100 retry/s busy-spin when the camera
+                        // enters a persistent error state (e.g. unplugged,
+                        // AVF session interrupted).
+                        let shift = err_count.min(7);
+                        thread::sleep(poll_interval * (1u32 << shift));
+                        err_count = err_count.saturating_add(1);
+                        #[cfg(feature = "logging")]
+                        {
+                            if err_count == 1 {
+                                log::debug!("CameraRunner: frame() error: {err}");
+                            } else if err_count.is_power_of_two() {
+                                log::warn!(
+                                    "CameraRunner: frame() failed {err_count} times in a row: {err}"
+                                );
+                            }
+                        }
+                        #[cfg(not(feature = "logging"))]
+                        let _ = err;
+                    }
                 }
             }
         });
@@ -369,6 +394,7 @@ impl CameraRunner {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn spawn_hybrid(mut cam: HybridCamera, cfg: RunnerConfig) -> Result<Self, NokhwaError> {
         // Idempotent open: same guard as `spawn_stream` — the caller may have
         // already opened the camera before passing it to the runner.
@@ -429,6 +455,8 @@ impl CameraRunner {
         let shutter_timeout = cfg.shutter_timeout;
 
         let join = thread::spawn(move || {
+            // Consecutive `frame()` error count — drives exponential backoff.
+            let mut err_count: u32 = 0;
             loop {
                 match cmd_rx.try_recv() {
                     Ok(Command::Die) | Err(TryRecvError::Disconnected) => break,
@@ -459,9 +487,26 @@ impl CameraRunner {
                         if frame_tx.send(buf).is_err() {
                             break;
                         }
+                        // Successful frame: reset the backoff.
+                        err_count = 0;
                     }
-                    Err(_) => {
-                        thread::sleep(poll_interval);
+                    Err(err) => {
+                        // Same exponential backoff as the stream worker.
+                        let shift = err_count.min(7);
+                        thread::sleep(poll_interval * (1u32 << shift));
+                        err_count = err_count.saturating_add(1);
+                        #[cfg(feature = "logging")]
+                        {
+                            if err_count == 1 {
+                                log::debug!("CameraRunner: frame() error: {err}");
+                            } else if err_count.is_power_of_two() {
+                                log::warn!(
+                                    "CameraRunner: frame() failed {err_count} times in a row: {err}"
+                                );
+                            }
+                        }
+                        #[cfg(not(feature = "logging"))]
+                        let _ = err;
                     }
                 }
             }

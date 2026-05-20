@@ -144,6 +144,12 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   `convert_to_rgb_buffer` RAWRGB arm did not check `data.len() % 3 == 0`, unlike the `convert_to_rgba`
   path. Both gaps fixed and covered by unit tests.
 
+- **`CameraRunner` exponential backoff on frame() errors in stream/hybrid workers (fix/runner-backoff-busy-spin)** —
+  Added `err_count: u32` tracker to both `spawn_stream` and `spawn_hybrid` worker loops; sleep duration
+  is now `poll_interval * 2^min(err_count, 7)` (max ~1.3 s with 10 ms default) instead of a flat 10 ms.
+  Resets on the next successful `frame()`. Under `logging` feature: `debug!` on first error, `warn!` on
+  power-of-two consecutive failures. Verified 2026-05-20 on macOS (FaceTime HD): 37/37 device-tests pass.
+
 - **`CameraRunner` guard against double-open in `spawn_stream` / `spawn_hybrid` (fix/runner-guard-double-open)** —
   Added `if !cam.is_open()` guard before `cam.open()?` in both spawn paths so that callers who
   already opened the camera don't inadvertently create a second `AVCaptureSession` (resource leak /
