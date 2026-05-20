@@ -133,6 +133,12 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **`decoded_buffer_size` GRAY+alpha fix (fix/core-gray-alpha-buffer-size)** —
+  `decoded_buffer_size(true)` returned `w·h·2` for GRAY (pxwidth+1=2) but
+  `convert_to_rgba` for GRAY produces a full `w·h·4` RGBA buffer. Fixed the
+  `if alpha` branch to force 4 bpp when pxwidth==1. Updated the two tests that
+  pinned the wrong value.
+
 - **GRAY→RGB resolution validation + RAWRGB multiple-of-3 check (fix/core-frame-validation-gaps)** —
   `convert_to_rgb` GRAY arm silently processed mismatched-length data (no resolution check).
   `convert_to_rgb_buffer` RAWRGB arm did not check `data.len() % 3 == 0`, unlike the `convert_to_rgba`
