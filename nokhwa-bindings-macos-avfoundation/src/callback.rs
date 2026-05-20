@@ -95,9 +95,10 @@ fn pts_to_wallclock(
 
 /// Instance variables for `MyCaptureCallback`.
 ///
-/// Holds a type-erased `*const c_void` that is actually an `Arc<Sender<FrameData>>`
-/// converted via `Arc::as_ptr`. Interior mutability via `Cell` is required because
-/// `ivars()` returns `&Self::Ivars` (shared reference only) by design.
+/// Holds a type-erased `*const c_void` that is actually an *owned* `Arc<Sender<FrameData>>`
+/// strong count, produced via `Arc::into_raw` and released in `dealloc`. Interior
+/// mutability via `Cell` is required because `ivars()` returns `&Self::Ivars` (shared
+/// reference only) by design.
 pub struct CaptureCallbackIvars {
     arc_sender: Cell<*const c_void>,
 }
@@ -225,7 +226,9 @@ unsafe impl Send for CaptureCallbackIvars {}
 define_class!(
     // SAFETY:
     // - `NSObject` has no subclassing requirements that we violate.
-    // - We implement `Drop` via the `Retained` wrapper — no manual `dealloc` needed.
+    // - We release the owned `Arc<Sender>` strong count by implementing `Drop` for
+    //   `MyCaptureCallback` (objc2 runs it from `dealloc`); `#[unsafe(method(dealloc))]`
+    //   is not permitted in objc2 0.6.
     // - The `AVCaptureVideoDataOutputSampleBufferDelegate` impl upholds the protocol contract:
     //   the required `captureOutput:didOutputSampleBuffer:fromConnection:` method is
     //   implemented and only reads pixel data while the CVPixelBuffer base-address lock is held.
@@ -296,7 +299,11 @@ define_class!(
                 )
             };
 
-            // Reconstruct (but do not consume) the Arc<Sender> from the stored raw pointer.
+            // Borrow the owned Arc<Sender> through the stored raw pointer without
+            // touching its strong count: reconstruct, send, then `forget` so the
+            // count is left intact (it is owned by the ivar, released in dealloc).
+            // `Sender::send` returns `Err` (never panics) when the receiver is gone,
+            // so there is no unwind between `from_raw` and `forget`.
             let arc_sender_ptr = self.ivars().arc_sender.get();
             let buffer_sndr = unsafe {
                 let ptr = arc_sender_ptr.cast::<Sender<FrameData>>();
@@ -319,12 +326,28 @@ define_class!(
     }
 );
 
+impl Drop for MyCaptureCallback {
+    /// Release the owned `Arc<Sender<FrameData>>` strong count that was handed to
+    /// the ivar via `Arc::into_raw` in `new`. `objc2` runs this from the
+    /// Objective-C `dealloc`, after the last (GCD or otherwise) reference to the delegate is
+    /// gone — so reconstructing and dropping the `Arc` here balances the
+    /// `into_raw` exactly once and frees the `Sender` only when nothing can still
+    /// touch it.
+    fn drop(&mut self) {
+        let ptr = self.ivars().arc_sender.get().cast::<Sender<FrameData>>();
+        if !ptr.is_null() {
+            unsafe { drop(Arc::from_raw(ptr)) };
+        }
+    }
+}
+
 impl MyCaptureCallback {
     /// Allocate and initialize a new `MyCaptureCallback` with the given sender pointer.
     ///
-    /// The `arc_sender_ptr` must be a raw pointer obtained from `Arc::as_ptr` on an
-    /// `Arc<Sender<FrameData>>`. The caller retains ownership of the original `Arc`
-    /// and must ensure it outlives this object.
+    /// The `arc_sender_ptr` must be a raw pointer obtained from `Arc::into_raw` on an
+    /// `Arc<Sender<FrameData>>` — i.e. it carries an owned strong count. That count is
+    /// released in `dealloc`, so the `Sender` is kept alive for exactly as long as this
+    /// delegate object (and any GCD callback still referencing it) lives.
     fn new_with_ptr(arc_sender_ptr: *const c_void) -> Retained<Self> {
         let this = Self::alloc().set_ivars(CaptureCallbackIvars {
             arc_sender: Cell::new(arc_sender_ptr),
@@ -397,10 +420,13 @@ pub struct AVCaptureVideoCallback {
 
 impl AVCaptureVideoCallback {
     pub fn new(device_spec: &CStr, buffer: &Arc<Sender<FrameData>>) -> Result<Self, NokhwaError> {
-        let arc_sender_ptr = {
-            let arc_raw = Arc::as_ptr(buffer);
-            arc_raw.cast::<c_void>()
-        };
+        // Hand the delegate its *own* strong reference (via `Arc::into_raw`),
+        // not a borrowed `Arc::as_ptr`. The sample-buffer callback runs on a GCD
+        // queue that can still have a block in flight after the caller stops the
+        // session and drops its `Arc`; an owned count guarantees the `Sender`
+        // outlives the delegate object (and thus any queued callback), closing a
+        // teardown use-after-free. The count is released in `dealloc`.
+        let arc_sender_ptr = Arc::into_raw(Arc::clone(buffer)).cast::<c_void>();
         let delegate = MyCaptureCallback::new_with_ptr(arc_sender_ptr);
         let queue = unsafe { dispatch_queue_create(device_spec.as_ptr(), std::ptr::null()) };
         Ok(AVCaptureVideoCallback { delegate, queue })

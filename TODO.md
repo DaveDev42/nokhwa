@@ -13,6 +13,20 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Runtime verification pending (compile-verified only)
 
+- [ ] **AVF callback owns the `Arc<Sender>` strong count (fix/avf-callback-arc-ownership)** —
+  `AVCaptureVideoCallback::new` stored `Arc::as_ptr(buffer)` (a *borrowed* pointer, no
+  refcount bump) and the GCD sample-buffer callback reconstructed it with `Arc::from_raw`
+  + `mem::forget`. The `Arc<Sender>` was kept alive only by the sibling `fbufsnd` field on
+  `AVFoundationCaptureDevice`, which Rust drops *after* the delegate. Because
+  `AVCaptureSession::stopRunning` does not guarantee an already-dispatched callback block
+  on the serial GCD queue has finished, a callback could `Arc::from_raw` the `Sender` after
+  `fbufsnd` was dropped → teardown use-after-free. Fixed by handing the delegate an owned
+  count via `Arc::into_raw(Arc::clone(buffer))` and releasing it in a `Drop for
+  MyCaptureCallback` impl (objc2 runs it from ObjC `dealloc`, after the last GCD reference is
+  gone). Compile + clippy verified on the macOS dev box. Verify on hardware that open →
+  stream → drop (and rapid open/close cycles) leak no `Sender` and never fault during
+  teardown: `cargo test --features device-test,input-avfoundation,runner`.
+
 - [ ] **MSMF `set_control` forces manual mode when writing an explicit value (fix/msmf-set-control-force-manual)** —
   `set_control` read the device's current auto/manual flag via `self.control(control)?` and forwarded
   that same flag to `IAMVideoProcAmp::Set`/`IAMCameraControl::Set`. When the device was in Auto mode,
