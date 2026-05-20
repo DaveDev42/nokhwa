@@ -24,6 +24,11 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   many reads and that unplugging mid-stream surfaces an error instead of hanging:
   `cargo test --features device-test,input-msmf,runner` +
   `cargo run --example hotplug_probe`
+- [ ] **MSMF hotplug channel-closed sentinel (fix/msmf-hotplug-doc-and-channel-sentinel, F7)** —
+  `wnd_proc` now calls `PostQuitMessage(0)` when `reconcile_and_emit` returns `false` (channel
+  closed). Verify on Windows hardware: hotplug still emits `Connected` → `Disconnected` during
+  normal operation and that after dropping the poller, further `WM_DEVICECHANGE` events no longer
+  trigger wasted `take_snapshot()` MF enumeration. Run `cargo run --example hotplug_probe` on Windows.
 
 - [ ] **AVF re-open guard + `frame_raw` drain (fix/avf-guard-reopen-and-drain-frame-raw)** —
   `open()` now returns `Ok(())` immediately if `is_open()` is true, preventing a double-open
@@ -201,6 +206,17 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   `ReadSample` loop that returns `Err(ReadFrameError)` immediately when
   `MF_SOURCE_READERF_ERROR` or `MF_SOURCE_READERF_ENDOFSTREAM` is set, preventing an infinite
   busy-spin when the camera is unplugged mid-stream. Runtime verification pending — see Open.
+- **MSMF hotplug: correct emit-order doc + propagate channel-closed sentinel (fix/msmf-hotplug-doc-and-channel-sentinel)** —
+  (F6) Fixed the doc comment on `reconcile_and_emit_with` (and the matching test comment) which claimed
+  a rapid re-plug "surfaces as `Disconnected` → `Connected`"; the code emits arrivals first, so the
+  correct consumer-visible order is `Connected` → `Disconnected`. Doc-only fix; no behaviour change.
+  (F7) `reconcile_and_emit` now returns the bool from `reconcile_and_emit_with` and `wnd_proc` checks it:
+  when the consumer has dropped the poller (channel closed), `PostQuitMessage(0)` is posted so the
+  message pump exits cleanly instead of processing further `WM_DEVICECHANGE` messages (wasted
+  `take_snapshot()` MF enumeration + BTreeMap diff on every hardware event after drop).
+  Runtime verification pending on Windows: verify hotplug still emits `Connected` → `Disconnected`
+  and that `WM_DEVICECHANGE` after poller drop no longer does wasted work —
+  `cargo run --example hotplug_probe` on Windows.
 
 - **AVF active_format() reports negotiated fps from activeVideoMinFrameDuration (fix/avf-active-format-fps)** —
   `active_format()` now reads `activeVideoMinFrameDuration` (the CMTime set by `set_all()`) and
