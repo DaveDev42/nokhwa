@@ -404,6 +404,15 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **`capture` Stream demo treats a frame-receive timeout as transient, not fatal (fix/capture-stream-timeout-not-fatal)** —
+  the `Stream` subcommand in `examples/capture` pulled frames in a `loop` with
+  `frames.recv_timeout(Duration::from_secs(2))` and returned an error on *any* `Err`,
+  collapsing `RecvTimeoutError::Timeout` (no frame in the 2 s window — the runner is still
+  alive) into the same fatal path as `Disconnected` (runner thread gone). A momentary capture
+  stall therefore killed the demo. Now the match arms are split: `Timeout` → `continue`,
+  `Disconnected` → return an error. Runtime-verified on a real Mac webcam — `capture stream`
+  streamed NV12 frames continuously and only exited on the external timeout. Examples-only.
+
 - **Examples dispatch decode on the negotiated fourcc instead of hardcoding `Frame<Mjpeg>` (fix/examples-hardcoded-mjpeg-frame)** —
   `examples/captesting`, `examples/threaded-capture`, and `examples/capture` (the `Single`
   subcommand) all opened the camera with `OpenRequest::any()` — letting the backend pick its
