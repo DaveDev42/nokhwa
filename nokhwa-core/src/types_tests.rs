@@ -1066,6 +1066,27 @@ fn verify_setter_integer_range_out_of_bounds() {
 }
 
 #[test]
+fn verify_setter_integer_step_aligned_to_default() {
+    // step > 1 with a default that is NOT a multiple of step. Valid setters
+    // are those lying on the grid anchored at `default` (or `value`):
+    // default + n*step. The alignment test must subtract the anchor, not add
+    // it — adding accidentally inverts which values are accepted whenever the
+    // anchor is itself off the step grid.
+    let desc = ControlValueDescription::Integer {
+        value: 3,
+        default: 3,
+        step: 5,
+    };
+    // 3, 8, 13, -2 ... are on the grid (3 + n*5).
+    assert!(desc.verify_setter(&ControlValueSetter::Integer(3)));
+    assert!(desc.verify_setter(&ControlValueSetter::Integer(8)));
+    assert!(desc.verify_setter(&ControlValueSetter::Integer(-2)));
+    // 7 is off the grid: (7 - 3) % 5 == 4 != 0.
+    assert!(!desc.verify_setter(&ControlValueSetter::Integer(7)));
+    assert!(!desc.verify_setter(&ControlValueSetter::Integer(5)));
+}
+
+#[test]
 fn verify_setter_integer_range_zero_step_always_valid() {
     // When step == 0, verify_setter returns true unconditionally —
     // even for mismatched types. This is the documented implementation behavior.
