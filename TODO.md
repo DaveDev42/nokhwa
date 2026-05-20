@@ -271,6 +271,26 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   bad/unreachable URL (`rtsp://127.0.0.1:1/nope`) leaves no leaked socket/handle after
   the open fails.
 
+- **Core RAWRGB/RAWBGR + GRAY-luma resolution length guards (fix/core-conversion-resolution-guards)** —
+  The RAWRGB/RAWBGR arms of every conversion dispatcher in `nokhwa-core/src/frame.rs`
+  (`convert_to_rgb`, `convert_to_rgb_buffer`, `convert_to_rgba`, `convert_to_rgba_buffer`,
+  `convert_to_luma`, `convert_to_luma_buffer`) validated only `data.len() % 3 == 0` —
+  or, in `convert_to_rgb`, nothing beyond that — instead of `data.len() == w*h*3`. A
+  payload whose length is a valid multiple of 3 but does not match the frame resolution
+  (e.g. an off-by-row backend bug) was silently accepted: `convert_to_rgb` returned the
+  raw bytes (and `ImageBuffer::from_raw` then used only the first `w*h*3`), and the RGBA/
+  luma paths produced a buffer sized from `data.len()` rather than the resolution —
+  yielding a wrong-resolution image with no error. This brings every RAWRGB/RAWBGR arm in
+  line with the existing GRAY arms and the `buf_bgr_to_rgb` RAWBGR path, all of which
+  already validate against `w*h*bpp`. Separately, `convert_to_luma_buffer`'s GRAY arm
+  checked only `dest.len() == data.len()` (not `data.len() == w*h`), unlike its allocating
+  sibling `convert_to_luma`; added the resolution guard there too. The new `w*h*3` check
+  subsumes the old multiple-of-3 check (any non-multiple-of-3 length also fails it), so no
+  valid input is newly rejected. Updated the 8 unit tests that pinned the old
+  "not a multiple of 3" message to the resolution-mismatch contract; happy-path
+  conversion tests (correctly-sized payloads) unchanged. `nokhwa-core` 399/399 tests pass,
+  clippy clean.
+
 - **V4L grayscale `GREY` wire token + `set_format`-while-streaming stale metadata (fix/v4l-grey-fourcc-and-streaming-format-refresh)** —
   Two V4L2 bugs found in a review pass over `nokhwa-bindings-linux-v4l/src/lib.rs`. (1)
   **Grayscale fourcc mismatch:** the V4L2 kernel wire token for grayscale is `GREY`

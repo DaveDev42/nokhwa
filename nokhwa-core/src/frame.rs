@@ -369,11 +369,15 @@ pub(crate) fn convert_to_rgb(
         FrameFormat::YUYV => yuyv422_to_rgb(data, false),
         FrameFormat::NV12 => nv12_to_rgb(resolution, data, false),
         FrameFormat::RAWRGB => {
-            if !data.len().is_multiple_of(3) {
+            let expected = resolution.width() as usize * resolution.height() as usize * 3;
+            if data.len() != expected {
                 return Err(NokhwaError::process_frame(
                     fcc,
                     "RGB",
-                    "RAWRGB data length not a multiple of 3",
+                    format!(
+                        "RAWRGB data length {} does not match resolution {expected}",
+                        data.len()
+                    ),
                 ));
             }
             Ok(data.to_vec())
@@ -415,11 +419,15 @@ pub(crate) fn convert_to_rgb_buffer(
         FrameFormat::YUYV => buf_yuyv422_to_rgb(data, dest, false),
         FrameFormat::NV12 => buf_nv12_to_rgb(resolution, data, dest, false),
         FrameFormat::RAWRGB => {
-            if !data.len().is_multiple_of(3) {
+            let expected = resolution.width() as usize * resolution.height() as usize * 3;
+            if data.len() != expected {
                 return Err(NokhwaError::process_frame(
                     fcc,
                     "RGB",
-                    "RAWRGB data length not a multiple of 3",
+                    format!(
+                        "RAWRGB data length {} does not match resolution {expected}",
+                        data.len()
+                    ),
                 ));
             }
             if dest.len() != data.len() {
@@ -473,11 +481,15 @@ pub(crate) fn convert_to_rgba(
         FrameFormat::YUYV => yuyv422_to_rgb(data, true),
         FrameFormat::NV12 => nv12_to_rgb(resolution, data, true),
         FrameFormat::RAWRGB => {
-            if !data.len().is_multiple_of(3) {
+            let expected = resolution.width() as usize * resolution.height() as usize * 3;
+            if data.len() != expected {
                 return Err(NokhwaError::process_frame(
                     fcc,
                     "RGBA",
-                    "RAWRGB data length not a multiple of 3",
+                    format!(
+                        "RAWRGB data length {} does not match resolution {expected}",
+                        data.len()
+                    ),
                 ));
             }
             let mut rgba = vec![0u8; (data.len() / 3) * 4];
@@ -485,11 +497,15 @@ pub(crate) fn convert_to_rgba(
             Ok(rgba)
         }
         FrameFormat::RAWBGR => {
-            if !data.len().is_multiple_of(3) {
+            let expected = resolution.width() as usize * resolution.height() as usize * 3;
+            if data.len() != expected {
                 return Err(NokhwaError::process_frame(
                     fcc,
                     "RGBA",
-                    "RAWBGR data length not a multiple of 3",
+                    format!(
+                        "RAWBGR data length {} does not match resolution {expected}",
+                        data.len()
+                    ),
                 ));
             }
             let mut rgba = vec![0u8; (data.len() / 3) * 4];
@@ -528,11 +544,15 @@ pub(crate) fn convert_to_rgba_buffer(
         FrameFormat::YUYV => buf_yuyv422_to_rgb(data, dest, true),
         FrameFormat::NV12 => buf_nv12_to_rgb(resolution, data, dest, true),
         FrameFormat::RAWRGB => {
-            if !data.len().is_multiple_of(3) {
+            let input_size = resolution.width() as usize * resolution.height() as usize * 3;
+            if data.len() != input_size {
                 return Err(NokhwaError::process_frame(
                     fcc,
                     "RGBA",
-                    "RAWRGB data length not a multiple of 3",
+                    format!(
+                        "RAWRGB data length {} does not match resolution {input_size}",
+                        data.len()
+                    ),
                 ));
             }
             let expected = (data.len() / 3) * 4;
@@ -550,11 +570,15 @@ pub(crate) fn convert_to_rgba_buffer(
             Ok(())
         }
         FrameFormat::RAWBGR => {
-            if !data.len().is_multiple_of(3) {
+            let input_size = resolution.width() as usize * resolution.height() as usize * 3;
+            if data.len() != input_size {
                 return Err(NokhwaError::process_frame(
                     fcc,
                     "RGBA",
-                    "RAWBGR data length not a multiple of 3",
+                    format!(
+                        "RAWBGR data length {} does not match resolution {input_size}",
+                        data.len()
+                    ),
                 ));
             }
             let expected = (data.len() / 3) * 4;
@@ -644,11 +668,15 @@ pub(crate) fn convert_to_luma(
             .collect()),
         // RAWBGR works with the same function: (R+G+B)/3 == (B+G+R)/3 (addition is commutative)
         FrameFormat::RAWRGB | FrameFormat::RAWBGR => {
-            if !data.len().is_multiple_of(3) {
+            let expected = resolution.width() as usize * resolution.height() as usize * 3;
+            if data.len() != expected {
                 return Err(NokhwaError::process_frame(
                     fcc,
                     "Luma",
-                    "RGB/BGR data length not a multiple of 3",
+                    format!(
+                        "RGB/BGR data length {} does not match resolution {expected}",
+                        data.len()
+                    ),
                 ));
             }
             let mut luma = vec![0u8; data.len() / 3];
@@ -666,6 +694,17 @@ pub(crate) fn convert_to_luma_buffer(
 ) -> Result<(), NokhwaError> {
     match fcc {
         FrameFormat::GRAY => {
+            let expected = resolution.width() as usize * resolution.height() as usize;
+            if data.len() != expected {
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "Luma",
+                    format!(
+                        "GRAY data length {} does not match resolution {expected}",
+                        data.len()
+                    ),
+                ));
+            }
             if dest.len() != data.len() {
                 return Err(NokhwaError::process_frame(
                     fcc,
@@ -684,11 +723,15 @@ pub(crate) fn convert_to_luma_buffer(
         FrameFormat::NV12 => buf_nv12_extract_luma(resolution, data, dest),
         // RAWBGR works with the same function: (R+G+B)/3 == (B+G+R)/3 (addition is commutative)
         FrameFormat::RAWRGB | FrameFormat::RAWBGR => {
-            if !data.len().is_multiple_of(3) {
+            let expected = resolution.width() as usize * resolution.height() as usize * 3;
+            if data.len() != expected {
                 return Err(NokhwaError::process_frame(
                     fcc,
                     "Luma",
-                    "RGB/BGR data length not a multiple of 3",
+                    format!(
+                        "RGB/BGR data length {} does not match resolution {expected}",
+                        data.len()
+                    ),
                 ));
             }
             let pixel_count = data.len() / 3;
