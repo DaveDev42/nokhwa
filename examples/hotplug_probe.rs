@@ -14,7 +14,7 @@
 //! while the probe is running to verify the poll loop is picking up
 //! device-change signals.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[cfg(all(feature = "input-msmf", target_os = "windows"))]
 fn backend_context() -> Box<dyn nokhwa_core::traits::HotplugSource> {
@@ -46,9 +46,14 @@ fn main() {
     let mut ctx = backend_context();
     let mut poll = ctx.take_hotplug_events().expect("take_hotplug_events");
     println!("Listening for 15 seconds — unplug + replug a camera to see events.");
-    for i in 0..30 {
+    // `next_timeout` returns early when an event arrives, so the loop
+    // index is not a clock. Measure real elapsed time from a fixed start
+    // and run until the 15-second budget is spent.
+    let start = Instant::now();
+    let budget = Duration::from_secs(15);
+    while start.elapsed() < budget {
         if let Some(evt) = poll.next_timeout(Duration::from_millis(500)) {
-            println!("  [{:5}ms] {evt:?}", i * 500);
+            println!("  [{:5}ms] {evt:?}", start.elapsed().as_millis());
         }
     }
     println!("Done.");
