@@ -13,6 +13,23 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Runtime verification pending (compile-verified only)
 
+- [ ] **MSMF Exposure/Iris/Focus report their min/max range (fix/msmf-cc-ranged-controls)** —
+  In `nokhwa-bindings-windows-msmf/src/lib.rs`, `Exposure`, `Iris`, and `Focus` were mapped to
+  `MFControlId::CCValue`, whose `control()` arm built a `ControlValueDescription::Integer { value,
+  default, step }` and silently discarded the `min`/`max` that `query_camera_control` had already
+  fetched via `IAMCameraControl::GetRange`. So a caller querying the valid range for these three
+  ranged `IAMCameraControl` properties got a descriptor with no bounds (and any `verify_setter`
+  built on it was useless), even though Pan/Tilt/Zoom — identical `IAMCameraControl` properties —
+  correctly used `CCRange`. Fix: map all three to `CCRange` so the reported descriptor is
+  `IntegerRange` with the real bounds. Since `query_camera_control` already calls `GetRange` + `Get`
+  for both variants and `set_control` treats them identically (`IAMCameraControl::Set`), this only
+  changes the *reported* descriptor — no FFI-call change. The now-unused `CCValue` variant and its
+  `control()`/`set_control` arms were removed; the `kcc_to_i32_maps_every_standard_control` mapping
+  test was updated in lockstep. Windows-gated code (`cfg(all(windows, not(docs-only)))`), so it is
+  compile-checked off-Windows only (stub + docs-only build clean locally). Verify on a Windows box
+  with a UVC cam that `controls()` now reports non-degenerate min/max for Exposure/Focus and that
+  setting a clamped value still works: `cargo test --features device-test,input-msmf,runner`.
+
 - [ ] **V4L `set_format` tears down the live stream before re-negotiating (fix/v4l-set-format-stream-teardown)** —
   `set_format` in `nokhwa-bindings-linux-v4l/src/lib.rs` issued `VIDIOC_S_FMT` / `VIDIOC_S_PARM`
   while a stream was still active and then called `self.open()`, which allocates the new
