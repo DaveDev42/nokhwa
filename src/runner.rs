@@ -285,7 +285,13 @@ impl CameraRunner {
     }
 
     fn spawn_stream(mut cam: StreamCamera, cfg: RunnerConfig) -> Result<Self, NokhwaError> {
-        cam.open()?;
+        // Idempotent open: the caller may have already called `open()` before
+        // handing the camera to the runner (e.g. to inspect a negotiated
+        // format). Opening a second time on AVFoundation creates a redundant
+        // `AVCaptureSession`, so guard against it.
+        if !cam.is_open() {
+            cam.open()?;
+        }
         let (frame_tx, frame_rx, frame_relay) =
             make_channel::<Buffer>(cfg.frames_capacity, cfg.overflow);
         let (cmd_tx, cmd_rx) = channel::<Command>();
@@ -364,7 +370,11 @@ impl CameraRunner {
     }
 
     fn spawn_hybrid(mut cam: HybridCamera, cfg: RunnerConfig) -> Result<Self, NokhwaError> {
-        cam.open()?;
+        // Idempotent open: same guard as `spawn_stream` — the caller may have
+        // already opened the camera before passing it to the runner.
+        if !cam.is_open() {
+            cam.open()?;
+        }
         let events_poll: Option<Box<dyn EventPoll + Send>> = match cam.take_events() {
             Some(Ok(p)) => Some(p),
             Some(Err(e)) => {
