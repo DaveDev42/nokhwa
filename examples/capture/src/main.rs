@@ -25,6 +25,7 @@ use nokhwa::{
     OpenedCamera, RunnerConfig, StreamCamera,
 };
 use std::str::FromStr;
+use std::sync::mpsc::RecvTimeoutError;
 use std::time::Duration;
 
 #[derive(Parser)]
@@ -215,8 +216,14 @@ fn nokhwa_main() -> Result<(), NokhwaError> {
             loop {
                 match frames.recv_timeout(Duration::from_secs(2)) {
                     Ok(buf) => println!("Captured frame of size {}", buf.buffer().len()),
-                    Err(e) => {
-                        return Err(NokhwaError::general(e.to_string()));
+                    // A timeout just means no frame arrived in the window —
+                    // the runner is still alive, so keep waiting. Only a
+                    // disconnected channel (runner thread gone) is fatal.
+                    Err(RecvTimeoutError::Timeout) => continue,
+                    Err(RecvTimeoutError::Disconnected) => {
+                        return Err(NokhwaError::general(
+                            "frames channel disconnected; runner stopped",
+                        ));
                     }
                 }
             }
