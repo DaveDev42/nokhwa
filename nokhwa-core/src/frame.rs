@@ -622,9 +622,10 @@ pub(crate) fn convert_to_rgba_buffer(
     }
 }
 
-/// Note: For YUYV and NV12, luma is extracted directly from the Y channel
-/// (BT.601 weighted). For MJPEG, RAWRGB, and RAWBGR, a simple average
-/// `(R+G+B)/3` is used rather than perceptual luminance weights.
+/// Note: For YUYV and NV12, luma is the camera-provided Y plane copied
+/// directly with no color-space conversion (the Y channel already holds
+/// luma; no weighting is applied). For MJPEG, RAWRGB, and RAWBGR, a simple
+/// average `(R+G+B)/3` is used rather than perceptual luminance weights.
 #[allow(clippy::cast_possible_truncation)]
 #[allow(clippy::cast_sign_loss)]
 pub(crate) fn convert_to_luma(
