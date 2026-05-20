@@ -320,6 +320,16 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **`CameraRunner` event thread exits on a closed command channel (fix/runner-event-thread-disconnect)** —
+  the hybrid worker's event sub-thread checked its stop channel with `if let Ok(()) =
+  ev_cmd_rx.try_recv()`, breaking only on an explicit signal. If the main worker unwound
+  (e.g. a `frame()` panic) before it could send that signal, `ev_cmd_tx` was dropped and
+  `try_recv` returned `Disconnected` — which the loop ignored, so the event thread kept
+  running, relying on the user-side event receiver being dropped to make `ev_tx.send` fail.
+  Now it `match`es `try_recv` and breaks on `Ok(())` *or* `Disconnected`, mirroring the two
+  command loops. Pure thread-lifecycle logic (no hardware); verified by the existing runner
+  tests + clippy under `--features runner`.
+
 - **V4L `set_control` skips read-back verify for WRITE_ONLY / VOLATILE controls (fix/v4l-set-control-verify-write-only-volatile)** —
   `set_control` in `nokhwa-bindings-linux-v4l/src/lib.rs` performed the `VIDIOC_S_EXT_CTRLS`
   write, then re-read the value via `self.camera_control(id)` and returned
