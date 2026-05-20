@@ -1,4 +1,4 @@
-//! End-to-end smoke test for the GStreamer session-2 streaming path.
+//! End-to-end smoke test for the GStreamer local-capture streaming path.
 //!
 //! ```text
 //! cargo run --features input-gstreamer --example gstreamer_probe
@@ -8,8 +8,8 @@
 //! first one with `GStreamerCaptureDevice::new`, builds the
 //! `source ! capsfilter ! videoconvert ! appsink` pipeline, pulls 5
 //! frames, and prints a summary. Used for hardware verification in
-//! WSL/usbipd setups before the `nokhwa::open()` dispatch integration
-//! (session 4) lands.
+//! WSL/usbipd setups, exercising the GStreamer backend directly without
+//! going through `nokhwa::open()`.
 
 #[cfg(feature = "input-gstreamer")]
 fn main() -> Result<(), nokhwa_core::error::NokhwaError> {
@@ -31,7 +31,7 @@ fn main() -> Result<(), nokhwa_core::error::NokhwaError> {
         ));
     }
 
-    // 640x480 NV12 30fps is the session-2 happy-path reference: small
+    // 640x480 NV12 30fps is the happy-path reference: small
     // enough to fit under WSL + usbip bandwidth budgets, big enough to
     // be meaningful, and exercises `videoconvert` when the device
     // prefers YUY2 natively. Higher resolutions work on direct USB
@@ -59,7 +59,7 @@ fn main() -> Result<(), nokhwa_core::error::NokhwaError> {
         );
     }
 
-    // Session-3 smoke: list live controls, round-trip brightness.
+    // Controls smoke: list live controls, round-trip brightness.
     // Graceful when the source element doesn't expose any (Windows
     // ksvideosrc, macOS avfvideosrc) — `controls()` returns an empty
     // list and the round-trip is skipped.

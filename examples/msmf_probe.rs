@@ -1,5 +1,4 @@
-//! Ad-hoc MSMF enumeration probe used during the MSMF OBS workflow
-//! session-2 investigation. Prints every device that
+//! Ad-hoc MSMF enumeration probe. Prints every device that
 //! `nokhwa::query(ApiBackend::MediaFoundation)` sees.
 
 #[cfg(all(feature = "input-msmf", target_os = "windows"))]

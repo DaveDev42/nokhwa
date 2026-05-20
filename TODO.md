@@ -244,6 +244,17 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **Examples: scrub internal dev-phase jargon from doc comments (docs/examples-drop-session-jargon)** —
+  `gstreamer_probe.rs`, `stream_camera.rs`, and `msmf_probe.rs` doc comments referenced internal
+  development-sequencing labels ("session-2 streaming path", "session 4 dispatch", "MSMF OBS workflow
+  session-2 investigation") that mean nothing to a user reading the examples as copy-paste reference.
+  Reworded to describe behavior in user-facing terms (e.g. "local-capture streaming path", "the
+  `open()` dispatch"). Doc-comment-only; no logic change.
+  Also evaluated W1 (wgpu `bytes_per_row` 256-alignment): confirmed **latent, no fix** — both
+  `frame_texture` and `frame_texture_raw` use `queue.write_texture` (CPU→texture), which does not
+  enforce `COPY_BYTES_PER_ROW_ALIGNMENT` (that applies only to `copy_buffer_to_texture`). Rounding
+  the stride up to 256 would corrupt the upload, so the current unrounded stride is correct.
+
 - **`nokhwa-core` GRAY/NV12 luma buffer dimension validation (fix/core-gray-nv12-luma-dimension-guards)** —
   C1: `convert_to_rgb_buffer` / `convert_to_rgba` / `convert_to_rgba_buffer` GRAY arms were missing
   the `data.len() == w*h` guard present in `convert_to_rgb`'s GRAY arm — added to all three, matching
