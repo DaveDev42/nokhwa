@@ -1872,6 +1872,14 @@ pub fn buf_nv12_extract_luma(
     data: &[u8],
     dest: &mut [u8],
 ) -> Result<(), NokhwaError> {
+    if !resolution.width().is_multiple_of(2) || !resolution.height().is_multiple_of(2) {
+        return Err(NokhwaError::process_frame(
+            FrameFormat::NV12,
+            "Luma",
+            "bad resolution",
+        ));
+    }
+
     let w = resolution.width() as usize;
     let h = resolution.height() as usize;
     let y_size = w * h;
