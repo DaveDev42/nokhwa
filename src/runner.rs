@@ -204,17 +204,26 @@ fn make_channel<T: Send + 'static>(
                         }
                         Err(RecvTimeoutError::Timeout) => {}
                         Err(RecvTimeoutError::Disconnected) => {
-                            // Producer gone; still try to flush buffered items.
-                            // The blocking `user_tx.send` here is safe only
-                            // because `CameraRunner::shutdown` drops the
-                            // user-facing `Receiver` *before* joining the
-                            // relay — so if no one is draining, `send`
-                            // fails with `SendError` and we exit. Future
-                            // refactors of `shutdown` must preserve that
-                            // ordering or this loop can deadlock.
+                            // Producer gone; best-effort flush of buffered items
+                            // to the consumer. Uses `try_send` (non-blocking) so
+                            // this flush loop can never deadlock regardless of
+                            // shutdown ordering:
+                            //   • `Disconnected` → consumer dropped its receiver;
+                            //     exit immediately.
+                            //   • `Full` → consumer isn't draining; give up rather
+                            //     than stalling a thread that may be joining us.
+                            //   • `Ok` → item delivered; keep draining.
+                            // The previous blocking `user_tx.send` was safe only
+                            // because `CameraRunner::shutdown` dropped the user
+                            // `Receiver` before joining the relay, creating an
+                            // informal invariant that was easy to violate in a
+                            // future refactor. `try_send` removes that dependency.
                             while let Some(front) = buf.pop_front() {
-                                if user_tx.send(front).is_err() {
-                                    return;
+                                match user_tx.try_send(front) {
+                                    Ok(()) => {}
+                                    Err(TrySendError::Full(_) | TrySendError::Disconnected(_)) => {
+                                        return;
+                                    }
                                 }
                             }
                             return;

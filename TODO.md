@@ -140,6 +140,13 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   device-test suite (no `HybridCamera`-capable backend on FaceTime HD, which is
   `StreamCamera`-only). Runtime path is compile-only.
 
+- **`CameraRunner` relay flush loop: replace blocking send with try_send (fix/runner-relay-try-send)** —
+  The `DropOldest` relay's producer-disconnect flush loop used a blocking `user_tx.send`, safe only
+  because `shutdown()` dropped the user `Receiver` before joining the relay. Replaced with `try_send`
+  so the invariant is no longer load-bearing: `Full` → give up (best-effort drain), `Disconnected` → exit.
+  Verified 2026-05-20 on macOS (FaceTime HD): 37/37 device-tests pass, relay unit tests including
+  `drop_oldest_relay_flushes_non_empty_buffer_on_producer_disconnect` still pass.
+
 - **`decoded_buffer_size` GRAY+alpha fix (fix/core-gray-alpha-buffer-size)** —
   `decoded_buffer_size(true)` returned `w·h·2` for GRAY (pxwidth+1=2) but
   `convert_to_rgba` for GRAY produces a full `w·h·4` RGBA buffer. Fixed the
