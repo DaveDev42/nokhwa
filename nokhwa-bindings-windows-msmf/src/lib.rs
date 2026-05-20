@@ -39,7 +39,6 @@ pub mod wmf {
         borrow::Cow,
         cell::Cell,
         mem::{ManuallyDrop, MaybeUninit},
-        slice::from_raw_parts,
         sync::{
             atomic::{AtomicBool, AtomicUsize, Ordering},
             Arc, LazyLock,
@@ -74,7 +73,7 @@ pub mod wmf {
                     MF_MT_SUBTYPE, MF_READWRITE_DISABLE_CONVERTERS,
                 },
             },
-            System::Com::{CoInitializeEx, CoUninitialize, COINIT},
+            System::Com::{CoInitializeEx, CoTaskMemFree, CoUninitialize, COINIT},
         },
     };
 
@@ -371,20 +370,46 @@ pub mod wmf {
             ));
         }
 
-        let mut device_list = vec![];
-        if count == 0 {
-            return Ok(device_list);
-        }
+        // SAFETY: MFEnumDeviceSources succeeded, so it always writes a value into
+        // the out-parameter (NULL when count == 0, a CoTaskMem-allocated array when
+        // count > 0). We MUST CoTaskMemFree the array pointer on every non-error
+        // path — that is the Win32 contract for MFEnumDeviceSources. Each element
+        // is moved out via ptr::read so that the COM object's own Drop (Release)
+        // fires exactly once via the owned IMFActivate pushed into `device_list`,
+        // while the CoTaskMem block itself is freed as raw memory afterward.
+        let array_ptr = unsafe { unused_mf_activate.assume_init() };
 
-        unsafe { from_raw_parts(unused_mf_activate.assume_init(), count as usize) }
-            .iter()
-            .for_each(|pointer| {
-                if let Some(imf_activate) = pointer {
-                    device_list.push(imf_activate.clone());
-                }
-            });
+        let mut device_list = vec![];
+        for i in 0..count as usize {
+            // Move the Option<IMFActivate> out of the array slot without running
+            // Drop on the slot itself — the CoTaskMem block is freed below as raw
+            // bytes, so a Drop here would double-Release the COM reference.
+            let slot: Option<IMFActivate> = unsafe { std::ptr::read(array_ptr.add(i)) };
+            if let Some(activate) = slot {
+                device_list.push(activate);
+            }
+        }
+        // Free the CoTaskMem-allocated array itself (NULL is a no-op per the Win32
+        // spec, so this is always safe). Individual IMFActivate objects are now
+        // owned by `device_list` and will be Released via their Drop impls.
+        unsafe { CoTaskMemFree(Some(array_ptr.cast::<c_void>())) };
 
         Ok(device_list)
+    }
+
+    /// Free a `PWSTR` allocated by `GetAllocatedString` (caller-owns-buffer
+    /// contract). Null pointers are silently ignored — `CoTaskMemFree` accepts
+    /// `NULL` and is a no-op, but we check explicitly to make the intent clear.
+    ///
+    /// # Safety
+    /// `p` must be either null or a pointer previously returned by a Win32
+    /// `GetAllocatedString` / `CoTaskMemAlloc` call.  Calling this more than
+    /// once for the same pointer is undefined behaviour.
+    unsafe fn free_pwstr(p: PWSTR) {
+        if !p.is_null() {
+            // SAFETY: caller guarantees `p` comes from GetAllocatedString.
+            unsafe { CoTaskMemFree(Some(p.as_ptr().cast::<c_void>())) };
+        }
     }
 
     fn activate_to_descriptors(
@@ -393,8 +418,6 @@ pub mod wmf {
     ) -> Result<CameraInfo, NokhwaError> {
         let mut pwstr_name = PWSTR(&mut 0_u16);
         let mut len_pwstrname = 0;
-        let mut pwstr_symlink = PWSTR(&mut 0_u16);
-        let mut len_pwstrsymlink = 0;
 
         if let Err(why) = unsafe {
             imf_activate.GetAllocatedString(
@@ -409,6 +432,27 @@ pub mod wmf {
             ));
         }
 
+        if pwstr_name.is_null() {
+            return Err(NokhwaError::get_property(
+                "MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME",
+                "Call to IMFActivate::GetAllocatedString failed - PWSTR is null",
+            ));
+        }
+
+        // Convert and immediately free the name buffer so that a later error
+        // path cannot skip its CoTaskMemFree.
+        let name = unsafe {
+            let result = pwstr_name
+                .to_string()
+                .map_err(|x| NokhwaError::structure("PWSTR/String - Name", x.to_string()));
+            // SAFETY: GetAllocatedString succeeded and returned non-null.
+            free_pwstr(pwstr_name);
+            result?
+        };
+
+        let mut pwstr_symlink = PWSTR(&mut 0_u16);
+        let mut len_pwstrsymlink = 0;
+
         if let Err(why) = unsafe {
             imf_activate.GetAllocatedString(
                 &MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK,
@@ -416,18 +460,14 @@ pub mod wmf {
                 &raw mut len_pwstrsymlink,
             )
         } {
+            // pwstr_name was already freed above; only pwstr_symlink is relevant here,
+            // and GetAllocatedString failing means no buffer was allocated for it.
             return Err(NokhwaError::get_property(
                 "MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK",
                 why.to_string(),
             ));
         }
 
-        if pwstr_name.is_null() {
-            return Err(NokhwaError::get_property(
-                "MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME",
-                "Call to IMFActivate::GetAllocatedString failed - PWSTR is null",
-            ));
-        }
         if pwstr_symlink.is_null() {
             return Err(NokhwaError::get_property(
                 "MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK",
@@ -435,15 +475,14 @@ pub mod wmf {
             ));
         }
 
-        let name = unsafe {
-            pwstr_name
-                .to_string()
-                .map_err(|x| NokhwaError::structure("PWSTR/String - Name", x.to_string()))?
-        };
+        // Convert and immediately free the symlink buffer.
         let symlink = unsafe {
-            pwstr_symlink
+            let result = pwstr_symlink
                 .to_string()
-                .map_err(|x| NokhwaError::structure("PWSTR/String - Symlink", x.to_string()))?
+                .map_err(|x| NokhwaError::structure("PWSTR/String - Symlink", x.to_string()));
+            // SAFETY: GetAllocatedString succeeded and returned non-null.
+            free_pwstr(pwstr_symlink);
+            result?
         };
 
         Ok(CameraInfo::new(
