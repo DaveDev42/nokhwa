@@ -13,6 +13,21 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Runtime verification pending (compile-verified only)
 
+- [ ] **V4L `set_format` tears down the live stream before re-negotiating (fix/v4l-set-format-stream-teardown)** —
+  `set_format` in `nokhwa-bindings-linux-v4l/src/lib.rs` issued `VIDIOC_S_FMT` / `VIDIOC_S_PARM`
+  while a stream was still active and then called `self.open()`, which allocates the new
+  `MmapStream` (`REQBUFS` + `mmap`) *before* dropping the old one. V4L2 rejects `S_FMT`/`REQBUFS`
+  on a streaming device with EBUSY, and requesting new buffers while the old arena is still mapped
+  is a use-after-stream hazard. Now: snapshot prev format/params, `self.close()` the live stream
+  first (its `Drop` issues `VIDIOC_STREAMOFF` + munmap), set the new format/params, then re-open;
+  the undo path restores the prior format/params and re-opens so a failed re-negotiation does not
+  leave the device silently closed. The Linux code path is `#[cfg(target_os = "linux")]`, so it is
+  compile-checked off-Linux only; verified by the new cross-platform device test
+  `set_format_while_streaming_reacquires_stream` (open → frame → set_format(other) → frame), which
+  passed locally against a real Mac webcam on the AVFoundation backend. Verify on Linux via CI's
+  v4l2loopback `device-test` job (and on a physical UVC cam if available) that a streaming-time
+  format change keeps delivering frames at the new resolution.
+
 - [ ] **GStreamer URI pad-added falls back to `query_caps` (fix/gstreamer-uri-pad-caps-fallback)** —
   the `uridecodebin` `pad-added` callback in `nokhwa-bindings-gstreamer/src/uri.rs` filtered
   video pads using only `new_pad.current_caps()`. On a freshly-added dynamic pad `current_caps()`
