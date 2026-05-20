@@ -398,8 +398,8 @@ pub mod wmf {
     }
 
     /// Free a `PWSTR` allocated by `GetAllocatedString` (caller-owns-buffer
-    /// contract). Null pointers are silently ignored — CoTaskMemFree accepts
-    /// NULL and is a no-op, but we check explicitly to make the intent clear.
+    /// contract). Null pointers are silently ignored — `CoTaskMemFree` accepts
+    /// `NULL` and is a no-op, but we check explicitly to make the intent clear.
     ///
     /// # Safety
     /// `p` must be either null or a pointer previously returned by a Win32
