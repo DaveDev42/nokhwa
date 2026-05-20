@@ -13,6 +13,17 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Runtime verification pending (compile-verified only)
 
+- [ ] **MSMF `set_control` forces manual mode when writing an explicit value (fix/msmf-set-control-force-manual)** —
+  `set_control` read the device's current auto/manual flag via `self.control(control)?` and forwarded
+  that same flag to `IAMVideoProcAmp::Set`/`IAMCameraControl::Set`. When the device was in Auto mode,
+  writing an explicit value sent `CameraControl_Flags_Auto`, causing the driver to silently ignore the
+  value — Auto→Manual transitions were impossible via `set_control`. Now always passes
+  `CameraControl_Flags_Manual` (writing a specific value inherently means manual).
+  Dropped the `self.control(control)?` call (was used only to derive the flag) and removed
+  the now-unused `CameraControl_Flags_Auto` import. Compile-checked in CI. Verify on Windows hardware
+  that `set_control(Brightness, N)` on an auto-mode camera actually applies N:
+  `cargo test --features device-test,input-msmf,runner`
+
 - [ ] **MSMF `raw_bytes` gratuitous `MFCreateSample` removed (perf/msmf-drop-gratuitous-mfcreatesample)** —
   Pre-allocating an `IMFSample` before calling `ReadSample` was wasted: `ReadSample` COM-releases
   the pre-created object and replaces it with the captured sample. Changed initializer to `None`;
@@ -206,6 +217,13 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   dispatches through `uridecodebin`.
 
 ## Shipped recently (for context)
+
+- **MSMF `set_control` forces manual mode when writing explicit value (fix/msmf-set-control-force-manual)** —
+  `set_control` was forwarding the device's current auto/manual flag to the driver's `Set` call.
+  When the device was in Auto mode, writing an explicit value sent `CameraControl_Flags_Auto` and
+  the driver silently ignored the value — Auto→Manual transition was impossible. Now always passes
+  `CameraControl_Flags_Manual`. Dropped `self.control(control)?` (only used for the flag) and
+  removed unused `CameraControl_Flags_Auto` import. Runtime verification pending — see Open.
 
 - **MSMF `raw_bytes` gratuitous `MFCreateSample` allocation removed (perf/msmf-drop-gratuitous-mfcreatesample)** —
   `raw_bytes` pre-allocated an empty `IMFSample` via `MFCreateSample()` then passed it as the

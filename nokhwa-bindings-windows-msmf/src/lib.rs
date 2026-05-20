@@ -46,7 +46,7 @@ pub mod wmf {
         },
         time::Duration,
     };
-    use windows::Win32::Media::DirectShow::{CameraControl_Flags_Auto, CameraControl_Flags_Manual};
+    use windows::Win32::Media::DirectShow::CameraControl_Flags_Manual;
     use windows::Win32::Media::MediaFoundation::{
         MF_SOURCE_READERF_ENDOFSTREAM, MF_SOURCE_READERF_ERROR, MF_SOURCE_READER_FIRST_VIDEO_STREAM,
     };
@@ -888,7 +888,6 @@ pub mod wmf {
             control: KnownCameraControl,
             value: ControlValueSetter,
         ) -> Result<(), NokhwaError> {
-            let current_value = self.control(control)?;
             let (camera_control, video_proc_amp) = self.get_camera_control_services()?;
 
             let control_id = kcc_to_i32_or_err(control)?;
@@ -904,20 +903,11 @@ pub mod wmf {
                 }
             };
 
-            let flag = current_value
-                .flag()
-                .first()
-                .map(|x| {
-                    if *x == KnownCameraControlFlag::Automatic {
-                        CameraControl_Flags_Auto
-                    } else {
-                        CameraControl_Flags_Manual
-                    }
-                })
-                .ok_or(NokhwaError::structure(
-                    "KnownCameraControlFlag",
-                    "could not cast to i32",
-                ))?;
+            // Writing an explicit value always means manual mode.  Using the
+            // device's current auto/manual flag here caused the driver to
+            // silently ignore the value when the device was in Auto mode,
+            // making Auto→Manual transitions impossible via set_control.
+            let flag = CameraControl_Flags_Manual;
 
             match control_id {
                 MFControlId::ProcAmpBoolean(id) | MFControlId::ProcAmpRange(id) => unsafe {
