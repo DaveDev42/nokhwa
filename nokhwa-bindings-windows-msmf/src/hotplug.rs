@@ -39,12 +39,12 @@ mod real {
     use windows::Win32::System::Threading::GetCurrentThreadId;
     use windows::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
-        GetWindowLongPtrW, PostThreadMessageW, RegisterClassExW, RegisterDeviceNotificationW,
-        SetWindowLongPtrW, TranslateMessage, UnregisterDeviceNotification, CW_USEDEFAULT,
-        DBT_DEVICEARRIVAL, DBT_DEVICEREMOVECOMPLETE, DBT_DEVTYP_DEVICEINTERFACE,
-        DEVICE_NOTIFY_WINDOW_HANDLE, DEV_BROADCAST_DEVICEINTERFACE_W, GWLP_USERDATA, HDEVNOTIFY,
-        HWND_MESSAGE, MSG, WINDOW_EX_STYLE, WINDOW_STYLE, WM_DEVICECHANGE, WM_QUIT, WNDCLASSEXW,
-        WS_OVERLAPPED,
+        GetWindowLongPtrW, PostQuitMessage, PostThreadMessageW, RegisterClassExW,
+        RegisterDeviceNotificationW, SetWindowLongPtrW, TranslateMessage,
+        UnregisterDeviceNotification, CW_USEDEFAULT, DBT_DEVICEARRIVAL, DBT_DEVICEREMOVECOMPLETE,
+        DBT_DEVTYP_DEVICEINTERFACE, DEVICE_NOTIFY_WINDOW_HANDLE, DEV_BROADCAST_DEVICEINTERFACE_W,
+        GWLP_USERDATA, HDEVNOTIFY, HWND_MESSAGE, MSG, WINDOW_EX_STYLE, WINDOW_STYLE,
+        WM_DEVICECHANGE, WM_QUIT, WNDCLASSEXW, WS_OVERLAPPED,
     };
 
     /// `KSCATEGORY_VIDEO_CAMERA` — the device interface class GUID we
@@ -315,10 +315,18 @@ mod real {
                 let should_reconcile =
                     event == DBT_DEVICEARRIVAL || event == DBT_DEVICEREMOVECOMPLETE;
                 if should_reconcile {
-                    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        let shared: &SharedState = unsafe { &*shared_ptr };
-                        reconcile_and_emit(shared);
-                    }));
+                    let channel_open =
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            let shared: &SharedState = unsafe { &*shared_ptr };
+                            reconcile_and_emit(shared)
+                        }))
+                        .unwrap_or(false);
+                    if !channel_open {
+                        // Consumer dropped the poller — no point processing
+                        // further WM_DEVICECHANGE messages.  Post WM_QUIT so
+                        // the message pump exits cleanly.
+                        unsafe { PostQuitMessage(0) };
+                    }
                 }
                 // Suppress unused_variable; we don't actually inspect
                 // the broadcast struct for the symbolic link because
@@ -333,10 +341,13 @@ mod real {
     /// `Connected` for newcomers and `Disconnected` for removals,
     /// then swaps the cache. Keyed on `CameraInfo.misc` (the MSMF
     /// symbolic link) — the same key the polling impl used.
-    fn reconcile_and_emit(shared: &SharedState) {
+    ///
+    /// Returns `false` when the consumer has dropped the poller
+    /// (channel closed) so the caller can stop further work.
+    fn reconcile_and_emit(shared: &SharedState) -> bool {
         let current = take_snapshot();
         let mut previous = shared.snapshot.borrow_mut();
-        reconcile_and_emit_with(&shared.tx, &mut previous, current);
+        reconcile_and_emit_with(&shared.tx, &mut previous, current)
     }
 
     /// Diff `current` against `previous`, emit events, swap cache.
@@ -347,7 +358,7 @@ mod real {
     ///
     /// Emit arrivals before removals so a rapid re-plug observable
     /// in one `WM_DEVICECHANGE` wake surfaces as
-    /// `Disconnected` → `Connected` on the consumer side.
+    /// `Connected` → `Disconnected` on the consumer side.
     fn reconcile_and_emit_with(
         tx: &Sender<HotplugEvent>,
         previous: &mut BTreeMap<String, CameraInfo>,
@@ -451,7 +462,7 @@ mod real {
         /// Pin the documented ordering invariant: arrivals are sent
         /// before removals so a re-plug landing in one
         /// `WM_DEVICECHANGE` wake is observable as
-        /// `Disconnected` → `Connected` on the consumer side.
+        /// `Connected` → `Disconnected` on the consumer side.
         #[test]
         fn arrivals_precede_removals_in_emission_order() {
             let (tx, rx) = mpsc::channel();
