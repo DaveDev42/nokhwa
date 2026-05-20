@@ -133,6 +133,12 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **SIMD hygiene: `#[target_feature]` on `rgb_to_luma_sse2` + NEON tail NV12 tests (refactor/core-simd-hygiene)** —
+  Added missing `#[target_feature(enable = "sse2")]` to `rgb_to_luma_sse2` to match every other
+  extension-using SIMD fn in the codebase. Added two NV12 NEON-tail tests (`width=20, height=2`
+  and `width=10, height=2`) that exercise the scalar tail path on aarch64 (where NEON processes 16
+  px at a time). Both new tests pass on this ARM64 macOS host.
+
 - **`HybridCamera::frame_raw` parity with `StreamCamera` (refactor/session-hybrid-frame-raw)** —
   Added `frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError>` to `HybridCamera` via
   `FrameSource::frame_raw(&mut *self.inner)`. Compile-verified on macOS

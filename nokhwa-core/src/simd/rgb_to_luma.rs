@@ -103,6 +103,7 @@ unsafe fn rgb_to_luma_x86(src: &[u8], dst: &mut [u8]) {
 /// Compute (R+G+B)/3 per pixel using SSE2.
 /// Processes 4 pixels (12 bytes → 4 luma bytes) per iteration.
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "sse2")]
 #[allow(clippy::cast_possible_truncation)]
 unsafe fn rgb_to_luma_sse2(src: &[u8], dst: &mut [u8]) {
     use std::arch::x86_64::{
