@@ -511,4 +511,60 @@ mod tests {
             "NV12→RGBA non-aligned: SIMD and scalar must match"
         );
     }
+
+    // The existing non-aligned-tail tests use width=18.  On NEON (16-wide)
+    // this exercises a 2-px scalar tail.  On SSE4.1 (8-wide) it exercises a
+    // 2-px tail too.  On this aarch64 host, the NEON path is what actually
+    // runs, so we need a width that leaves a NEON tail ≥ 4 px and a fully
+    // sub-SIMD case to exercise nv12_scalar_tail exhaustively.
+
+    #[test]
+    fn nv12_to_rgb_neon_four_px_tail() {
+        // width=20: NEON processes 16 px, leaving a 4-px scalar tail.
+        // On SSE4.1 (8-wide) this exercises a 4-px tail too.
+        let width = 20;
+        let height = 2;
+        let y_size = width * height;
+        let uv_size = width * (height / 2);
+        let data: Vec<u8> = (0..y_size + uv_size)
+            .map(|i| (i * 17 % 256) as u8)
+            .collect();
+
+        let mut simd_rgb = vec![0u8; width * height * 3];
+        let mut scalar_rgb = vec![0u8; width * height * 3];
+
+        nv12_to_rgb_simd(width, height, &data, &mut simd_rgb, false);
+        nv12_to_rgb_scalar(width, height, &data, &mut scalar_rgb, false);
+
+        assert_eq!(
+            simd_rgb, scalar_rgb,
+            "NV12→RGB NEON 4-px tail (width=20): SIMD and scalar must match"
+        );
+    }
+
+    #[test]
+    fn nv12_to_rgb_fully_scalar_small() {
+        // width=10: below the NEON SIMD threshold (16) and below SSE4.1 (8
+        // only if width<8; here width=10 still runs one SSE4.1 iteration
+        // of 8 px + 2 scalar).  On NEON the entire row is scalar.
+        // This exercises nv12_scalar_tail with no preceding SIMD work.
+        let width = 10;
+        let height = 2;
+        let y_size = width * height;
+        let uv_size = width * (height / 2);
+        let data: Vec<u8> = (0..y_size + uv_size)
+            .map(|i| (i * 23 % 256) as u8)
+            .collect();
+
+        let mut simd_rgb = vec![0u8; width * height * 3];
+        let mut scalar_rgb = vec![0u8; width * height * 3];
+
+        nv12_to_rgb_simd(width, height, &data, &mut simd_rgb, false);
+        nv12_to_rgb_scalar(width, height, &data, &mut scalar_rgb, false);
+
+        assert_eq!(
+            simd_rgb, scalar_rgb,
+            "NV12→RGB fully-scalar (width=10): SIMD and scalar must match"
+        );
+    }
 }
