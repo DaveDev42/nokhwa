@@ -1720,3 +1720,40 @@ fn gray_into_luma_write_to_rejects_mismatched_dest() {
         "destination buffer size mismatch (expected 4, got 3)",
     );
 }
+
+// Gap A: convert_to_rgb GRAY arm was missing a resolution vs. data.len() check.
+// A Buffer built with a mismatched resolution (e.g. 4×4 = 16 expected but only
+// 10 bytes of data) would silently produce a wrong-pixel-count output.
+// Every other arm validates input size against resolution — now GRAY does too.
+#[test]
+fn convert_to_rgb_gray_rejects_resolution_mismatch() {
+    // Resolution says 4×4 = 16 pixels, but only 10 bytes of data.
+    // Before the fix this would silently produce a 30-byte (10*3) output
+    // instead of the expected 48-byte (16*3) one.
+    let data = vec![128u8; 10];
+    let err = convert_to_rgb(FrameFormat::GRAY, Resolution::new(4, 4), &data).unwrap_err();
+    assert_process_frame_err(
+        err,
+        FrameFormat::GRAY,
+        "RGB",
+        "GRAY data length 10 does not match resolution 16",
+    );
+}
+
+// Gap B: convert_to_rgb_buffer RAWRGB arm was not checking data.len() % 3 == 0,
+// unlike the convert_to_rgba and convert_to_rgba_buffer RAWRGB arms which do.
+// A non-multiple-of-3 RAWRGB payload would be silently copied into dest.
+#[test]
+fn convert_to_rgb_buffer_rawrgb_rejects_non_multiple_of_3_data() {
+    // 7 bytes: not divisible by 3.
+    let data = vec![1u8, 2, 3, 4, 5, 6, 7];
+    let mut dest = vec![0u8; 7]; // same length as data to avoid the dest-mismatch error
+    let err = convert_to_rgb_buffer(FrameFormat::RAWRGB, Resolution::new(1, 1), &data, &mut dest)
+        .unwrap_err();
+    assert_process_frame_err(
+        err,
+        FrameFormat::RAWRGB,
+        "RGB",
+        "RAWRGB data length not a multiple of 3",
+    );
+}

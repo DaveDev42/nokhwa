@@ -375,6 +375,17 @@ pub(crate) fn convert_to_rgb(
             Ok(rgb)
         }
         FrameFormat::GRAY => {
+            let expected = resolution.width() as usize * resolution.height() as usize;
+            if data.len() != expected {
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "RGB",
+                    format!(
+                        "GRAY data length {} does not match resolution {expected}",
+                        data.len()
+                    ),
+                ));
+            }
             let mut rgb = vec![0u8; data.len() * 3];
             for (dst, &pxv) in rgb.chunks_exact_mut(3).zip(data.iter()) {
                 dst.copy_from_slice(&[pxv, pxv, pxv]);
@@ -395,6 +406,13 @@ pub(crate) fn convert_to_rgb_buffer(
         FrameFormat::YUYV => buf_yuyv422_to_rgb(data, dest, false),
         FrameFormat::NV12 => buf_nv12_to_rgb(resolution, data, dest, false),
         FrameFormat::RAWRGB => {
+            if !data.len().is_multiple_of(3) {
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "RGB",
+                    "RAWRGB data length not a multiple of 3",
+                ));
+            }
             if dest.len() != data.len() {
                 return Err(NokhwaError::process_frame(
                     fcc,

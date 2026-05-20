@@ -133,6 +133,11 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **GRAY→RGB resolution validation + RAWRGB multiple-of-3 check (fix/core-frame-validation-gaps)** —
+  `convert_to_rgb` GRAY arm silently processed mismatched-length data (no resolution check).
+  `convert_to_rgb_buffer` RAWRGB arm did not check `data.len() % 3 == 0`, unlike the `convert_to_rgba`
+  path. Both gaps fixed and covered by unit tests.
+
 - **`CameraRunner` guard against double-open in `spawn_stream` / `spawn_hybrid` (fix/runner-guard-double-open)** —
   Added `if !cam.is_open()` guard before `cam.open()?` in both spawn paths so that callers who
   already opened the camera don't inadvertently create a second `AVCaptureSession` (resource leak /
