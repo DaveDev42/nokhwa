@@ -179,6 +179,14 @@ impl TokioCameraRunner {
     /// Stop forwarders and join the underlying sync runner on a
     /// `spawn_blocking` task.
     ///
+    /// `stop()` tears the runner down immediately and may drop frames or
+    /// pictures that are still in flight: the async receivers are dropped
+    /// before each forwarder's pending `blocking_send` completes, so an
+    /// item a forwarder has pulled from the sync side but not yet handed to
+    /// the async side is discarded. This is intended shutdown behaviour for
+    /// a live stream; if you need every queued item, drain the receivers
+    /// with `recv().await` until they return `None` before calling `stop()`.
+    ///
     /// # Errors
     /// Returns [`NokhwaError`] only if the `spawn_blocking` task panics.
     pub async fn stop(mut self) -> Result<(), NokhwaError> {
