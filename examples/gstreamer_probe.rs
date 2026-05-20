@@ -59,7 +59,7 @@ fn main() -> Result<(), nokhwa_core::error::NokhwaError> {
         );
     }
 
-    // Session-3 smoke: list live controls, round-trip brightness.
+    // Controls smoke: list live controls, round-trip brightness.
     // Graceful when the source element doesn't expose any (Windows
     // ksvideosrc, macOS avfvideosrc) — `controls()` returns an empty
     // list and the round-trip is skipped.
