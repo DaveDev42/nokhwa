@@ -298,6 +298,32 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Backlog
 
+- [ ] **AVF drops every MJPEG frame (`frame()` hangs on MJPEG-only macOS cameras).** In
+  `nokhwa-bindings-macos-avfoundation/src/callback.rs`, the sample-buffer delegate calls
+  `CMSampleBufferGetImageBuffer` (line ~267) and returns early when it is null (line ~269).
+  For compressed codecs (`kCMVideoCodecType_JPEG`, requested for `FrameFormat::MJPEG` in
+  `session.rs:115`) AVFoundation delivers data via a `CMBlockBuffer`, not a `CVImageBuffer`,
+  so `GetImageBuffer` is always null and **every MJPEG frame is silently discarded** — a
+  consumer that negotiated MJPEG blocks forever in `frame()`. The fix is to detect the
+  null-image-buffer case and extract the JPEG bytes via `CMSampleBufferGetDataBuffer` +
+  `CMBlockBufferCopyDataBytes` instead. Deferred: the maintainer's Mac camera offers only
+  NV12 (verified via `nokhwactl list-properties 0 compatibleformats` → NV12 at 7
+  resolutions, no MJPEG), so this path is unreachable here and cannot be runtime-verified.
+  Needs an external UVC webcam that exposes an MJPEG format on macOS.
+
+- [ ] **AVF maps 10-bit `x420` to 8-bit `NV12` (latent corruption on 10-bit-only cameras).** In
+  `nokhwa-bindings-macos-avfoundation/src/util.rs:18`,
+  `kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange` (`x420`) is mapped to
+  `FrameFormat::NV12`. `x420` packs each 10-bit sample into a 16-bit word (2 bytes/column),
+  but `extract_frame_bytes` (`callback.rs:194`) copies the Y plane at `dst_stride = plane_w`
+  (1 byte/column), truncating each luma row to half its real byte width — and even a
+  corrected byte count would feed 10-bit data to the 8-bit NV12 decoder. `output_set_frame_format`
+  requests 8-bit (`session.rs:117`), so `x420` only arrives if a camera offers *only* the
+  10-bit format. Safer fix is to drop the `x420 → NV12` mapping entirely (so negotiation
+  doesn't claim support it can't honor) rather than half-implement 10-bit unpacking.
+  Deferred: unreachable on the maintainer's NV12-8-bit camera; needs a 10-bit-only camera to
+  verify the behavior change does not regress real hardware.
+
 - [ ] **AVF `ExposureDuration` control assumes a uniform `CMTime` timescale.** In
   `nokhwa-bindings-macos-avfoundation/src/device.rs`, the `ExposureDuration` control
   (mapped to `KnownCameraControl::Gamma`) builds its `IntegerRange` from raw
