@@ -13,6 +13,19 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Runtime verification pending (compile-verified only)
 
+- [ ] **AVF device-lock leak + exposure control wiring (fix/avf-lock-leak-and-exposure-control-wiring)** —
+  Three bugs fixed together: (A1) `set_all` returned early without calling `self.unlock()` when the
+  format was not found, leaving the `AVCaptureDevice` permanently locked for configuration; (A4)
+  `ExposurePointOfInterest`'s `active` flag was gated on `focus_auto || focus_continuous` (focus vars)
+  instead of the correct `exposure_auto || exposure_continuous`; (A3) `ExposureDuration` and
+  `ExposureISO` controls keyed their writability flag and `active` bool on `exposure_custom` ("is
+  Custom mode *supported*") rather than `exposure_is_custom` ("is Custom mode *currently active*"),
+  making both controls appear ReadOnly+inactive when the device was actually in Custom mode and
+  read-write+active when it was not. Fixed to gate on `exposure_current.0 ==
+  AVCaptureExposureMode::Custom.0`. Verify on macOS hardware:
+  `cargo test --features device-test,input-avfoundation,runner --test device_tests -- --test-threads=1`
+  — confirm exposure controls round-trip correctly when switching to/from Custom exposure mode.
+
 - [ ] **MSMF control() helper extraction (refactor/msmf-control-extract-helpers)** —
   Mechanical extraction of `GetRange`+`Get` boilerplate from `control()` into
   `query_proc_amp` / `query_camera_control` helpers. Behaviour-preserving by

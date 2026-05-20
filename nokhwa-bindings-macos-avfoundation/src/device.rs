@@ -730,6 +730,7 @@ impl AVCaptureDeviceWrapper {
 
         let (Some(format), Some(min_duration)) = (selected_format, selected_min_frame_duration)
         else {
+            self.unlock();
             return Err(NokhwaError::set_property(
                 "CameraFormat",
                 descriptor.to_string(),
@@ -830,6 +831,10 @@ impl AVCaptureDeviceWrapper {
         );
         let exposure_custom =
             device_is_exposure_mode_supported(&self.inner, AVCaptureExposureMode::Custom);
+        // True only when the device is *currently* in Custom mode (raw value 3).
+        // ExposureDuration and ISO are only manually settable in Custom mode;
+        // gate their writability on the current mode, not mere support.
+        let exposure_is_custom = exposure_current.0 == AVCaptureExposureMode::Custom.0;
 
         {
             let mut supported_exposure_values = vec![];
@@ -872,7 +877,7 @@ impl AVCaptureDeviceWrapper {
                 default: (0.5, 0.5),
             },
             disabled_if_unsupported(exposure_poi_supported),
-            focus_auto || focus_continuous,
+            exposure_auto || exposure_continuous,
         ));
 
         let exposure_face_driven_supported =
@@ -923,15 +928,15 @@ impl AVCaptureDeviceWrapper {
                 step: 1,
                 default: exposure_duration_current().value,
             },
-            if exposure_custom {
+            if exposure_is_custom {
+                vec![KnownCameraControlFlag::Volatile]
+            } else {
                 vec![
                     KnownCameraControlFlag::ReadOnly,
                     KnownCameraControlFlag::Volatile,
                 ]
-            } else {
-                vec![KnownCameraControlFlag::Volatile]
             },
-            exposure_custom,
+            exposure_is_custom,
         ));
 
         let exposure_iso: c_float = device_iso(&self.inner);
@@ -948,15 +953,15 @@ impl AVCaptureDeviceWrapper {
                 step: f64::from(f32::MIN_POSITIVE),
                 default: f64::from(iso_current()),
             },
-            if exposure_custom {
+            if exposure_is_custom {
+                vec![KnownCameraControlFlag::Volatile]
+            } else {
                 vec![
                     KnownCameraControlFlag::ReadOnly,
                     KnownCameraControlFlag::Volatile,
                 ]
-            } else {
-                vec![KnownCameraControlFlag::Volatile]
             },
-            exposure_custom,
+            exposure_is_custom,
         ));
 
         let lens_aperture: c_float = device_lens_aperture(&self.inner);
