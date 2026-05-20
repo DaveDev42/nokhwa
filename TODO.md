@@ -13,6 +13,19 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Runtime verification pending (compile-verified only)
 
+- [ ] **V4L `frame()`/`frame_raw()` truncate to `bytesused` (fix/v4l-frame-bytesused)** —
+  In `nokhwa-bindings-linux-v4l/src/lib.rs`, `frame()` and `frame_raw()` handed the full mmap
+  buffer slice from `MmapStream::next()` downstream. The v4l crate sizes each arena buffer to
+  `v4l2_buf.length` (the driver's max image size) and returns that whole slice; the actual frame
+  length lives in `Metadata.bytesused`, which we ignored. For raw formats (YUYV/NV12)
+  `bytesused == length` so it was invisible, but for **MJPEG** the buffer is far larger than the
+  encoded frame, so consumers received the JPEG bytes plus a tail of stale padding — corrupting
+  strict decoders and any `frame_raw()` consumer. Fix: clamp `data` to `&data[..bytesused]`
+  (with `.min(data.len())` against a driver over-reporting). CI's `v4l2loopback` test pattern is
+  raw YUYV (`bytesused == length`), so it confirms no regression on the raw path but does **not**
+  exercise the compressed-frame difference — verify on real hardware with an MJPEG webcam that
+  `frame_raw()` length equals the JPEG size and that MJPEG decode succeeds.
+
 - [ ] **MSMF Exposure/Iris/Focus report their min/max range (fix/msmf-cc-ranged-controls)** —
   In `nokhwa-bindings-windows-msmf/src/lib.rs`, `Exposure`, `Iris`, and `Focus` were mapped to
   `MFControlId::CCValue`, whose `control()` arm built a `ControlValueDescription::Integer { value,
