@@ -199,6 +199,22 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Backlog
 
+- [ ] **V4L `controls()` drops WRITE_ONLY / INACTIVE controls.** In
+  `nokhwa-bindings-linux-v4l/src/lib.rs::controls()`, each descriptor's current
+  value is read via `device.control(desc.id)?` (line ~510) before the control is
+  emitted. For `WRITE_ONLY` controls `VIDIOC_G_EXT_CTRLS` returns `EACCES`, and
+  `INACTIVE` controls (e.g. `GAIN` while `AUTO_GAIN` is on) can also fail the read;
+  the `?` errors inside the map closure and `.filter_map(Result::ok)` silently drops
+  them. So those controls never appear in `controls()` output even though their flag
+  metadata (`WriteOnly` / `Disabled` / `active=false`) is already computed. Proper fix:
+  for descriptors flagged `WRITE_ONLY` / `INACTIVE`, skip the value read and emit the
+  control with a sentinel value (e.g. `desc.default`) so it's still enumerated with
+  correct flags. Deferred from the `set_control` verify fix because it changes
+  enumeration output and needs hardware verification on a UVC camera with auto-gated
+  controls (`cargo test --features device-test,input-v4l,runner`). NOTE: the
+  `set_control` read-back-verify path no longer depends on this (it now inspects the
+  descriptor flags directly), so this is purely an enumeration-completeness gap.
+
 - [ ] **`CameraRunner` stream-only frame-error observability.** In
   `src/runner.rs::spawn_stream`, a persistent `cam.frame()` error only drives
   exponential backoff + (optional) logging; the error is never surfaced to the
@@ -253,6 +269,27 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   dispatches through `uridecodebin`.
 
 ## Shipped recently (for context)
+
+- **V4L `set_control` skips read-back verify for WRITE_ONLY / VOLATILE controls (fix/v4l-set-control-verify-write-only-volatile)** —
+  `set_control` in `nokhwa-bindings-linux-v4l/src/lib.rs` performed the `VIDIOC_S_EXT_CTRLS`
+  write, then re-read the value via `self.camera_control(id)` and returned
+  `SetPropertyError("Rejected")` if the read-back differed. That verify step broke two
+  legitimate control classes. (1) **WRITE_ONLY** controls (common on UVC cameras for
+  relative pan/tilt/zoom/focus/iris) reject `VIDIOC_G_EXT_CTRLS` with `EACCES`, so
+  `controls()` — which reads every control's value up front — silently dropped them, and
+  `camera_control(id)` then returned "not found", making a *successful* write look failed.
+  (2) **VOLATILE** controls (e.g. `EXPOSURE` under auto-exposure) report a hardware-updated
+  value that legitimately differs from what was just written, producing a false "Rejected".
+  Fix: after the write succeeds, look up the target control's descriptor flags directly via
+  `device.query_controls()` (not the lossy `controls()` round-trip) and skip the read-back
+  verify when `WRITE_ONLY | VOLATILE` is set — the kernel already errors on the write itself
+  if it was actually rejected. The mutex guard is explicitly dropped before
+  `camera_control(id)` re-locks (std Mutex is non-reentrant). Real path is
+  `#[cfg(target_os = "linux")]`-gated; compile-verified via CI's Linux build + V4L loopback
+  job. Needs hardware verification on a UVC camera exposing WRITE_ONLY (relative PTZ) and
+  VOLATILE (auto-exposure) controls: `cargo test --features device-test,input-v4l,runner`.
+  The related enumeration gap (`controls()` dropping WRITE_ONLY/INACTIVE controls entirely)
+  is logged separately in Backlog — `set_control` no longer depends on it.
 
 - **GStreamer URI pipeline NULL-on-error teardown (fix/gstreamer-uri-null-on-startup-error)** —
   `UriPipelineHandle::new` in `nokhwa-bindings-gstreamer/src/uri.rs` transitioned the
