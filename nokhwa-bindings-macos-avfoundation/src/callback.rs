@@ -2,7 +2,10 @@ use crate::ffi::CMSampleBufferRef;
 use crate::ffi::{
     dispatch_queue_create, dispatch_release, CMSampleBufferGetImageBuffer,
     CMSampleBufferGetPresentationTimeStamp, CVImageBufferRef, CVPixelBufferGetBaseAddress,
-    CVPixelBufferGetDataSize, CVPixelBufferGetPixelFormatType, CVPixelBufferLockBaseAddress,
+    CVPixelBufferGetBaseAddressOfPlane, CVPixelBufferGetBytesPerRow,
+    CVPixelBufferGetBytesPerRowOfPlane, CVPixelBufferGetHeight, CVPixelBufferGetHeightOfPlane,
+    CVPixelBufferGetPixelFormatType, CVPixelBufferGetPlaneCount, CVPixelBufferGetWidth,
+    CVPixelBufferGetWidthOfPlane, CVPixelBufferIsPlanar, CVPixelBufferLockBaseAddress,
     CVPixelBufferUnlockBaseAddress, DispatchQueue,
 };
 use crate::types::{AVAuthorizationStatus, AVMediaTypeLocal};
@@ -99,6 +102,114 @@ pub struct CaptureCallbackIvars {
     arc_sender: Cell<*const c_void>,
 }
 
+/// Tight-packed bytes-per-pixel for the packed (non-planar) `FrameFormat`s
+/// `AVFoundation` can hand us. Used to compute the destination row stride
+/// when repacking a buffer that may have hardware row padding.
+fn packed_bytes_per_pixel(format: FrameFormat) -> Option<usize> {
+    match format {
+        FrameFormat::YUYV => Some(2),
+        FrameFormat::GRAY => Some(1),
+        FrameFormat::RAWRGB | FrameFormat::RAWBGR => Some(3),
+        // MJPEG is compressed (no row concept) and NV12 is planar — both
+        // are handled outside this helper.
+        FrameFormat::MJPEG | FrameFormat::NV12 => None,
+    }
+}
+
+/// Copy `rows` rows of `dst_stride` useful bytes each out of a source
+/// region whose physical row stride is `src_stride` (which may be larger
+/// than `dst_stride` due to hardware padding), appending into `out`.
+///
+/// # Safety
+/// `base` must point to at least `rows * src_stride` readable bytes,
+/// which holds while the `CVPixelBuffer` base-address lock is held.
+unsafe fn copy_rows(
+    base: *const u8,
+    src_stride: usize,
+    dst_stride: usize,
+    rows: usize,
+    out: &mut Vec<u8>,
+) {
+    let copy = dst_stride.min(src_stride);
+    for row in 0..rows {
+        let row_ptr = unsafe { base.add(row * src_stride) };
+        let row_slice = unsafe { std::slice::from_raw_parts(row_ptr, copy) };
+        out.extend_from_slice(row_slice);
+    }
+}
+
+/// Extract a tight-packed (no row padding) frame from a locked
+/// `CVPixelBuffer`, honoring planar layout and per-row stride.
+///
+/// The downstream SIMD/scalar decoders assume the canonical packed
+/// layout for each `FrameFormat` (`width * bpp` bytes per row for packed
+/// formats; a `width`-strided Y plane immediately followed by a
+/// `width`-strided interleaved `CbCr` plane for NV12). `AVFoundation`,
+/// however, returns buffers with hardware row padding (stride can exceed
+/// `width * bpp`, common on Apple Silicon) and delivers `420v`/`420f`/
+/// `x420` as a *bi-planar* buffer whose planes are not contiguous and
+/// each carry their own stride. The old flat
+/// `GetBaseAddress`+`GetDataSize` copy mishandled both: it dragged
+/// padding bytes into the output for padded packed formats, and for the
+/// bi-planar 4:2:0 formats it copied only the Y plane (plus whatever
+/// happened to follow it), corrupting every NV12 frame.
+///
+/// # Safety
+/// `image_buffer` must be non-null and its base address must be locked
+/// (`CVPixelBufferLockBaseAddress` succeeded) for the duration of the
+/// call.
+// The CoreVideo getters return `c_ulong` (`u64` on the only targets this
+// crate runs on — 64-bit Apple platforms). Frame dimensions and strides
+// always fit a `usize` there, so the `as usize` casts cannot truncate.
+#[allow(clippy::cast_possible_truncation)]
+unsafe fn extract_frame_bytes(
+    image_buffer: CVImageBufferRef,
+    format: FrameFormat,
+) -> Option<Vec<u8>> {
+    if unsafe { CVPixelBufferIsPlanar(image_buffer) } {
+        // Planar path — only the 4:2:0 bi-planar formats (mapped to
+        // FrameFormat::NV12) reach here. Repack into the canonical NV12
+        // layout: full-width Y plane, then full-width interleaved CbCr.
+        let plane_count = unsafe { CVPixelBufferGetPlaneCount(image_buffer) } as usize;
+        if plane_count < 2 {
+            return None;
+        }
+        let mut out = Vec::new();
+        for plane in 0..2usize {
+            let base = unsafe { CVPixelBufferGetBaseAddressOfPlane(image_buffer, plane as _) };
+            if base.is_null() {
+                return None;
+            }
+            let src_stride =
+                unsafe { CVPixelBufferGetBytesPerRowOfPlane(image_buffer, plane as _) } as usize;
+            let plane_w =
+                unsafe { CVPixelBufferGetWidthOfPlane(image_buffer, plane as _) } as usize;
+            let plane_h =
+                unsafe { CVPixelBufferGetHeightOfPlane(image_buffer, plane as _) } as usize;
+            // Y plane: 1 byte per sample column. CbCr plane: 2 bytes per
+            // sample column (interleaved Cb,Cr), so the useful width is
+            // `plane_w * 2` bytes — GetWidthOfPlane reports the chroma
+            // sample count, not the byte count.
+            let dst_stride = if plane == 0 { plane_w } else { plane_w * 2 };
+            unsafe { copy_rows(base.cast::<u8>(), src_stride, dst_stride, plane_h, &mut out) };
+        }
+        Some(out)
+    } else {
+        let bpp = packed_bytes_per_pixel(format)?;
+        let width = unsafe { CVPixelBufferGetWidth(image_buffer) } as usize;
+        let height = unsafe { CVPixelBufferGetHeight(image_buffer) } as usize;
+        let src_stride = unsafe { CVPixelBufferGetBytesPerRow(image_buffer) } as usize;
+        let base = unsafe { CVPixelBufferGetBaseAddress(image_buffer) };
+        if base.is_null() || width == 0 || height == 0 {
+            return None;
+        }
+        let dst_stride = width * bpp;
+        let mut out = Vec::with_capacity(dst_stride * height);
+        unsafe { copy_rows(base.cast::<u8>(), src_stride, dst_stride, height, &mut out) };
+        Some(out)
+    }
+}
+
 // SAFETY: `arc_sender` is only written once at init time (before any GCD callbacks
 // can fire) and is only read from the serial GCD dispatch queue thereafter.
 // `Cell<*const c_void>` is not `Send` by default; we assert it is safe to move
@@ -106,8 +217,10 @@ pub struct CaptureCallbackIvars {
 //  - The pointer is read-only after `set_ivars` (init is single-threaded).
 //  - The GCD queue ensures serialised access to reads.
 //  - `Arc<Sender<FrameData>>` itself is `Send`.
+// We deliberately do NOT implement `Sync`: `Cell` is `!Sync`, the serial
+// queue gives us single-threaded *access* (which `Send` covers), and no
+// code path takes a shared `&CaptureCallbackIvars` across threads.
 unsafe impl Send for CaptureCallbackIvars {}
-unsafe impl Sync for CaptureCallbackIvars {}
 
 define_class!(
     // SAFETY:
@@ -154,29 +267,24 @@ define_class!(
                 return;
             }
 
+            let pixel_format = unsafe { CVPixelBufferGetPixelFormatType(image_buffer) };
+            let frame_format = raw_fcc_to_frameformat(pixel_format).unwrap_or(FrameFormat::YUYV);
+
             unsafe {
                 CVPixelBufferLockBaseAddress(image_buffer, 0);
             };
 
-            let buffer_length = unsafe { CVPixelBufferGetDataSize(image_buffer) };
-            let buffer_ptr = unsafe { CVPixelBufferGetBaseAddress(image_buffer) };
-
-            if buffer_ptr.is_null() || buffer_length == 0 {
-                unsafe { CVPixelBufferUnlockBaseAddress(image_buffer, 0) };
-                return;
-            }
-
-            // CVPixelBufferGetDataSize returns c_ulong (usize on 64-bit Apple platforms).
-            // cast_possible_truncation on usize→usize is a no-op; the allow above covers
-            // the cross-size target warning.
-            let buffer_as_vec = unsafe {
-                std::slice::from_raw_parts(buffer_ptr as *const u8, buffer_length as usize).to_vec()
-            };
-
-            let pixel_format = unsafe { CVPixelBufferGetPixelFormatType(image_buffer) };
-            let frame_format = raw_fcc_to_frameformat(pixel_format).unwrap_or(FrameFormat::YUYV);
+            // Repack honoring planar layout + per-row stride. Returns a
+            // tight-packed buffer in the canonical layout the decoders
+            // expect; `None` if the buffer was empty/malformed or a plane
+            // base address was null.
+            let extracted = unsafe { extract_frame_bytes(image_buffer, frame_format) };
 
             unsafe { CVPixelBufferUnlockBaseAddress(image_buffer, 0) };
+
+            let Some(buffer_as_vec) = extracted else {
+                return;
+            };
 
             // Compute sensor capture timestamp from CMSampleBuffer presentation time
             let capture_ts = {
