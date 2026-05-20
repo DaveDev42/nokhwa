@@ -1171,15 +1171,18 @@ pub mod wmf {
                 });
             };
 
-            // Calculate absolute capture timestamp.
-            let capture_ts = if sample_time_100ns > 0 {
-                let sample_offset =
-                    Duration::from_nanos(u64::try_from(sample_time_100ns).unwrap_or(0) * 100);
-                self.stream_epoch
-                    .and_then(|epoch| epoch.checked_add(sample_offset))
-            } else {
-                None
-            };
+            // Calculate absolute capture timestamp. A presentation time of 0 is a
+            // valid first-frame stamp, so accept >= 0; a negative time (reported on
+            // some format changes/seeks) has no meaningful wallclock mapping and
+            // yields None rather than a fabricated stamp.
+            let capture_ts = u64::try_from(sample_time_100ns)
+                .ok()
+                .and_then(|ticks_100ns| ticks_100ns.checked_mul(100))
+                .map(Duration::from_nanos)
+                .and_then(|sample_offset| {
+                    self.stream_epoch
+                        .and_then(|epoch| epoch.checked_add(sample_offset))
+                });
 
             let buffer = match unsafe { imf_sample.ConvertToContiguousBuffer() } {
                 Ok(buf) => buf,
