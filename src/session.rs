@@ -487,6 +487,16 @@ impl HybridCamera {
     }
     /// # Errors
     /// Propagates the backend's error.
+    pub fn compatible_formats(&mut self) -> Result<Vec<CameraFormat>, NokhwaError> {
+        FrameSource::compatible_formats(&mut *self.inner)
+    }
+    /// # Errors
+    /// Propagates the backend's error.
+    pub fn compatible_fourcc(&mut self) -> Result<Vec<FrameFormat>, NokhwaError> {
+        FrameSource::compatible_fourcc(&mut *self.inner)
+    }
+    /// # Errors
+    /// Propagates the backend's error.
     pub fn open(&mut self) -> Result<(), NokhwaError> {
         FrameSource::open(&mut *self.inner)
     }
