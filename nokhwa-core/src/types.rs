@@ -1087,7 +1087,7 @@ impl ControlValueDescription {
                     return true;
                 }
                 match setter.as_integer() {
-                    Some(i) => (i + default) % step == 0 || (i + value) % step == 0,
+                    Some(i) => (i - default) % step == 0 || (i - value) % step == 0,
                     None => false,
                 }
             }
@@ -1103,7 +1103,7 @@ impl ControlValueDescription {
                 }
                 match setter.as_integer() {
                     Some(i) => {
-                        ((i + default) % step == 0 || (i + value) % step == 0)
+                        ((i - default) % step == 0 || (i - value) % step == 0)
                             && i >= min
                             && i <= max
                     }

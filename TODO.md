@@ -354,6 +354,19 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **`verify_setter` integer step-alignment uses subtraction, not addition (fix/verify-setter-step-alignment)** —
+  `ControlValueDescription::verify_setter` in `nokhwa-core/src/types.rs` tested integer
+  step-grid alignment with `(i + default) % step == 0 || (i + value) % step == 0` for both the
+  `Integer` and `IntegerRange` variants. Grid alignment is anchored at `default` (or `value`),
+  so the test must *subtract* the anchor — `(i - default) % step == 0` — exactly as the `Float`
+  path already did with `(f - default).abs() % step`. The `+` form accidentally worked only
+  when the anchor was itself a multiple of `step` (e.g. the common `default = 0`); whenever the
+  anchor was off the step grid it inverted which setters were accepted. Concrete failure: with
+  `default = 3, step = 5`, the valid setter `8` (`(8 - 3) % 5 == 0`) was rejected while the
+  invalid `7` (`(7 + 3) % 5 == 0`) was accepted. Pure arithmetic (no hardware); fixed both
+  variants and added a `step > 1` + unaligned-default regression test; `cargo test`/`clippy`
+  green under `-p nokhwa-core`.
+
 - **`CameraRunner` event thread exits on a closed command channel (fix/runner-event-thread-disconnect)** —
   the hybrid worker's event sub-thread checked its stop channel with `if let Ok(()) =
   ev_cmd_rx.try_recv()`, breaking only on an explicit signal. If the main worker unwound
