@@ -172,6 +172,9 @@ impl FrameSource for AVFoundationCaptureDevice {
     }
 
     fn open(&mut self) -> Result<(), NokhwaError> {
+        if self.is_open() {
+            return Ok(());
+        }
         self.refresh_camera_format()?;
 
         let input = create_device_input(self.device.inner())?;
@@ -233,7 +236,10 @@ impl FrameSource for AVFoundationCaptureDevice {
 
     fn frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError> {
         match self.frame_buffer_receiver.recv() {
-            Ok(recv) => Ok(Cow::from(recv.0)),
+            Ok(recv) => {
+                self.frame_buffer_receiver.try_iter().for_each(drop);
+                Ok(Cow::from(recv.0))
+            }
             Err(why) => Err(NokhwaError::ReadFrameError {
                 message: why.to_string(),
                 format: Some(self.format.format()),

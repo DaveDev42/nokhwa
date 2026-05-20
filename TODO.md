@@ -13,6 +13,16 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Runtime verification pending (compile-verified only)
 
+- [ ] **AVF re-open guard + `frame_raw` drain (fix/avf-guard-reopen-and-drain-frame-raw)** —
+  `open()` now returns `Ok(())` immediately if `is_open()` is true, preventing a double-open
+  that would leak the previous `AVCaptureSession` and its delegate (old session kept running,
+  double-feeding the channel). `frame_raw()` now drains stale queued frames with
+  `try_iter().for_each(drop)` after `recv()`, matching `frame()`, so callers get the freshest
+  frame rather than a growing backlog. Compile/clippy-verified (macOS). Verify on hardware:
+  `cargo test --features device-test,input-avfoundation,runner` — confirm that calling `open()`
+  on an already-open camera is a no-op, and that `frame_raw()` returns the same freshness as
+  `frame()` (no stale-backlog drift over time).
+
 - [ ] **MSMF control() helper extraction (refactor/msmf-control-extract-helpers)** —
   Mechanical extraction of `GetRange`+`Get` boilerplate from `control()` into
   `query_proc_amp` / `query_camera_control` helpers. Behaviour-preserving by
@@ -161,6 +171,12 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   (Bug B — flags were inverted). `ExposurePointOfInterest` active arg now uses `exposure_auto ||
   exposure_continuous` instead of the wrong `focus_auto || focus_continuous` (Bug C). Verified 37/37
   device-tests on FaceTime HD.
+- **AVF re-open guard + `frame_raw` drain (fix/avf-guard-reopen-and-drain-frame-raw)** —
+  Added `if self.is_open() { return Ok(()); }` at the top of `open()` to prevent a second
+  `AVCaptureSession` from being created when the device is already streaming (session leak /
+  double-feed bug). Added `self.frame_buffer_receiver.try_iter().for_each(drop)` after the
+  successful `recv()` in `frame_raw()` to drain stale buffered frames, matching the drain
+  already present in `frame()`. Runtime verification pending on hardware — see Open.
 
 - **`runner` example feature-gate fix (fix/examples-runner-feature-gate)** —
   Replaced `#![cfg(feature = "runner")]` file-level attribute (which suppresses the entire
