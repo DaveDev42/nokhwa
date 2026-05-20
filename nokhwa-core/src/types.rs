@@ -1916,8 +1916,8 @@ pub fn buf_bgr_to_rgb(
     let width = resolution.width();
     let height = resolution.height();
 
-    let input_size = (width * height * 3) as usize; // BGR is 3 bytes per pixel
-    let output_size = (width * height * 3) as usize; // RGB is 3 bytes per pixel
+    let input_size = width as usize * height as usize * 3; // BGR is 3 bytes per pixel
+    let output_size = width as usize * height as usize * 3; // RGB is 3 bytes per pixel
 
     if data.len() != input_size {
         return Err(NokhwaError::process_frame(

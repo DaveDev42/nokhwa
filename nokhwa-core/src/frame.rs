@@ -368,7 +368,16 @@ pub(crate) fn convert_to_rgb(
         FrameFormat::MJPEG => mjpeg_to_rgb(data, false),
         FrameFormat::YUYV => yuyv422_to_rgb(data, false),
         FrameFormat::NV12 => nv12_to_rgb(resolution, data, false),
-        FrameFormat::RAWRGB => Ok(data.to_vec()),
+        FrameFormat::RAWRGB => {
+            if !data.len().is_multiple_of(3) {
+                return Err(NokhwaError::process_frame(
+                    fcc,
+                    "RGB",
+                    "RAWRGB data length not a multiple of 3",
+                ));
+            }
+            Ok(data.to_vec())
+        }
         FrameFormat::RAWBGR => {
             let mut rgb = vec![0u8; data.len()];
             buf_bgr_to_rgb(resolution, data, &mut rgb)?;
@@ -652,14 +661,18 @@ pub(crate) fn convert_to_luma_buffer(
         }
         FrameFormat::MJPEG => {
             let luma = convert_to_luma(fcc, resolution, data)?;
-            if dest.len() < luma.len() {
+            if dest.len() != luma.len() {
                 return Err(NokhwaError::process_frame(
                     fcc,
                     "Luma",
-                    "Destination buffer too small",
+                    format!(
+                        "destination buffer size mismatch (expected {}, got {})",
+                        luma.len(),
+                        dest.len()
+                    ),
                 ));
             }
-            dest[..luma.len()].copy_from_slice(&luma);
+            dest.copy_from_slice(&luma);
             Ok(())
         }
     }
