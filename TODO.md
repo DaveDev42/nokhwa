@@ -245,6 +245,36 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   consumer that needs programmatic error detection (today: rely on frame
   starvation + `logging` feature).
 
+- [ ] **GStreamer `pull_frame` does not validate the mapped buffer size.**
+  In `nokhwa-bindings-gstreamer/src/pipeline.rs::pull_frame` (line ~207),
+  the readable map is handed straight to `Buffer::new(self.format.resolution(),
+  map.as_slice(), self.format.format())` with no check that `map.len()` matches
+  the expected wire size for the negotiated format. A short or oversized buffer
+  (e.g. a partially-decoded frame, a caps/stride mismatch) is currently caught
+  downstream by the `nokhwa-core` conversion-length guards (shipped in #476),
+  which reject it at `into_rgb()`/`into_luma()` time. A defensive size check at
+  the source would fail earlier with a clearer GStreamer-scoped `ReadFrameError`
+  rather than surfacing as a conversion error later. Proper fix wants a shared
+  wire-size helper (the V4L2 and AVFoundation paths compute the same expectation
+  independently) rather than another inline `width*height*bpp` in this one spot;
+  deferred until that helper exists so the three backends stay consistent.
+
+- [ ] **GStreamer V4L2 control restart briefly runs two `v4l2src` on the same
+  device.** In `nokhwa-bindings-gstreamer/src/lib.rs::set_control` (line ~327),
+  applying a `V4l2Cid` control to an already-open local pipeline builds the
+  replacement `PipelineHandle` (`PipelineHandle::start(...)`) *before* assigning
+  it to `self.pipeline`, so for a brief window two pipelines exist, each with its
+  own `v4l2src` element opening the same `/dev/videoN`. This ordering is
+  **intentional** (the keep-stream-alive design noted in the inline comment: on
+  start failure the old pipeline keeps running and the device stays usable), so
+  this is a recorded known-limitation, not a bug to "fix" by dropping the old
+  pipeline first — that would regress the failure-path guarantee. Some V4L2
+  drivers permit multiple opens of the same node; others (single-open UVC
+  gadgets) may reject the second `v4l2src` and fail the restart, in which case
+  the staged control still lands on the next `open()`. Revisit only if a driver
+  is found that mishandles the transient double-open in a way the failure path
+  doesn't already cover (`cargo test --features device-test,input-gstreamer`).
+
 - [ ] **WASM / browser backend.** Blocked on five design decisions, no
   active consumer:
   - interop library (`tsify` vs `serde-wasm-bindgen` vs hand-rolled)
