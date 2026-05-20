@@ -519,7 +519,6 @@ pub mod wmf {
     enum MFControlId {
         ProcAmpBoolean(i32),
         ProcAmpRange(i32),
-        CCValue(i32),
         CCRange(i32),
     }
 
@@ -542,9 +541,9 @@ pub mod wmf {
             KnownCameraControl::Pan => MFControlId::CCRange(CameraControl_Pan.0),
             KnownCameraControl::Tilt => MFControlId::CCRange(CameraControl_Tilt.0),
             KnownCameraControl::Zoom => MFControlId::CCRange(CameraControl_Zoom.0),
-            KnownCameraControl::Exposure => MFControlId::CCValue(CameraControl_Exposure.0),
-            KnownCameraControl::Iris => MFControlId::CCValue(CameraControl_Iris.0),
-            KnownCameraControl::Focus => MFControlId::CCValue(CameraControl_Focus.0),
+            KnownCameraControl::Exposure => MFControlId::CCRange(CameraControl_Exposure.0),
+            KnownCameraControl::Iris => MFControlId::CCRange(CameraControl_Iris.0),
+            KnownCameraControl::Focus => MFControlId::CCRange(CameraControl_Focus.0),
             KnownCameraControl::Other(o) => {
                 if o == VideoProcAmp_ColorEnable.0 as u128 {
                     MFControlId::ProcAmpRange(o as i32)
@@ -893,16 +892,6 @@ pub mod wmf {
                     };
                     (desc, r.flag)
                 }
-                MFControlId::CCValue(id) => {
-                    let r =
-                        unsafe { query_camera_control(&camera_control, id, control_id, control)? };
-                    let desc = ControlValueDescription::Integer {
-                        value: i64::from(r.value),
-                        default: i64::from(r.default),
-                        step: i64::from(r.step),
-                    };
-                    (desc, r.flag)
-                }
                 MFControlId::CCRange(id) => {
                     let r =
                         unsafe { query_camera_control(&camera_control, id, control_id, control)? };
@@ -968,7 +957,7 @@ pub mod wmf {
                         ));
                     }
                 },
-                MFControlId::CCValue(id) | MFControlId::CCRange(id) => unsafe {
+                MFControlId::CCRange(id) => unsafe {
                     if let Err(why) = camera_control.Set(id, ctrl_value, flag.0) {
                         return Err(NokhwaError::set_property(
                             control.to_string(),
@@ -1323,14 +1312,15 @@ pub mod wmf {
         }
 
         // Pin every KnownCameraControl -> MFControlId mapping. The variant
-        // (ProcAmpRange / ProcAmpBoolean / CCRange / CCValue) determines
-        // which of the four IAMVideoProcAmp / IAMCameraControl Get/Set
-        // routines `set_control` ends up calling. A Pan that drifts from
-        // CCRange to CCValue would silently call IAMCameraControl::Get
-        // instead of GetRange and the user would observe wrong limits.
-        // The exact i32 IDs come from windows-rs constants — we round-trip
-        // them so a future windows-rs major bump that renumbers these
-        // would be caught here rather than at runtime on a customer's box.
+        // (ProcAmpRange / ProcAmpBoolean / CCRange) determines which
+        // IAMVideoProcAmp / IAMCameraControl Get/Set routine `control()` and
+        // `set_control` end up using, and — for the *Range variants — whether
+        // the reported descriptor keeps its min/max bounds. A ranged control
+        // (Pan/Exposure/Focus/…) that drifts off CCRange would surface a
+        // descriptor with no limits even though IAMCameraControl::GetRange
+        // returns them. The exact i32 IDs come from windows-rs constants — we
+        // round-trip them so a future windows-rs major bump that renumbers
+        // these would be caught here rather than at runtime on a customer's box.
         #[test]
         fn kcc_to_i32_maps_every_standard_control() {
             let expected: &[(KnownCameraControl, MFControlId)] = &[
@@ -1384,15 +1374,15 @@ pub mod wmf {
                 ),
                 (
                     KnownCameraControl::Exposure,
-                    MFControlId::CCValue(CameraControl_Exposure.0),
+                    MFControlId::CCRange(CameraControl_Exposure.0),
                 ),
                 (
                     KnownCameraControl::Iris,
-                    MFControlId::CCValue(CameraControl_Iris.0),
+                    MFControlId::CCRange(CameraControl_Iris.0),
                 ),
                 (
                     KnownCameraControl::Focus,
-                    MFControlId::CCValue(CameraControl_Focus.0),
+                    MFControlId::CCRange(CameraControl_Focus.0),
                 ),
             ];
             for (kcc, want) in expected {
