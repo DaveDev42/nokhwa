@@ -404,6 +404,20 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **Examples dispatch decode on the negotiated fourcc instead of hardcoding `Frame<Mjpeg>` (fix/examples-hardcoded-mjpeg-frame)** —
+  `examples/captesting`, `examples/threaded-capture`, and `examples/capture` (the `Single`
+  subcommand) all opened the camera with `OpenRequest::any()` — letting the backend pick its
+  preferred format — and then unconditionally wrapped the captured `Buffer` in
+  `Frame::<Mjpeg>::new(buffer)`. `Frame::new` asserts `buffer.source_frame_format() ==
+  F::FRAME_FORMAT` at runtime, so on any backend that negotiates a non-MJPEG format (most Linux
+  webcams pick YUYV; this Mac's FaceTime camera reports NV12) the examples panicked instead of
+  demonstrating capture. Each now routes through a small `decode_to_rgb` / `decode_to_rgba`
+  helper that matches on `buffer.source_frame_format()` and uses the non-panicking
+  `Frame::<F>::try_new`, mirroring `examples/live_view`'s `decode_to_rgb`. Runtime-verified on a
+  real Mac webcam (NV12 negotiated): captesting wrote `turtle.jpeg`; threaded-capture decoded ten
+  1920x1080 frames to RGBA. The `capture` Single path shares the identical helper. Examples-only;
+  no library code changed.
+
 - **AVF `close()` brackets session input/output removal in a configuration block (fix/avf-close-session-config-bracket)** —
   `AVFoundationCaptureDevice::close()` in `nokhwa-bindings-macos-avfoundation/src/capture.rs`
   called `session_remove_output` / `session_remove_input` on a *running* `AVCaptureSession`

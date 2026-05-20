@@ -17,12 +17,12 @@
 use clap::{Parser, Subcommand};
 use color_eyre::Report;
 use nokhwa::error::NokhwaError;
-use nokhwa::format_types::Mjpeg;
-use nokhwa::frame::{Frame, IntoRgb};
+use nokhwa::format_types::{Mjpeg, Nv12, RawBgr, RawRgb, Yuyv};
+use nokhwa::frame::{Frame, IntoRgb, RgbConversion};
 use nokhwa::utils::{frame_formats, CameraFormat, CameraIndex, FrameFormat, Resolution};
 use nokhwa::{
-    native_api_backend, nokhwa_initialize, open, query, CameraRunner, OpenRequest, OpenedCamera,
-    RunnerConfig, StreamCamera,
+    native_api_backend, nokhwa_initialize, open, query, Buffer, CameraRunner, OpenRequest,
+    OpenedCamera, RunnerConfig, StreamCamera,
 };
 use std::str::FromStr;
 use std::time::Duration;
@@ -238,8 +238,7 @@ fn nokhwa_main() -> Result<(), NokhwaError> {
             let buffer = camera.frame()?;
             camera.close()?;
             println!("Captured Single Frame of {}", buffer.buffer().len());
-            let frame: Frame<Mjpeg> = Frame::new(buffer);
-            let decoded = frame.into_rgb().materialize()?;
+            let decoded = decode_to_rgb(buffer)?.materialize()?;
             println!("DecodedFrame of {}", decoded.len());
 
             if let Some(path) = save {
@@ -252,6 +251,23 @@ fn nokhwa_main() -> Result<(), NokhwaError> {
     }
 
     Ok(())
+}
+
+/// Wrap a `Buffer` in the typed `Frame<F>` matching its own fourcc and
+/// start a lazy RGB conversion. Dispatching on the buffer's format avoids
+/// the panic that `Frame::<Mjpeg>::new` raises when the backend negotiates
+/// a non-MJPEG format (most Linux webcams pick YUYV).
+fn decode_to_rgb(buf: Buffer) -> Result<RgbConversion, NokhwaError> {
+    match buf.source_frame_format() {
+        FrameFormat::MJPEG => Ok(Frame::<Mjpeg>::try_new(buf)?.into_rgb()),
+        FrameFormat::YUYV => Ok(Frame::<Yuyv>::try_new(buf)?.into_rgb()),
+        FrameFormat::NV12 => Ok(Frame::<Nv12>::try_new(buf)?.into_rgb()),
+        FrameFormat::RAWRGB => Ok(Frame::<RawRgb>::try_new(buf)?.into_rgb()),
+        FrameFormat::RAWBGR => Ok(Frame::<RawBgr>::try_new(buf)?.into_rgb()),
+        FrameFormat::GRAY => Err(NokhwaError::general(
+            "capture does not support GRAY/Luma cameras",
+        )),
+    }
 }
 
 fn camera_print_controls(cam: &StreamCamera) -> Result<(), NokhwaError> {
