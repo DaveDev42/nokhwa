@@ -22,6 +22,15 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   `cargo test --features device-test,input-avfoundation,runner` — confirm that calling `open()`
   on an already-open camera is a no-op, and that `frame_raw()` returns the same freshness as
   `frame()` (no stale-backlog drift over time).
+- [ ] **AVF ExposureDuration/ISO writability gated on active Custom mode (fix/avf-lock-leak-and-exposure-control-wiring)** —
+  `ExposureDuration` (`KnownCameraControl::Gamma`) and `ExposureISO` (`KnownCameraControl::Brightness`)
+  now gate their `ReadOnly` flag and `active` bool on `exposure_is_custom` (device is *currently* in
+  Custom exposure mode) instead of `exposure_custom` (Custom mode is merely *supported*). AVFoundation
+  only allows `setExposureModeCustomWithDuration:ISO:` when actively in Custom mode; the old code made
+  both controls appear writable when Custom was supported but the device was in a different mode.
+  Compile-verified on macOS. Verify on hardware: switch to Custom exposure mode and confirm
+  `ExposureDuration` + `ExposureISO` surface as writable+active; switch back and confirm ReadOnly+inactive.
+  `cargo test --features device-test,input-avfoundation,runner --test device_tests -- --test-threads=1`
 
 - [ ] **MSMF control() helper extraction (refactor/msmf-control-extract-helpers)** —
   Mechanical extraction of `GetRange`+`Get` boilerplate from `control()` into
