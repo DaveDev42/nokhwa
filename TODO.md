@@ -13,6 +13,17 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Runtime verification pending (compile-verified only)
 
+- [ ] **AVF `active_format()` negotiated FPS (fix/avf-active-format-negotiated-fps)** —
+  `active_format()` returned the maximum fps from the active format's `fps_list` (e.g. 60 fps
+  for a 15–60 range) regardless of what frame rate `set_all` had negotiated (e.g. 30 fps). This
+  corrupts `Buffer` metadata. Fixed by reading `activeVideoMinFrameDuration` (the negotiated
+  min frame duration) via a new `device_active_video_min_frame_duration` getter and computing
+  `fps = timescale / value`. Falls back to format max fps only when `CMTime.value == 0`
+  (degenerate/kCMTimeInvalid). Verify on macOS hardware:
+  `cargo test --features device-test,input-avfoundation,runner --test device_tests -- --test-threads=1`
+  — confirm that `negotiated_format_after_set_format_matches` passes and reported fps matches
+  what was passed to `set_format()`.
+
 - [ ] **AVF device-lock leak + exposure control wiring (fix/avf-lock-leak-and-exposure-control-wiring)** —
   Three bugs fixed together: (A1) `set_all` returned early without calling `self.unlock()` when the
   format was not found, leaving the `AVCaptureDevice` permanently locked for configuration; (A4)

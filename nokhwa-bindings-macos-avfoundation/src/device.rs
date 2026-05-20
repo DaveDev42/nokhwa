@@ -284,6 +284,13 @@ fn device_set_active_format(device: &AVCaptureDevice, format: &AVCaptureDeviceFo
     unsafe { device.setActiveFormat(format) }
 }
 
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+// Returns the reciprocal of the current maximum frame rate (i.e. the minimum
+// frame duration). No preconditions beyond a valid receiver.
+fn device_active_video_min_frame_duration(device: &AVCaptureDevice) -> CMTime {
+    unsafe { device.activeVideoMinFrameDuration() }
+}
+
 // SAFETY: Property setter on a valid `AVCaptureDevice` reference.
 // Caller must lock the device for configuration before calling this.
 fn device_set_active_video_min_frame_duration(device: &AVCaptureDevice, duration: CMTime) {
@@ -1400,26 +1407,47 @@ impl AVCaptureDeviceWrapper {
     pub fn active_format(&self) -> Result<CameraFormat, NokhwaError> {
         let af = device_active_format(&self.inner);
         let avf_format = AVCaptureDeviceFormatWrapper::try_from_format(&af)?;
-        let resolution = avf_format.resolution;
-        let fourcc = avf_format.fourcc;
-        // fps and resolution casts: same safe FFI boundary as supported_formats.
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let mut a = avf_format
-            .fps_list
-            .into_iter()
-            .map(move |fps_f64| {
-                let fps = fps_f64 as u32;
-                let resolution = Resolution::new(resolution.width as u32, resolution.height as u32);
-                CameraFormat::new(resolution, fourcc, fps)
-            })
-            .collect::<Vec<_>>();
-        a.sort_by_key(CameraFormat::frame_rate);
 
-        if a.is_empty() {
-            Err(NokhwaError::get_property("activeFormat", "None??"))
+        // Report the *negotiated* frame rate from activeVideoMinFrameDuration
+        // (fps = timescale / value), not the maximum fps in the active format's
+        // fps_list.  The format may support up to 60 fps while set_all negotiated
+        // 30 fps; returning max fps would corrupt Buffer metadata.
+        let min_dur = device_active_video_min_frame_duration(&self.inner);
+        // fps and resolution casts: CMTime values from real cameras are always
+        // non-negative and fit in the target integer types.  The i64→f64 cast
+        // for `min_dur.value` loses precision for values > 2^52, but frame
+        // duration values in practice (e.g. 1 at timescale=30) are tiny.
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss
+        )]
+        let negotiated_fps = if min_dur.value > 0 {
+            // CMTime: value is duration in ticks, timescale is ticks/s.
+            // fps = timescale / value, rounded to nearest integer.
+            let fps = (f64::from(min_dur.timescale) / min_dur.value as f64).round() as u32;
+            fps.max(1)
         } else {
-            Ok(a[a.len() - 1])
-        }
+            // Degenerate CMTime (e.g. kCMTimeInvalid / zero value): fall back to
+            // the maximum fps from the active format so we never return 0.
+            avf_format
+                .fps_list
+                .iter()
+                .copied()
+                .fold(0.0_f64, f64::max)
+                .round() as u32
+        };
+
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let resolution = Resolution::new(
+            avf_format.resolution.width as u32,
+            avf_format.resolution.height as u32,
+        );
+        Ok(CameraFormat::new(
+            resolution,
+            avf_format.fourcc,
+            negotiated_fps,
+        ))
     }
 }
 
