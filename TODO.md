@@ -133,6 +133,13 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **`HybridCamera::frame_raw` parity with `StreamCamera` (refactor/session-hybrid-frame-raw)** —
+  Added `frame_raw(&mut self) -> Result<Cow<'_, [u8]>, NokhwaError>` to `HybridCamera` via
+  `FrameSource::frame_raw(&mut *self.inner)`. Compile-verified on macOS
+  (`cargo build --features input-avfoundation,runner`); not directly hit by
+  device-test suite (no `HybridCamera`-capable backend on FaceTime HD, which is
+  `StreamCamera`-only). Runtime path is compile-only.
+
 - **`decoded_buffer_size` GRAY+alpha fix (fix/core-gray-alpha-buffer-size)** —
   `decoded_buffer_size(true)` returned `w·h·2` for GRAY (pxwidth+1=2) but
   `convert_to_rgba` for GRAY produces a full `w·h·4` RGBA buffer. Fixed the
