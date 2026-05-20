@@ -121,6 +121,22 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   Linux hardware that `controls()` still surfaces the same flag set on a
   webcam exercising AUTO_GAIN / GAIN gating.
 
+- [ ] **MSMF device-enumeration CoTaskMem leak fixes (fix/msmf-free-cotaskmem-allocations-from-device-enumeration)** —
+  Two CoTaskMem leaks fixed in the device-enumeration path. (1) `MFEnumDeviceSources` allocates a
+  heap array of `Option<IMFActivate>` pointers; the caller must `CoTaskMemFree` it after use. The
+  old code iterated via `from_raw_parts` + `clone()` but never freed the array, leaking it on every
+  `query()` / device refresh. Fixed: elements are moved out via `ptr::read` (so each owned
+  `IMFActivate` gets Released via Drop exactly once), then `CoTaskMemFree` is called on the array
+  pointer. (2) `GetAllocatedString` allocates two PWSTR buffers (friendly name + symbolic link) that
+  the caller must `CoTaskMemFree`. They were never freed — leaking on every successfully enumerated
+  device, and on error paths too. Fixed: a `free_pwstr` helper null-checks then `CoTaskMemFree`s;
+  each PWSTR is converted to a Rust `String` and freed immediately, so later `?` returns cannot
+  skip a free. Compile-checked on macOS (no LINK error = compile-clean). Verify on Windows
+  hardware that repeated `query()` calls + `cargo run --example hotplug_probe` show no handle or
+  memory growth:
+  `cargo test --features device-test,input-msmf,runner` +
+  `cargo run --example hotplug_probe --features input-msmf`
+
 - [ ] **MSMF COM service helper refactor (refactor/msmf-com-service-helper)** —
   `get_camera_control_services()` consolidation has only the `Build (windows)`
   compile check. Verify control read/write on physical Windows hardware
