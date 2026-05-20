@@ -652,14 +652,7 @@ mod internal {
                 Err(why) => return Err(NokhwaError::get_property("Frame rate", why.to_string())),
             };
 
-            let v4l_fcc = match new_fmt.format() {
-                FrameFormat::MJPEG => FourCC::new(b"MJPG"),
-                FrameFormat::YUYV => FourCC::new(b"YUYV"),
-                FrameFormat::GRAY => FourCC::new(b"GRAY"),
-                FrameFormat::RAWRGB => FourCC::new(b"RGB3"),
-                FrameFormat::RAWBGR => FourCC::new(b"BGR3"),
-                FrameFormat::NV12 => FourCC::new(b"NV12"),
-            };
+            let v4l_fcc = frameformat_to_fourcc(new_fmt.format());
 
             let format = Format::new(new_fmt.width(), new_fmt.height(), v4l_fcc);
             let frame_rate = Parameters::with_fps(new_fmt.frame_rate());
@@ -682,28 +675,25 @@ mod internal {
             drop(device);
 
             if self.stream_handle.is_some() {
-                return match self.open() {
-                    Ok(()) => Ok(()),
-                    Err(why) => {
-                        // undo
-                        let device = self.lock_device()?;
-                        if let Err(why) = Capture::set_format(&*device, &prev_format) {
-                            return Err(NokhwaError::set_property(
-                                format!("Attempt undo due to stream acquisition failure with error {why}. Resolution, FrameFormat"),
-                                prev_format.to_string(),
-                                why.to_string(),
-                            ));
-                        }
-                        if let Err(why) = Capture::set_params(&*device, &prev_fps) {
-                            return Err(NokhwaError::set_property(
-                                format!("Attempt undo due to stream acquisition failure with error {why}. Frame rate"),
-                                prev_fps.to_string(),
-                                why.to_string(),
-                            ));
-                        }
-                        Err(why)
+                if let Err(why) = self.open() {
+                    // undo
+                    let device = self.lock_device()?;
+                    if let Err(why) = Capture::set_format(&*device, &prev_format) {
+                        return Err(NokhwaError::set_property(
+                            format!("Attempt undo due to stream acquisition failure with error {why}. Resolution, FrameFormat"),
+                            prev_format.to_string(),
+                            why.to_string(),
+                        ));
                     }
-                };
+                    if let Err(why) = Capture::set_params(&*device, &prev_fps) {
+                        return Err(NokhwaError::set_property(
+                            format!("Attempt undo due to stream acquisition failure with error {why}. Frame rate"),
+                            prev_fps.to_string(),
+                            why.to_string(),
+                        ));
+                    }
+                    return Err(why);
+                }
             }
             self.camera_format = new_fmt;
 
@@ -873,10 +863,23 @@ mod internal {
     }
 
     fn fourcc_to_frameformat(fourcc: FourCC) -> Option<FrameFormat> {
+        // The V4L2 kernel wire token for grayscale is `GREY`
+        // (`V4L2_PIX_FMT_GREY`), but nokhwa-core's canonical token is `GRAY`.
+        // Translate at this boundary so a grayscale camera's formats are not
+        // silently dropped during enumeration.
+        if &fourcc.repr == b"GREY" {
+            return Some(FrameFormat::GRAY);
+        }
         FrameFormat::from_fourcc(fourcc.str().ok()?)
     }
 
     fn frameformat_to_fourcc(format: FrameFormat) -> FourCC {
+        // See `fourcc_to_frameformat`: emit the kernel's `GREY` token for
+        // grayscale rather than nokhwa-core's canonical `GRAY`, otherwise the
+        // ioctl rejects the unrecognised fourcc.
+        if format == FrameFormat::GRAY {
+            return FourCC::new(b"GREY");
+        }
         FourCC::new(
             format
                 .to_fourcc()
@@ -1266,15 +1269,28 @@ mod internal {
         }
 
         /// The byte representation of `frameformat_to_fourcc` must equal
-        /// `FrameFormat::to_fourcc`'s string bytes. This is the
-        /// invariant that downstream tools (`v4l2-ctl --list-formats`,
-        /// log lines that print `FourCC` bytes directly) depend on. Pin
-        /// it so the v4l shim cannot silently diverge from the
-        /// canonical `FourCC` table in `nokhwa-core`.
+        /// `FrameFormat::to_fourcc`'s string bytes for every variant
+        /// *except* `GRAY`. This is the invariant that downstream tools
+        /// (`v4l2-ctl --list-formats`, log lines that print `FourCC`
+        /// bytes directly) depend on. Pin it so the v4l shim cannot
+        /// silently diverge from the canonical `FourCC` table in
+        /// `nokhwa-core`.
+        ///
+        /// `GRAY` is the deliberate exception: the V4L2 kernel wire token
+        /// is `GREY` (`V4L2_PIX_FMT_GREY`), so the shim emits `GREY` while
+        /// nokhwa-core keeps `GRAY` as its canonical token.
         #[test]
         fn frameformat_to_fourcc_matches_core_to_fourcc_bytes() {
             for &fmt in nokhwa_core::types::frame_formats() {
                 let v4l_bytes = frameformat_to_fourcc(fmt).repr;
+                if fmt == FrameFormat::GRAY {
+                    assert_eq!(
+                        &v4l_bytes[..],
+                        b"GREY",
+                        "v4l grayscale fourcc must use the kernel wire token GREY"
+                    );
+                    continue;
+                }
                 let core_bytes = fmt.to_fourcc().as_bytes();
                 assert_eq!(
                     &v4l_bytes[..],
@@ -1282,8 +1298,26 @@ mod internal {
                     "v4l fourcc bytes for {fmt:?} diverge from FrameFormat::to_fourcc"
                 );
             }
-            // Spot-check the FrameFormat import is what we expect.
-            let _ = FrameFormat::MJPEG;
+        }
+
+        /// Grayscale must survive the V4L2 boundary even though the kernel
+        /// wire token (`GREY`) differs from nokhwa-core's canonical `GRAY`.
+        /// A grayscale camera enumerating `GREY` formats must map to
+        /// `FrameFormat::GRAY`, and a `set_format(GRAY)` must submit `GREY`
+        /// to the ioctl — otherwise grayscale devices are silently
+        /// unusable.
+        #[test]
+        fn grayscale_translates_grey_kernel_token() {
+            assert_eq!(
+                fourcc_to_frameformat(FourCC::new(b"GREY")),
+                Some(FrameFormat::GRAY),
+                "kernel GREY token must map to FrameFormat::GRAY"
+            );
+            assert_eq!(
+                &frameformat_to_fourcc(FrameFormat::GRAY).repr[..],
+                b"GREY",
+                "FrameFormat::GRAY must submit the kernel GREY token"
+            );
         }
 
         /// Canonical V4L2 standard form: `numerator == 1` →

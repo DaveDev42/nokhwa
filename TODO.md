@@ -254,6 +254,30 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **V4L grayscale `GREY` wire token + `set_format`-while-streaming stale metadata (fix/v4l-grey-fourcc-and-streaming-format-refresh)** —
+  Two V4L2 bugs found in a review pass over `nokhwa-bindings-linux-v4l/src/lib.rs`. (1)
+  **Grayscale fourcc mismatch:** the V4L2 kernel wire token for grayscale is `GREY`
+  (`V4L2_PIX_FMT_GREY`), but the backend used nokhwa-core's canonical `GRAY` everywhere —
+  `set_format`'s inline match submitted `b"GRAY"` (rejected by the ioctl) and
+  `fourcc_to_frameformat` dropped enumerated `GREY` formats as `None`, so a grayscale
+  camera's formats were silently unusable. Fix is scoped to the V4L boundary shims only
+  (NOT nokhwa-core's `from_fourcc`/`to_fourcc`, since AVF/GStreamer/MSMF map native
+  grayscale constants directly to `FrameFormat::GRAY` and never touch the string table):
+  `fourcc_to_frameformat` now maps `GREY → FrameFormat::GRAY`, `frameformat_to_fourcc`
+  emits `GREY` for `GRAY`, and `set_format` was changed to use `frameformat_to_fourcc`
+  instead of its own divergent inline match. (2) **Stale metadata on `set_format` while
+  streaming:** the streaming branch returned `Ok(())` from the `self.open()` success arm
+  without ever assigning `self.camera_format` or calling `force_refresh_camera_format()`
+  (those lines were unreachable when streaming), so `camera_format()`/`frame()` kept
+  reporting the pre-change format. Restructured so the early-return only fires on the
+  undo/error path; the success path now falls through to the existing
+  `self.camera_format = new_fmt` + `force_refresh_camera_format()` validation for both the
+  streaming and non-streaming cases. Updated the byte-equality unit test to encode the
+  deliberate `GRAY`→`GREY` divergence and added `grayscale_translates_grey_kernel_token`.
+  Compile-/clippy-clean on macOS; the real `internal` mod + these tests are
+  `#[cfg(target_os = "linux")]`-gated so they execute only on the Linux CI job + the
+  `v4l2loopback` device-test, not locally on macOS.
+
 - **nokhwa-tokio: document `stop()` in-flight frame-loss semantics (docs/tokio-stop-frame-loss)** —
   A review pass over the async surface confirmed `TokioCameraRunner::stop()` drops the async
   receivers before each `spawn_blocking` forwarder's pending `blocking_send` completes, so an item
