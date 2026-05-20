@@ -254,6 +254,18 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **nokhwa-tokio: document `stop()` in-flight frame-loss semantics (docs/tokio-stop-frame-loss)** —
+  A review pass over the async surface confirmed `TokioCameraRunner::stop()` drops the async
+  receivers before each `spawn_blocking` forwarder's pending `blocking_send` completes, so an item
+  a forwarder has pulled from the sync side but not yet handed to the async side is discarded. This
+  is correct teardown behaviour for a live stream, but `stop()`'s doc said nothing about it while
+  the crate-level docs carefully document drop semantics. Added a paragraph to `stop()` noting the
+  in-flight-loss window and pointing callers who need every queued item to drain the receivers to
+  `None` first. Doc-only; no logic change; `nokhwa-tokio` tests 6/6 pass, clippy clean. The other
+  review findings (event-thread shutdown race under `Overflow::Block`, shutter worker unresponsive
+  to `Die` during a blocking `pic_tx.send`) are correct-by-construction edge cases that resolve on
+  receiver drop — no code change warranted.
+
 - **AVF planar/stride-aware frame copy (fix/avf-planar-stride-aware-frame-copy)** —
   The capture callback flat-copied the locked `CVPixelBuffer` via
   `GetBaseAddress` + `GetDataSize`, which is wrong for two cases AVFoundation
