@@ -609,15 +609,34 @@ mod internal {
                     ))
                 }
             };
-            self.lock_device()?
+            let v4l_id = known_camera_control_to_id(id);
+            let device = self.lock_device()?;
+            device
                 .set_control(Control {
-                    id: known_camera_control_to_id(id),
+                    id: v4l_id,
                     value: conv_value,
                 })
                 .map_err(|why| {
                     NokhwaError::set_property(id.to_string(), format!("{value:?}"), why.to_string())
                 })?;
-            // verify
+
+            // Read-back verification, but only when the control supports a
+            // meaningful read-back. WRITE_ONLY controls reject
+            // `VIDIOC_G_EXT_CTRLS` with EACCES (so the read would always
+            // fail), and VOLATILE controls report a hardware-updated value
+            // that legitimately differs from what we just wrote — for both,
+            // a read-back mismatch is expected and must NOT be treated as a
+            // rejected write. The kernel already errored above if the write
+            // itself was rejected.
+            let skip_verify = device
+                .query_controls()
+                .ok()
+                .and_then(|descs| descs.into_iter().find(|d| d.id == v4l_id))
+                .is_some_and(|d| d.flags.intersects(Flags::WRITE_ONLY | Flags::VOLATILE));
+            drop(device);
+            if skip_verify {
+                return Ok(());
+            }
 
             let control = self.camera_control(id)?;
             if control.value() != value {
