@@ -1289,47 +1289,31 @@ fn mjpeg_luma_write_to() {
 
 #[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
 #[test]
-fn mjpeg_luma_write_to_rejects_too_small_dest() {
-    // The MJPEG arm in `convert_to_luma_buffer` decodes into an
-    // intermediate `Vec` then guards `dest.len() < luma.len()` before
-    // copying. Unlike the RAW{RGB,BGR} luma arm — which requires
-    // `dest.len() == pixel_count` — MJPEG accepts oversized dests
-    // (only the first `luma.len()` bytes are written). Pin the
-    // asymmetric "too-small" rejection so a regression that drops the
-    // guard would panic on OOB instead of returning a clean
-    // `ProcessFrameError`.
+fn mjpeg_luma_write_to_rejects_mismatched_dest() {
+    // `convert_to_luma_buffer`'s MJPEG arm now requires an exact-length
+    // destination (same contract as GRAY / RAW{RGB,BGR}). Both too-small
+    // and too-large dests must return `ProcessFrameError` with a
+    // "destination buffer size mismatch" message.
     let buf = Buffer::new(Resolution::new(2, 2), JPEG_RED_2X2, FrameFormat::MJPEG);
-    let frame: Frame<Mjpeg> = Frame::new(buf);
-    let mut dest = vec![0u8; 3]; // expected >= 4 (2x2 = 4 luma bytes)
-    let err = frame.into_luma().write_to(&mut dest).unwrap_err();
+    let frame: Frame<Mjpeg> = Frame::new(buf.clone());
+    let mut too_small = vec![0u8; 3]; // expected = 4 (2x2 = 4 luma bytes)
+    let err = frame.into_luma().write_to(&mut too_small).unwrap_err();
     assert_process_frame_err(
         err,
         FrameFormat::MJPEG,
         "Luma",
-        "Destination buffer too small",
+        "destination buffer size mismatch (expected 4, got 3)",
     );
-}
 
-#[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
-#[test]
-fn mjpeg_luma_write_to_accepts_oversized_dest() {
-    // Counterpart to the "too small" test: the `<` (not `!=`) check
-    // means oversized dests must succeed, with the trailing bytes
-    // left untouched. This pins the documented asymmetry so a future
-    // refactor can't silently tighten the guard to `!=` and reject
-    // larger dests that the call site happens to allocate.
-    let buf = Buffer::new(Resolution::new(2, 2), JPEG_RED_2X2, FrameFormat::MJPEG);
-    let frame: Frame<Mjpeg> = Frame::new(buf);
-    let sentinel = 0xAB;
-    let mut dest = vec![sentinel; 8]; // expected = 4; trailing 4 bytes must stay sentinel
-    frame.into_luma().write_to(&mut dest).unwrap();
-    assert_eq!(
-        &dest[4..],
-        &[sentinel; 4],
-        "oversized-dest tail must not be touched by `write_to`",
+    let frame2: Frame<Mjpeg> = Frame::new(buf);
+    let mut too_large = vec![0u8; 8]; // expected = 4; oversized is now also rejected
+    let err2 = frame2.into_luma().write_to(&mut too_large).unwrap_err();
+    assert_process_frame_err(
+        err2,
+        FrameFormat::MJPEG,
+        "Luma",
+        "destination buffer size mismatch (expected 4, got 8)",
     );
-    let expected = [85u8; 4];
-    assert_pixels_near(&dest[..4], &expected, 1, 5);
 }
 
 #[cfg(all(feature = "mjpeg", not(target_arch = "wasm32")))]
@@ -1494,6 +1478,20 @@ fn convert_to_rgb_buffer_gray_rejects_mismatched_dest() {
     let err = convert_to_rgb_buffer(FrameFormat::GRAY, Resolution::new(2, 2), &data, &mut dest)
         .unwrap_err();
     assert_process_frame_err(err, FrameFormat::GRAY, "RGB", "Bad buffer length");
+}
+
+#[test]
+fn rawrgb_into_rgb_rejects_non_multiple_of_3_data() {
+    // `convert_to_rgb`'s RAWRGB arm now guards `data.len() % 3 != 0`,
+    // matching the sibling guards in `convert_to_rgba` / `convert_to_luma`.
+    let data = vec![1, 2, 3, 4]; // length 4, not a multiple of 3
+    let err = convert_to_rgb(FrameFormat::RAWRGB, Resolution::new(1, 1), &data).unwrap_err();
+    assert_process_frame_err(
+        err,
+        FrameFormat::RAWRGB,
+        "RGB",
+        "RAWRGB data length not a multiple of 3",
+    );
 }
 
 #[test]

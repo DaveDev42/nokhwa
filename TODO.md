@@ -186,6 +186,21 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   double-feed bug). Added `self.frame_buffer_receiver.try_iter().for_each(drop)` after the
   successful `recv()` in `frame_raw()` to drain stale buffered frames, matching the drain
   already present in `frame()`. Runtime verification pending on hardware — see Open.
+- **`nokhwa-core` conversion robustness: u32 overflow fix + length guards (fix/core-conversion-length-guards)** —
+  Three complementary fixes to `nokhwa-core` pixel-format conversion functions:
+  (F1) `buf_bgr_to_rgb` computed `input_size`/`output_size` as `(width * height * 3) as usize`,
+  which overflows `u32` in debug/release for very large resolutions; changed to
+  `width as usize * height as usize * 3`. (F2) `convert_to_rgb` RAWRGB arm had no `%3`
+  length guard, unlike sibling arms in `convert_to_rgba`/`convert_to_luma`; added the same
+  `!data.len().is_multiple_of(3)` check. (F4) `convert_to_luma_buffer` MJPEG arm used a
+  `dest.len() < luma.len()` (partial-fill) check while every other arm in that function
+  requires `dest.len() != luma.len()` (exact match); tightened to exact match with a
+  consistent error message. Two existing tests that pinned the old oversized-dest behavior
+  were replaced with a single test covering both too-small and too-large mismatches.
+  Skipped F3 (GRAY length guard in `convert_to_rgba`/`convert_to_luma`) — safe by
+  construction (`chunks_exact_mut.zip` is bounds-safe) and risks noise without benefit.
+  Skipped F5 (dead match arm removal) — no arms were provably unreachable.
+  All 388 nokhwa-core unit tests pass in CI.
 
 - **`runner` example feature-gate fix (fix/examples-runner-feature-gate)** —
   Replaced `#![cfg(feature = "runner")]` file-level attribute (which suppresses the entire
