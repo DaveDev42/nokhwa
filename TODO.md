@@ -13,6 +13,17 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Runtime verification pending (compile-verified only)
 
+- [ ] **AVF callback drops unknown formats + checks lock return (fix/avf-callback-unknown-format-and-lock-check)** —
+  The sample-buffer callback did `raw_fcc_to_frameformat(pixel_format).unwrap_or(FrameFormat::YUYV)`,
+  so any unrecognised pixel format was forced through the YUYV (2 bpp) repack path, producing a
+  wrong-length garbage frame instead of being dropped. It also ignored the `CVReturn` from
+  `CVPixelBufferLockBaseAddress` and called `CVPixelBufferUnlockBaseAddress` unconditionally — if the
+  lock failed, plane pointers were read while unlocked and an unmatched Unlock was issued (UB per
+  Apple docs). Now: unknown formats `return` early (drop the frame); a non-zero lock `CVReturn`
+  returns before any plane read and skips the Unlock. Compile + clippy verified on macOS. Verify on
+  hardware that normal capture is unaffected and that a format-renegotiation glitch drops frames
+  rather than emitting corrupt ones: `cargo test --features device-test,input-avfoundation,runner`.
+
 - [ ] **AVF callback owns the `Arc<Sender>` strong count (fix/avf-callback-arc-ownership)** —
   `AVCaptureVideoCallback::new` stored `Arc::as_ptr(buffer)` (a *borrowed* pointer, no
   refcount bump) and the GCD sample-buffer callback reconstructed it with `Arc::from_raw`
