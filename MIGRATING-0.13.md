@@ -40,13 +40,20 @@ let mut cam = match opened {
 
 ### Stream lifecycle
 
-| 0.12                   | 0.13                   |
-| ---------------------- | ---------------------- |
-| `cam.open_stream()`    | `cam.open()`           |
-| `cam.frame()`          | `cam.frame()`          |
-| `cam.frame_timeout(d)` | `cam.frame_timeout(d)` |
-| `cam.frame_raw()`      | `cam.frame_raw()`      |
-| `cam.stop_stream()`    | `cam.close()`          |
+| 0.12                   | 0.13+                                         |
+| ---------------------- | --------------------------------------------- |
+| `cam.open_stream()`    | `cam.open()`                                  |
+| `cam.frame()`          | `cam.frame()`                                 |
+| `cam.frame_timeout(d)` | `cam.frame()`¹                                |
+| `cam.frame_raw()`      | `cam.frame_raw()`                             |
+| `cam.stop_stream()`    | `cam.close()`                                 |
+
+¹ `frame_timeout` is a default method on the `FrameSource` trait that
+forwards to `frame()`, but it is **not** exposed as a method on
+`StreamCamera` / `HybridCamera`. If you called `frame_timeout`, use
+`frame()` with an external timeout (e.g. `std::thread::spawn` +
+`JoinHandle::join` with a timeout, or a `std::sync::mpsc` channel pair)
+or the `CameraRunner` helper which manages timeouts internally.
 
 ### Format negotiation
 

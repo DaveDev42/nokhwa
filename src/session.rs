@@ -115,14 +115,26 @@ impl Default for OpenRequest {
     }
 }
 
-/// Open the camera at `index` using the platform's default native backend.
+/// Open a camera or URL source.
 ///
-/// Dispatches at compile time via `cfg` to the V4L2 backend on Linux,
-/// the `AVFoundation` backend on macOS/iOS, or the Media Foundation
-/// backend on Windows (subject to the corresponding `input-*` feature
-/// being enabled). If none of the native `input-*` features are enabled
-/// for the current target, the call returns an error at runtime rather
-/// than failing at compile time.
+/// ## Routing
+///
+/// **`CameraIndex::String` with a URL-like scheme** (`rtsp://`, `rtsps://`,
+/// `rtmp://`, `rtmps://`, `http://`, `https://`, `file://`, `srt://`,
+/// `udp://`, `tcp://`) is routed to the `GStreamer` backend via
+/// `uridecodebin`. This path requires the `input-gstreamer` feature and a
+/// system `GStreamer` install. If the feature is not enabled, the call falls
+/// through to the native backend which will return an error for URI strings
+/// it cannot open.
+///
+/// **All other indices** (numeric `CameraIndex::Index`, or
+/// `CameraIndex::String` values that do not look like a URI) are dispatched
+/// at compile time via `cfg` to the V4L2 backend on Linux, the
+/// `AVFoundation` backend on macOS/iOS, or the Media Foundation backend on
+/// Windows (subject to the corresponding `input-*` feature being enabled).
+/// If none of the native `input-*` features are enabled for the current
+/// target the call returns an error at runtime rather than failing at
+/// compile time.
 ///
 /// Note: this function acquires the device. It is unrelated to the
 /// `open()` method on [`StreamCamera`] / [`HybridCamera`], which starts
