@@ -77,6 +77,13 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   (GStreamer/MSMF hybrid path) that `frame_raw()` returns the same bytes as
   `frame().buffer()`.
 
+- [ ] **`HybridCamera::compatible_formats` / `compatible_fourcc` runtime path** —
+  Added for parity with `StreamCamera` (same gap as `frame_raw` #445) but
+  compile-verified only; FaceTime HD opens as `StreamCamera` (no `CAP_SHUTTER`).
+  Verify on a backend advertising both `CAP_FRAME` + `CAP_SHUTTER` that these
+  methods return the same result as calling the methods directly on the inner
+  `FrameSource` backend.
+
 ### Infrastructure / CI
 
 - [ ] **Provision `RELEASE_PLEASE_TOKEN` repo secret.** The
