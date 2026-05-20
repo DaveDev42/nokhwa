@@ -145,7 +145,6 @@ path = "examples/stream_camera.rs"
 [[example]]
 name = "runner"
 path = "examples/runner.rs"
-required-features = [ "runner" ]
 
 [[example]]
 name = "hotplug_probe"

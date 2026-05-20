@@ -8,23 +8,29 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-#![cfg(feature = "runner")]
+#[cfg(feature = "runner")]
+fn main() -> Result<(), nokhwa_core::error::NokhwaError> {
+    use nokhwa::{open, CameraRunner, OpenRequest, RunnerConfig};
+    use nokhwa_core::types::CameraIndex;
+    use std::time::Duration;
 
-use nokhwa::{open, CameraRunner, OpenRequest, RunnerConfig};
-use nokhwa_core::error::NokhwaError;
-use nokhwa_core::types::CameraIndex;
-use std::time::Duration;
-
-fn main() -> Result<(), NokhwaError> {
     let opened = open(CameraIndex::Index(0), OpenRequest::any())?;
     let runner = CameraRunner::spawn(opened, RunnerConfig::default())?;
     if let Some(rx) = runner.frames() {
         for _ in 0..5 {
             let f = rx
                 .recv_timeout(Duration::from_secs(2))
-                .map_err(|e| NokhwaError::general(e.to_string()))?;
+                .map_err(|e| nokhwa_core::error::NokhwaError::general(e.to_string()))?;
             println!("frame: {} bytes", f.buffer().len());
         }
     }
     runner.stop()
+}
+
+#[cfg(not(feature = "runner"))]
+fn main() {
+    eprintln!(
+        "This example requires the `runner` feature. Re-run with:\n  \
+         cargo run --example runner --features runner,input-<backend>"
+    );
 }

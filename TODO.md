@@ -133,6 +133,13 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **`runner` example feature-gate fix (fix/examples-runner-feature-gate)** —
+  Replaced `#![cfg(feature = "runner")]` file-level attribute (which suppresses the entire
+  file including `fn main`, producing a silent do-nothing binary when built without `runner`)
+  with a `#[cfg(feature = "runner")] fn main()` + `#[cfg(not(feature = "runner"))] fn main()`
+  fallback that prints a helpful error message. Matches the `eprintln!` pattern used in
+  `hotplug_probe.rs` and `msmf_probe.rs`.
+
 - **SIMD hygiene: `#[target_feature]` on `rgb_to_luma_sse2` + NEON tail NV12 tests (refactor/core-simd-hygiene)** —
   Added missing `#[target_feature(enable = "sse2")]` to `rgb_to_luma_sse2` to match every other
   extension-using SIMD fn in the codebase. Added two NV12 NEON-tail tests (`width=20, height=2`
