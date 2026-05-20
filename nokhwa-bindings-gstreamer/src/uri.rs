@@ -188,20 +188,26 @@ impl UriPipelineHandle {
                 message: "AppSink::try_pull_sample timed out or hit EOS".to_string(),
                 format: Some(self.format.format()),
             })?;
+        // Re-derive the format from the current sample's caps so that
+        // adaptive streams (HLS/DASH/RTSP that renegotiate resolution
+        // mid-stream) report accurate dimensions for each frame. Fall
+        // back to `self.format` (the negotiated default from `new()`)
+        // only when the sample carries no readable caps.
+        let frame_format = sample_format(&sample).unwrap_or(self.format);
         let buffer = sample.buffer().ok_or_else(|| NokhwaError::ReadFrameError {
             message: "Sample carried no GstBuffer".to_string(),
-            format: Some(self.format.format()),
+            format: Some(frame_format.format()),
         })?;
         let map = buffer
             .map_readable()
             .map_err(|e| NokhwaError::ReadFrameError {
                 message: format!("map_readable: {e}"),
-                format: Some(self.format.format()),
+                format: Some(frame_format.format()),
             })?;
         Ok(Buffer::new(
-            self.format.resolution(),
+            frame_format.resolution(),
             map.as_slice(),
-            self.format.format(),
+            frame_format.format(),
         ))
     }
 

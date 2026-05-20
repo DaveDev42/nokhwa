@@ -36,6 +36,16 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   closed). Verify on Windows hardware: hotplug still emits `Connected` → `Disconnected` during
   normal operation and that after dropping the poller, further `WM_DEVICECHANGE` events no longer
   trigger wasted `take_snapshot()` MF enumeration. Run `cargo run --example hotplug_probe` on Windows.
+- [ ] **GStreamer extra-control truncation guard + URI per-sample format (fix/gstreamer-extra-control-truncation-and-uri-per-sample-format)** —
+  `build_extra_controls` now returns `Result<Option<…>, NokhwaError>` and propagates a
+  `SetPropertyError` if any pending `i64` value exceeds `i32` range (V4L2 CIDs are `__s32`).
+  All 3 callers in `lib.rs` updated. `pull_frame` in `uri.rs` now re-derives the format from
+  each sample's caps via `sample_format(&sample)` instead of the cached `self.format`, so
+  adaptive/renegotiating RTSP/HLS streams report correct dimensions per frame.
+  Compile-checked (`cargo check -p nokhwa-bindings-gstreamer`). Verify on Linux with a
+  real/URL GStreamer source: `cargo test --features device-test,input-gstreamer` and confirm
+  (1) setting an out-of-range extra-control returns an error, and (2) per-sample format
+  matches actual frame bytes on a renegotiating stream.
 
 - [ ] **AVF re-open guard + `frame_raw` drain (fix/avf-guard-reopen-and-drain-frame-raw)** —
   `open()` now returns `Ok(())` immediately if `is_open()` is true, preventing a double-open
