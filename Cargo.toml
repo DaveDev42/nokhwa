@@ -49,10 +49,12 @@ input-msmf         = [ "nokhwa-bindings-windows-msmf" ]
 # Linux Video4Linux2 backend
 input-v4l          = [ "nokhwa-bindings-linux-v4l" ]
 # Cross-platform GStreamer backend (requires a system GStreamer install
-# with `libgstreamer1.0-dev` on Linux or the upstream installer on
-# macOS / Windows). Session 1 ships device enumeration only —
-# `query(ApiBackend::GStreamer)` works; streaming lands in follow-up
-# PRs. See `TODO.md`.
+# with `libgstreamer1.0-dev` + `libgstreamer-plugins-base1.0-dev` +
+# `gstreamer1.0-libav` on Linux; the upstream **Complete** installer on
+# macOS / Windows). Supports device enumeration, local capture, controls
+# on Linux, and URL sources (`rtsp://`, `http://`, `file://`, etc.) via
+# `uridecodebin`. Pass a URL string as `CameraIndex::String("rtsp://…")`
+# to `open()` to use the URL-source path.
 input-gstreamer    = [ "nokhwa-bindings-gstreamer", "nokhwa-bindings-gstreamer/backend" ]
 # Disable arena buffer on v4l.
 # This should fix crashes on Raspberry Pis that have a faulty v4l driver.

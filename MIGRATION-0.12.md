@@ -114,6 +114,9 @@ Use `frame.into_luma().materialize()` for grayscale frames.
 | `RawBgr`  | Some industrial / screen-capture sources    | `into_rgb`          |
 
 If you don't know which format a camera supports, enumerate devices with
-`nokhwa::query()` then open one and call `Camera::compatible_fourcc()` or
-`Camera::compatible_camera_formats()` to discover supported formats
-(platform-dependent).
+`nokhwa::query()` then open one. In 0.13+ the `Camera` struct is replaced by
+the wrapper types returned from `nokhwa::open()`: call
+`StreamCamera::compatible_fourcc()` / `StreamCamera::compatible_formats()` (or
+the equivalent methods on `HybridCamera`) to discover supported formats
+(platform-dependent). `Camera::compatible_camera_formats()` no longer exists —
+use `compatible_formats()` instead.
