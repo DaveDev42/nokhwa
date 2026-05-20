@@ -19,7 +19,7 @@ use objc2_av_foundation::{
     AVCaptureWhiteBalanceMode, AVFrameRateRange,
 };
 use objc2_core_foundation::{CGFloat, CGPoint};
-use objc2_core_media::CMTime;
+use objc2_core_media::{CMTime, CMTimeFlags};
 use objc2_foundation::NSArray;
 use std::{cmp::Ordering, collections::BTreeMap, ffi::c_float};
 
@@ -294,6 +294,11 @@ fn device_set_active_video_min_frame_duration(device: &AVCaptureDevice, duration
 // Caller must lock the device for configuration before calling this.
 fn device_set_active_video_max_frame_duration(device: &AVCaptureDevice, duration: CMTime) {
     unsafe { device.setActiveVideoMaxFrameDuration(duration) }
+}
+
+// SAFETY: Read-only property accessor on a valid `AVCaptureDevice` reference.
+fn device_active_video_min_frame_duration(device: &AVCaptureDevice) -> CMTime {
+    unsafe { device.activeVideoMinFrameDuration() }
 }
 
 // SAFETY: Property setter on a valid `AVCaptureDevice` reference.
@@ -1399,26 +1404,56 @@ impl AVCaptureDeviceWrapper {
     pub fn active_format(&self) -> Result<CameraFormat, NokhwaError> {
         let af = device_active_format(&self.inner);
         let avf_format = AVCaptureDeviceFormatWrapper::try_from_format(&af)?;
-        let resolution = avf_format.resolution;
-        let fourcc = avf_format.fourcc;
         // fps and resolution casts: same safe FFI boundary as supported_formats.
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let mut a = avf_format
-            .fps_list
-            .into_iter()
-            .map(move |fps_f64| {
-                let fps = fps_f64 as u32;
-                let resolution = Resolution::new(resolution.width as u32, resolution.height as u32);
-                CameraFormat::new(resolution, fourcc, fps)
-            })
-            .collect::<Vec<_>>();
-        a.sort_by_key(CameraFormat::frame_rate);
+        let resolution = Resolution::new(
+            avf_format.resolution.width as u32,
+            avf_format.resolution.height as u32,
+        );
+        let fourcc = avf_format.fourcc;
 
-        if a.is_empty() {
-            Err(NokhwaError::get_property("activeFormat", "None??"))
+        // Prefer the device's actually-negotiated frame rate (set by set_all via
+        // setActiveVideoMinFrameDuration) over the per-format maximum. Without
+        // this, a format whose ranges span [1–30] and [1–60] always reports 60
+        // fps even after the caller negotiated 30, causing Buffer metadata to
+        // carry the wrong frame rate.
+        //
+        // activeVideoMinFrameDuration is a CMTime representing the minimum frame
+        // delivery interval: fps = timescale / value (seconds per frame inverted).
+        // An invalid CMTime (kCMTimeInvalid) means the property has not been set
+        // explicitly, so we fall back to the format maximum.
+        let min_dur = device_active_video_min_frame_duration(&self.inner);
+        // min_dur.value is i64 but camera frame-count values (e.g. 1, 3) are
+        // nowhere near the 2^52 mantissa boundary, so the cast is lossless in
+        // practice.
+        #[allow(clippy::cast_precision_loss)]
+        let negotiated_fps: Option<f64> =
+            if min_dur.flags.contains(CMTimeFlags::Valid) && min_dur.value > 0 {
+                Some(f64::from(min_dur.timescale) / min_dur.value as f64)
+            } else {
+                None
+            };
+
+        // Match the negotiated fps to the nearest entry in fps_list (tolerance
+        // mirrors set_all's < 0.999 comparison), or fall back to the maximum.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let fps: u32 = if let Some(neg_fps) = negotiated_fps {
+            avf_format
+                .fps_list
+                .iter()
+                .copied()
+                .find(|&f| (f - neg_fps).abs() < 0.999)
+                .unwrap_or_else(|| avf_format.fps_list.last().copied().unwrap_or(neg_fps))
+                as u32
         } else {
-            Ok(a[a.len() - 1])
+            avf_format.fps_list.last().copied().unwrap_or(0.0) as u32
+        };
+
+        if fps == 0 {
+            return Err(NokhwaError::get_property("activeFormat", "None??"));
         }
+
+        Ok(CameraFormat::new(resolution, fourcc, fps))
     }
 }
 
