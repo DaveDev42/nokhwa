@@ -13,6 +13,18 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Runtime verification pending (compile-verified only)
 
+- [ ] **MSMF `raw_bytes` Lock/Unlock + stream-end guard (fix/msmf-raw-bytes-unlock-and-stream-end-guard)** —
+  `IMFMediaBuffer::Lock` was never paired with `Unlock` on any return path (success or the two
+  early-error paths for null pointer / zero length). The read loop also spun forever when
+  `ReadSample` returned `Ok` but set `MF_SOURCE_READERF_ERROR` or `MF_SOURCE_READERF_ENDOFSTREAM`
+  in `stream_flags` (camera unplugged mid-stream). Both fixed together: `Unlock` called before
+  every return after a successful `Lock`; the loop now checks the error/end-of-stream bits before
+  the `is_some()` break and returns `Err(ReadFrameError { "stream ended or errored" })`. Compile-
+  checked in CI (Build/Clippy windows). Verify on Windows hardware that frames keep flowing across
+  many reads and that unplugging mid-stream surfaces an error instead of hanging:
+  `cargo test --features device-test,input-msmf,runner` +
+  `cargo run --example hotplug_probe`
+
 - [ ] **AVF re-open guard + `frame_raw` drain (fix/avf-guard-reopen-and-drain-frame-raw)** —
   `open()` now returns `Ok(())` immediately if `is_open()` is true, preventing a double-open
   that would leak the previous `AVCaptureSession` and its delegate (old session kept running,
@@ -165,6 +177,13 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   dispatches through `uridecodebin`.
 
 ## Shipped recently (for context)
+
+- **MSMF `raw_bytes` Lock/Unlock + stream-end guard (fix/msmf-raw-bytes-unlock-and-stream-end-guard)** —
+  Paired every `IMFMediaBuffer::Lock` with a matching `Unlock` on all exit paths (success copy path
+  and both early-error paths for null pointer / zero length). Added a stream-flags check in the
+  `ReadSample` loop that returns `Err(ReadFrameError)` immediately when
+  `MF_SOURCE_READERF_ERROR` or `MF_SOURCE_READERF_ENDOFSTREAM` is set, preventing an infinite
+  busy-spin when the camera is unplugged mid-stream. Runtime verification pending — see Open.
 
 - **AVF active_format() reports negotiated fps from activeVideoMinFrameDuration (fix/avf-active-format-fps)** —
   `active_format()` now reads `activeVideoMinFrameDuration` (the CMTime set by `set_all()`) and
