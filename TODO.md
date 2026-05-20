@@ -260,6 +260,20 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   and that `WM_DEVICECHANGE` after poller drop no longer does wasted work —
   `cargo run --example hotplug_probe` on Windows.
 
+- **V4L Stepwise max-endpoint + zero-step guard (fix/v4l-stepwise-max-endpoint-and-zero-step)** —
+  Two bugs in Stepwise frame-size/interval enumeration fixed:
+  (1) `V4LCaptureDevice::new()` used an inline `..max_width` (exclusive) + `step_by(step)` + `.zip()` to
+  enumerate Stepwise resolutions, missing the max endpoint (causing "Failed to fulfill" for max-res requests),
+  panicking on `step == 0`, and truncating the width/height cartesian product to a lockstep zip. Replaced
+  with the existing robust `expand_stepwise_resolutions()` helper that is already used in
+  `get_resolution_list()`/`compatible_formats()`.
+  (2) `expand_frame_interval()` called `step_by(step.step.numerator as usize)` without guarding against
+  `step.numerator == 0`; added a `if step.step.numerator == 0 { return vec![]; }` guard before the range.
+  Both fixes are unit-test-covered (`expand_frame_interval_stepwise_zero_step_does_not_panic`,
+  `expand_stepwise_resolutions_includes_max_endpoint`, `expand_stepwise_resolutions_zero_step_does_not_panic`)
+  and will be exercised end-to-end by the Linux `v4l2loopback` CI job on every PR — no separate
+  hardware-verification-pending entry needed.
+
 - **AVF active_format() reports negotiated fps from activeVideoMinFrameDuration (fix/avf-active-format-fps)** —
   `active_format()` now reads `activeVideoMinFrameDuration` (the CMTime set by `set_all()`) and
   converts it to fps (timescale/value), falling back to the format maximum only when the CMTime is

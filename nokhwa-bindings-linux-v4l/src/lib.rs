@@ -213,6 +213,9 @@ mod internal {
                 if step.max.denominator == 1 && step.min.denominator == 1 {
                     return vec![];
                 }
+                if step.step.numerator == 0 {
+                    return vec![];
+                }
                 (step.min.numerator..=step.max.numerator)
                     .step_by(step.step.numerator as usize)
                     .map(|fps| CameraFormat::new(resolution, fmt, fps))
@@ -324,17 +327,20 @@ mod internal {
                     .enum_framesizes(ff)
                     .map_err(|why| NokhwaError::get_property("ResolutionList", why.to_string()))?
                     .into_iter()
-                    .flat_map(|x| {
-                        match x.size {
-                            FrameSizeEnum::Discrete(d) => {
-                                [Resolution::new(d.width, d.height)].to_vec()
-                            }
-                            // we step over each step, getting a new resolution.
-                            FrameSizeEnum::Stepwise(s) => (s.min_width..s.max_width)
-                                .step_by(s.step_width as usize)
-                                .zip((s.min_height..s.max_height).step_by(s.step_height as usize))
-                                .map(|(x, y)| Resolution::new(x, y))
-                                .collect(),
+                    .flat_map(|x| match x.size {
+                        FrameSizeEnum::Discrete(d) => [Resolution::new(d.width, d.height)].to_vec(),
+                        FrameSizeEnum::Stepwise(s) => {
+                            let mut v = Vec::new();
+                            Self::expand_stepwise_resolutions(
+                                s.min_width,
+                                s.max_width,
+                                s.step_width,
+                                s.min_height,
+                                s.max_height,
+                                s.step_height,
+                                &mut v,
+                            );
+                            v
                         }
                     })
                     .flat_map(|res| {
@@ -995,10 +1001,13 @@ mod internal {
     #[cfg(test)]
     mod tests {
         use super::{
-            expand_stepwise_resolutions, fourcc_to_frameformat, frameformat_to_fourcc,
-            id_to_known_camera_control, interval_to_fps, known_camera_control_to_id,
-            monotonic_to_wallclock, FrameFormat, KnownCameraControl, Resolution, V4L2_CONTROL_IDS,
+            expand_frame_interval, expand_stepwise_resolutions, fourcc_to_frameformat,
+            frameformat_to_fourcc, id_to_known_camera_control, interval_to_fps,
+            known_camera_control_to_id, monotonic_to_wallclock, FrameFormat, KnownCameraControl,
+            Resolution, V4L2_CONTROL_IDS,
         };
+        use v4l::fraction::Fraction;
+        use v4l::frameinterval::{FrameIntervalEnum, Stepwise};
         use v4l::v4l_sys::{
             V4L2_CID_BACKLIGHT_COMPENSATION, V4L2_CID_BRIGHTNESS, V4L2_CID_CONTRAST,
             V4L2_CID_EXPOSURE, V4L2_CID_FOCUS_RELATIVE, V4L2_CID_GAIN, V4L2_CID_GAMMA,
@@ -1335,6 +1344,52 @@ mod internal {
         fn interval_to_fps_zero_numerator_errors() {
             let interval = v4l::Fraction::new(0, 30);
             assert!(interval_to_fps(interval).is_err());
+        }
+
+        /// Bug fix: `expand_frame_interval` with a Stepwise interval whose
+        /// `step.numerator == 0` must not panic. `step_by(0)` on a range
+        /// panics unconditionally. The guard returns `vec![]` for zero-step
+        /// Stepwise, matching the analogous "denominator guard" above it.
+        #[test]
+        fn expand_frame_interval_stepwise_zero_step_does_not_panic() {
+            let resolution = Resolution::new(640, 480);
+            let interval = FrameIntervalEnum::Stepwise(Stepwise {
+                min: Fraction::new(1, 30),
+                max: Fraction::new(1, 60),
+                step: Fraction::new(0, 1), // zero numerator → step_by(0) used to panic
+            });
+            // Must not panic; empty result is acceptable.
+            let result = expand_frame_interval(interval, resolution, FrameFormat::MJPEG);
+            assert!(result.is_empty());
+        }
+
+        /// `expand_stepwise_resolutions` must include the max endpoint.
+        /// The old inline `..s.max_width` (exclusive) in `new()` missed it,
+        /// causing "Failed to fulfill" when the caller requested the max
+        /// resolution. The helper uses inclusive bounds; pin the contract.
+        #[test]
+        fn expand_stepwise_resolutions_includes_max_endpoint() {
+            // Choose a max that is NOT a preset so the test does not pass by
+            // accident because a preset happens to equal the max.
+            let out = run(320, 1921, 1, 240, 1081, 1);
+            assert!(
+                out.contains(&Resolution::new(1921, 1081)),
+                "max endpoint (1921, 1081) must be present; got {out:?}"
+            );
+        }
+
+        /// `expand_stepwise_resolutions` with a zero step must not panic.
+        /// Step == 0 means "continuous" in V4L2; the helper treats it as
+        /// "always aligned", so the range should yield min + matching presets
+        /// + max without panicking.
+        #[test]
+        fn expand_stepwise_resolutions_zero_step_does_not_panic() {
+            // step 0 on both axes: should produce min, all fitting presets,
+            // and max without panicking.
+            let out = run(320, 1920, 0, 240, 1080, 0);
+            // min and max must always be present
+            assert!(out.contains(&Resolution::new(320, 240)));
+            assert!(out.contains(&Resolution::new(1920, 1080)));
         }
     }
 }
