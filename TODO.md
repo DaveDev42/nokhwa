@@ -367,7 +367,11 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   rather than surfacing as a conversion error later. Proper fix wants a shared
   wire-size helper (the V4L2 and AVFoundation paths compute the same expectation
   independently) rather than another inline `width*height*bpp` in this one spot;
-  deferred until that helper exists so the three backends stay consistent.
+  deferred until that helper exists so the three backends stay consistent. Also
+  GStreamer-install-blocked for runtime verification: the macOS dev box has no
+  GStreamer dev libs and CI's `v4l2loopback` device-test does not route through
+  the GStreamer backend, so a size-guard change could only be compile-checked —
+  and a validation guard's whole value is its runtime behavior on a malformed buffer.
 
 - [ ] **GStreamer V4L2 control restart briefly runs two `v4l2src` on the same
   device.** In `nokhwa-bindings-gstreamer/src/lib.rs::set_control` (line ~327),
