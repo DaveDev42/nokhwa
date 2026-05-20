@@ -158,6 +158,39 @@ extern "C" {
 
     pub fn CVPixelBufferGetPixelFormatType(pixelBuffer: CVPixelBufferRef) -> OSType;
 
+    /// Pixel dimensions of the whole image (not byte counts).
+    pub fn CVPixelBufferGetWidth(pixelBuffer: CVPixelBufferRef) -> std::os::raw::c_ulong;
+    pub fn CVPixelBufferGetHeight(pixelBuffer: CVPixelBufferRef) -> std::os::raw::c_ulong;
+
+    /// Row stride in bytes for a non-planar buffer. Includes any
+    /// hardware row padding, so it can exceed `width * bytes_per_pixel`.
+    pub fn CVPixelBufferGetBytesPerRow(pixelBuffer: CVPixelBufferRef) -> std::os::raw::c_ulong;
+
+    /// Non-zero when the buffer is planar (e.g. NV12 = 2 planes).
+    pub fn CVPixelBufferIsPlanar(pixelBuffer: CVPixelBufferRef) -> bool;
+    pub fn CVPixelBufferGetPlaneCount(pixelBuffer: CVPixelBufferRef) -> std::os::raw::c_ulong;
+
+    /// Per-plane base address / stride / dimensions. `planeIndex` must
+    /// be `< CVPixelBufferGetPlaneCount`. For NV12: plane 0 = Y
+    /// (`width`x`height`), plane 1 = interleaved `CbCr`
+    /// (`width`x`height/2`, two bytes per chroma sample column).
+    pub fn CVPixelBufferGetBaseAddressOfPlane(
+        pixelBuffer: CVPixelBufferRef,
+        planeIndex: std::os::raw::c_ulong,
+    ) -> *mut std::os::raw::c_void;
+    pub fn CVPixelBufferGetBytesPerRowOfPlane(
+        pixelBuffer: CVPixelBufferRef,
+        planeIndex: std::os::raw::c_ulong,
+    ) -> std::os::raw::c_ulong;
+    pub fn CVPixelBufferGetWidthOfPlane(
+        pixelBuffer: CVPixelBufferRef,
+        planeIndex: std::os::raw::c_ulong,
+    ) -> std::os::raw::c_ulong;
+    pub fn CVPixelBufferGetHeightOfPlane(
+        pixelBuffer: CVPixelBufferRef,
+        planeIndex: std::os::raw::c_ulong,
+    ) -> std::os::raw::c_ulong;
+
     /// `CFStringRef` in Apple headers; cast to `*mut AnyObject` at usage site.
     pub static kCVPixelBufferPixelFormatTypeKey: *const std::ffi::c_void;
 }

@@ -254,6 +254,32 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **AVF planar/stride-aware frame copy (fix/avf-planar-stride-aware-frame-copy)** —
+  The capture callback flat-copied the locked `CVPixelBuffer` via
+  `GetBaseAddress` + `GetDataSize`, which is wrong for two cases AVFoundation
+  actually delivers: (1) **bi-planar 4:2:0** (`420v`/`420f`/`x420`, mapped to
+  `FrameFormat::NV12`) is two non-contiguous planes (Y + interleaved CbCr) each
+  with its own base address and row stride — the flat copy grabbed only the Y
+  plane plus trailing garbage, corrupting every NV12 frame; (2) **packed formats
+  with hardware row padding** (stride > width·bpp, common on Apple Silicon) —
+  the flat copy dragged padding bytes into the output, which the SIMD/scalar
+  decoders (assuming tight-packed rows) then misread, shearing the image. Added
+  the plane/stride CoreVideo getters to `ffi.rs` (`CVPixelBufferGetPlaneCount`/
+  `IsPlanar`/`BaseAddressOfPlane`/`BytesPerRowOfPlane`/`WidthOfPlane`/
+  `HeightOfPlane`/`GetWidth`/`GetHeight`/`GetBytesPerRow`) and rewrote
+  `extract_frame_bytes` to repack into the canonical tight-packed layout the
+  decoders expect: planar path copies Y (dst stride = plane width) then CbCr
+  (dst stride = plane width · 2) row-by-row honoring per-plane source stride;
+  packed path copies width·bpp useful bytes per row honoring `GetBytesPerRow`.
+  Also dropped the unused `unsafe impl Sync for CaptureCallbackIvars` (kept
+  `Send`; the serial GCD queue gives single-threaded *access*, `Cell` is `!Sync`,
+  and no shared `&Ivars` crosses threads). Verified 2026-05-20 on macOS (FaceTime
+  HD, NV12 only): captured frames are exactly 1920·1080·3/2 = 3110400 bytes
+  (tight-packed, no padding, full chroma plane), decode to RGB at correct dims,
+  non-degenerate. This camera advertises no YUYV/RGB, so the packed-padding path
+  is code-verified only (the canonical-layout output matches what the existing
+  decoders already consume on other backends).
+
 - **GStreamer: force pipeline to NULL on startup failure (fix/gstreamer-pipeline-null-on-open-error)** —
   `PipelineHandle::new` returned `Err` on `set_state(Playing)` failure / async-state-wait timeout
   *before* constructing `Self`, so `PipelineHandle::Drop` never ran and the local `Pipeline` binding
