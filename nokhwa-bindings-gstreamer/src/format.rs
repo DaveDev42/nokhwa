@@ -6,10 +6,10 @@
 //! nokhwa's `CameraFormat` tuples so the rest of the crate can speak
 //! the same vocabulary as the other backends.
 //!
-//! Session 2 scope: uncompressed `video/x-raw` only. MJPEG via
-//! `image/jpeg` caps is deferred — the native backends already cover
-//! MJPEG-capable devices, so there's no user-facing regression until a
-//! future session adds the compressed path here.
+//! Scope: uncompressed `video/x-raw` only. MJPEG via `image/jpeg` caps
+//! is deferred — the native backends already cover MJPEG-capable
+//! devices, so there's no user-facing regression until a compressed
+//! path is added here.
 
 use gstreamer::Caps;
 use gstreamer_video::VideoFormat;
@@ -30,8 +30,8 @@ pub(crate) fn video_format_to_frame_format(fmt: VideoFormat) -> Option<FrameForm
 
 /// Inverse of [`video_format_to_frame_format`]. `None` for formats
 /// nokhwa exposes but GStreamer doesn't round-trip (currently only
-/// `MJPEG` and `RAWBGR` / `RAWRGB`, none of which are in the session-2
-/// happy path).
+/// `MJPEG` and `RAWBGR` / `RAWRGB`, none of which are in the
+/// uncompressed happy path).
 pub(crate) fn frame_format_to_video_format(fmt: FrameFormat) -> Option<VideoFormat> {
     match fmt {
         FrameFormat::YUYV => Some(VideoFormat::Yuy2),
@@ -56,7 +56,7 @@ pub(crate) fn caps_to_camera_formats(caps: &Caps) -> Vec<CameraFormat> {
         let Some(structure) = caps.structure(i) else {
             continue;
         };
-        // Session 2: uncompressed video/x-raw only.
+        // Uncompressed video/x-raw only.
         if structure.name() != "video/x-raw" {
             continue;
         }
@@ -254,8 +254,8 @@ mod tests {
 
     #[test]
     fn frame_format_to_video_format_unsupported_returns_none() {
-        // The session-2 caps path does not currently round-trip MJPEG /
-        // RAWRGB / RAWBGR through GStreamer's `video/x-raw` subset; the
+        // The caps path does not currently round-trip MJPEG / RAWRGB /
+        // RAWBGR through GStreamer's `video/x-raw` subset; the
         // function must surface this with `None` so callers can skip
         // those structures rather than panicking.
         assert!(frame_format_to_video_format(FrameFormat::MJPEG).is_none());
@@ -357,7 +357,7 @@ mod tests {
     #[test]
     fn caps_to_camera_formats_skips_non_video_x_raw() {
         // `image/jpeg` is the typical compressed-MJPEG caps form; our
-        // session-2 path is uncompressed-only and must skip it without
+        // caps path is uncompressed-only and must skip it without
         // panicking. (The native MSMF / V4L backends already cover MJPEG
         // for affected devices.)
         ensure_gst_init();

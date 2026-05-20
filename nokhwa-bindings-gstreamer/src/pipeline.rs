@@ -72,7 +72,7 @@ impl PipelineHandle {
             NokhwaError::set_property(
                 "FrameFormat",
                 format!("{:?}", format.format()),
-                "not supported by GStreamer session-2 pipeline",
+                "not supported by the GStreamer pipeline",
             )
         })?;
 
