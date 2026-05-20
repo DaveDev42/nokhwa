@@ -13,6 +13,13 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Runtime verification pending (compile-verified only)
 
+- [ ] **MSMF `raw_bytes` gratuitous `MFCreateSample` removed (perf/msmf-drop-gratuitous-mfcreatesample)** —
+  Pre-allocating an `IMFSample` before calling `ReadSample` was wasted: `ReadSample` COM-releases
+  the pre-created object and replaces it with the captured sample. Changed initializer to `None`;
+  `MFCreateSample` import removed. Compile-checked in CI. Verify on Windows hardware that frame
+  capture still works correctly (no regression):
+  `cargo test --features device-test,input-msmf,runner`
+
 - [ ] **MSMF `raw_bytes` Lock/Unlock + stream-end guard (fix/msmf-raw-bytes-unlock-and-stream-end-guard)** —
   `IMFMediaBuffer::Lock` was never paired with `Unlock` on any return path (success or the two
   early-error paths for null pointer / zero length). The read loop also spun forever when
@@ -199,6 +206,13 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   dispatches through `uridecodebin`.
 
 ## Shipped recently (for context)
+
+- **MSMF `raw_bytes` gratuitous `MFCreateSample` allocation removed (perf/msmf-drop-gratuitous-mfcreatesample)** —
+  `raw_bytes` pre-allocated an empty `IMFSample` via `MFCreateSample()` then passed it as the
+  `ppsample` outparam to `ReadSample`, which immediately COM-released it and replaced it with the
+  captured sample — wasted allocation every frame. Changed `imf_sample` initializer to `None`
+  (the correct pattern) and deleted the `MFCreateSample` match block. Removed the now-unused
+  `MFCreateSample` import (Clippy would flag it on Windows CI). Compile-checked in CI.
 
 - **MSMF `raw_bytes` Lock/Unlock + stream-end guard (fix/msmf-raw-bytes-unlock-and-stream-end-guard)** —
   Paired every `IMFMediaBuffer::Lock` with a matching `Unlock` on all exit paths (success copy path
