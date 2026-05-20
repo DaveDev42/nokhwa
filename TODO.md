@@ -70,6 +70,13 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   변함없이 동작하는지 확인: `cargo test --features device-test,input-msmf,runner` on
   a Windows box with a webcam attached.
 
+- [ ] **`HybridCamera::frame_raw` runtime path (#445)** — added for parity with
+  `StreamCamera` but compile-verified only; FaceTime HD opens as `StreamCamera`
+  (AVFoundation advertises no `CAP_SHUTTER`), so no `HybridCamera`-capable backend
+  exercised it. Verify on a backend advertising both `CAP_STREAM` + `CAP_SHUTTER`
+  (GStreamer/MSMF hybrid path) that `frame_raw()` returns the same bytes as
+  `frame().buffer()`.
+
 ### Infrastructure / CI
 
 - [ ] **Provision `RELEASE_PLEASE_TOKEN` repo secret.** The
