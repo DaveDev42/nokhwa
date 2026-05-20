@@ -175,8 +175,11 @@ impl FrameSource for MediaFoundationCaptureDevice {
 
     fn frame(&mut self) -> Result<Buffer, NokhwaError> {
         self.refresh_camera_format()?;
-        let self_ctrl = self.negotiated_format();
         let (bytes, capture_ts) = self.inner.raw_bytes()?;
+        // Snapshot the format *after* the read: `raw_bytes` refreshes the
+        // cached format if the driver renegotiated mid-stream, so reading it
+        // here tags the buffer with the format the bytes are actually in.
+        let self_ctrl = self.negotiated_format();
         let ts = capture_ts.map(|ts| (ts, TimestampKind::MonotonicClock));
         Ok(match bytes {
             Cow::Owned(vec) => {

@@ -47,7 +47,8 @@ pub mod wmf {
     };
     use windows::Win32::Media::DirectShow::CameraControl_Flags_Manual;
     use windows::Win32::Media::MediaFoundation::{
-        MF_SOURCE_READERF_ENDOFSTREAM, MF_SOURCE_READERF_ERROR, MF_SOURCE_READER_FIRST_VIDEO_STREAM,
+        MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED, MF_SOURCE_READERF_ENDOFSTREAM,
+        MF_SOURCE_READERF_ERROR, MF_SOURCE_READER_FIRST_VIDEO_STREAM,
     };
     use windows::{
         core::{Interface, GUID, PWSTR},
@@ -1059,7 +1060,11 @@ pub mod wmf {
 
                         match result {
                             Ok(()) => {
-                                self.device_format = format;
+                                // `format_refreshed` reads the actually-negotiated
+                                // media type back from the reader and caches it,
+                                // so it is the single source of truth for
+                                // `device_format` — don't pre-write the requested
+                                // (unconfirmed) value here.
                                 self.format_refreshed()?;
                                 return Ok(());
                             }
@@ -1144,6 +1149,16 @@ pub mod wmf {
                             message: "stream ended or errored".to_string(),
                             format: frame_fmt,
                         });
+                    }
+
+                    // The driver can spontaneously renegotiate the media type
+                    // mid-stream (resolution/fps/subtype). When it signals this,
+                    // the accompanying sample is already in the new format, so
+                    // refresh the cached `device_format` before returning — the
+                    // caller tags the `Buffer` from `device_format`, and a stale
+                    // tag would mislabel the frame's resolution/format.
+                    if (stream_flags & (MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED.0 as u32)) != 0 {
+                        self.format_refreshed()?;
                     }
 
                     if imf_sample.is_some() {
