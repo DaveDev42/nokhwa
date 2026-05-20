@@ -571,6 +571,61 @@ fn set_format_from_compatible_round_trip() {
     );
 }
 
+/// Re-negotiating the format on an *already-streaming* camera must
+/// succeed and keep delivering frames. The backend has to tear the
+/// live stream down before issuing the format change — V4L2, for one,
+/// rejects `VIDIOC_S_FMT` / `VIDIOC_REQBUFS` while a stream is active
+/// (EBUSY), and re-acquiring buffers before releasing the old arena is
+/// a use-after-stream hazard. This drives `open() → frame() →
+/// set_format(other) → frame()` to catch a backend that mishandles the
+/// re-open ordering.
+#[test]
+fn set_format_while_streaming_reacquires_stream() {
+    let OpenedCamera::Stream(mut cam) = open_first() else {
+        eprintln!(
+            "set_format_while_streaming_reacquires_stream: backend is not Stream-capable; skipping."
+        );
+        return;
+    };
+    let mut formats = cam
+        .compatible_formats()
+        .expect("StreamCamera::compatible_formats");
+    formats.sort_by_key(|f| (f.width(), f.height(), f.frame_rate()));
+    formats.dedup();
+    if formats.len() < 2 {
+        eprintln!(
+            "set_format_while_streaming_reacquires_stream: fewer than 2 compatible formats; \
+             skipping."
+        );
+        return;
+    }
+    let first = formats[0];
+    let second = formats[formats.len() - 1];
+
+    cam.set_format(first)
+        .unwrap_or_else(|e| panic!("set_format({first:?}) before streaming: {e}"));
+    cam.open().expect("StreamCamera::open");
+    let _ = cam.frame().expect("frame() before re-negotiation");
+
+    // The path under test: change format with the stream live.
+    cam.set_format(second)
+        .unwrap_or_else(|e| panic!("set_format({second:?}) while streaming returned error: {e}"));
+    assert_eq!(
+        cam.negotiated_format(),
+        second,
+        "negotiated_format must reflect the format set while streaming"
+    );
+    let buf = cam
+        .frame()
+        .expect("frame() must still flow after a streaming-time set_format");
+    assert_eq!(
+        buf.resolution(),
+        second.resolution(),
+        "frame resolution must match the re-negotiated format"
+    );
+    cam.close().expect("StreamCamera::close");
+}
+
 /// `info()` and `backend()` must reflect the device that was opened —
 /// `info().index()` matches the index passed to `open()`, and
 /// `backend()` matches the platform's `native_api_backend()`. Catches

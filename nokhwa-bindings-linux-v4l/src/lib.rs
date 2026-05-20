@@ -656,61 +656,84 @@ mod internal {
         }
 
         fn set_format(&mut self, new_fmt: CameraFormat) -> Result<(), NokhwaError> {
-            let device = self.lock_device()?;
-            let prev_format = match Capture::format(&*device) {
-                Ok(fmt) => fmt,
-                Err(why) => {
-                    return Err(NokhwaError::get_property(
-                        "Resolution, FrameFormat",
-                        why.to_string(),
-                    ))
-                }
+            let (prev_format, prev_fps) = {
+                let device = self.lock_device()?;
+                let prev_format = match Capture::format(&*device) {
+                    Ok(fmt) => fmt,
+                    Err(why) => {
+                        return Err(NokhwaError::get_property(
+                            "Resolution, FrameFormat",
+                            why.to_string(),
+                        ))
+                    }
+                };
+                let prev_fps = match Capture::params(&*device) {
+                    Ok(fps) => fps,
+                    Err(why) => {
+                        return Err(NokhwaError::get_property("Frame rate", why.to_string()))
+                    }
+                };
+                (prev_format, prev_fps)
             };
-            let prev_fps = match Capture::params(&*device) {
-                Ok(fps) => fps,
-                Err(why) => return Err(NokhwaError::get_property("Frame rate", why.to_string())),
-            };
+
+            // Tear down any live stream *before* changing the format. V4L2
+            // rejects `VIDIOC_S_FMT` / `VIDIOC_REQBUFS` while a stream is
+            // active (EBUSY), and `open()` allocates the new `MmapStream`
+            // before dropping the old one — so without this the new buffers
+            // would be requested while the old arena is still mapped and
+            // streaming. `close()` drops the handle, whose `Drop` issues
+            // `VIDIOC_STREAMOFF` and munmaps the arena.
+            let was_streaming = self.stream_handle.is_some();
+            if was_streaming {
+                self.close()?;
+            }
 
             let v4l_fcc = frameformat_to_fourcc(new_fmt.format());
 
             let format = Format::new(new_fmt.width(), new_fmt.height(), v4l_fcc);
             let frame_rate = Parameters::with_fps(new_fmt.frame_rate());
 
-            if let Err(why) = Capture::set_format(&*device, &format) {
-                return Err(NokhwaError::set_property(
-                    "Resolution, FrameFormat",
-                    format.to_string(),
-                    why.to_string(),
-                ));
-            }
-            if let Err(why) = Capture::set_params(&*device, &frame_rate) {
-                return Err(NokhwaError::set_property(
-                    "Frame rate",
-                    frame_rate.to_string(),
-                    why.to_string(),
-                ));
+            {
+                let device = self.lock_device()?;
+                if let Err(why) = Capture::set_format(&*device, &format) {
+                    return Err(NokhwaError::set_property(
+                        "Resolution, FrameFormat",
+                        format.to_string(),
+                        why.to_string(),
+                    ));
+                }
+                if let Err(why) = Capture::set_params(&*device, &frame_rate) {
+                    return Err(NokhwaError::set_property(
+                        "Frame rate",
+                        frame_rate.to_string(),
+                        why.to_string(),
+                    ));
+                }
             }
 
-            drop(device);
-
-            if self.stream_handle.is_some() {
+            if was_streaming {
                 if let Err(why) = self.open() {
-                    // undo
-                    let device = self.lock_device()?;
-                    if let Err(why) = Capture::set_format(&*device, &prev_format) {
-                        return Err(NokhwaError::set_property(
-                            format!("Attempt undo due to stream acquisition failure with error {why}. Resolution, FrameFormat"),
-                            prev_format.to_string(),
-                            why.to_string(),
-                        ));
+                    // Undo: restore the previous format/params, then try to
+                    // re-acquire the stream the caller had before the failed
+                    // re-negotiation so the device isn't left silently closed.
+                    {
+                        let device = self.lock_device()?;
+                        if let Err(why) = Capture::set_format(&*device, &prev_format) {
+                            return Err(NokhwaError::set_property(
+                                format!("Attempt undo due to stream acquisition failure with error {why}. Resolution, FrameFormat"),
+                                prev_format.to_string(),
+                                why.to_string(),
+                            ));
+                        }
+                        if let Err(why) = Capture::set_params(&*device, &prev_fps) {
+                            return Err(NokhwaError::set_property(
+                                format!("Attempt undo due to stream acquisition failure with error {why}. Frame rate"),
+                                prev_fps.to_string(),
+                                why.to_string(),
+                            ));
+                        }
                     }
-                    if let Err(why) = Capture::set_params(&*device, &prev_fps) {
-                        return Err(NokhwaError::set_property(
-                            format!("Attempt undo due to stream acquisition failure with error {why}. Frame rate"),
-                            prev_fps.to_string(),
-                            why.to_string(),
-                        ));
-                    }
+                    let _ = self.open();
                     return Err(why);
                 }
             }
