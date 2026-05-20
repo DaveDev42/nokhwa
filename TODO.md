@@ -140,6 +140,13 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **AVF control-layer triple fix: lock leak + inverted exposure flags + exposure POI active arg (fix/avf-control-flags-lock-leak)** —
+  `set_all()` now unlocks on format-not-found early return (Bug A). `Gamma`/`Brightness` exposure
+  controls now correctly mark `ReadOnly` when custom exposure is unsupported, writable when supported
+  (Bug B — flags were inverted). `ExposurePointOfInterest` active arg now uses `exposure_auto ||
+  exposure_continuous` instead of the wrong `focus_auto || focus_continuous` (Bug C). Verified 37/37
+  device-tests on FaceTime HD.
+
 - **`runner` example feature-gate fix (fix/examples-runner-feature-gate)** —
   Replaced `#![cfg(feature = "runner")]` file-level attribute (which suppresses the entire
   file including `fn main`, producing a silent do-nothing binary when built without `runner`)
