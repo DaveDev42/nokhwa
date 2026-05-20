@@ -48,7 +48,8 @@ pub mod wmf {
     };
     use windows::Win32::Media::DirectShow::{CameraControl_Flags_Auto, CameraControl_Flags_Manual};
     use windows::Win32::Media::MediaFoundation::{
-        MFCreateSample, MF_SOURCE_READER_FIRST_VIDEO_STREAM,
+        MFCreateSample, MF_SOURCE_READERF_ENDOFSTREAM, MF_SOURCE_READERF_ERROR,
+        MF_SOURCE_READER_FIRST_VIDEO_STREAM,
     };
     use windows::{
         core::{Interface, GUID, PWSTR},
@@ -1110,6 +1111,19 @@ pub mod wmf {
                         });
                     }
 
+                    // Guard against infinite spin when the stream ends or
+                    // errors (ReadSample returns Ok but leaves sample=None).
+                    if (stream_flags
+                        & (MF_SOURCE_READERF_ERROR.0 as u32
+                            | MF_SOURCE_READERF_ENDOFSTREAM.0 as u32))
+                        != 0
+                    {
+                        return Err(NokhwaError::ReadFrameError {
+                            message: "stream ended or errored".to_string(),
+                            format: frame_fmt,
+                        });
+                    }
+
                     if imf_sample.is_some() {
                         break;
                     }
@@ -1161,6 +1175,7 @@ pub mod wmf {
             }
 
             if buffer_start_ptr.is_null() {
+                let _ = unsafe { buffer.Unlock() };
                 return Err(NokhwaError::ReadFrameError {
                     message: "Buffer Pointer Null".to_string(),
                     format: frame_fmt,
@@ -1168,6 +1183,7 @@ pub mod wmf {
             }
 
             if buffer_valid_length == 0 {
+                let _ = unsafe { buffer.Unlock() };
                 return Err(NokhwaError::ReadFrameError {
                     message: "Buffer Size is 0".to_string(),
                     format: frame_fmt,
@@ -1182,6 +1198,8 @@ pub mod wmf {
                     buffer_start_ptr,
                     buffer_valid_length as usize,
                 ) as &[u8]);
+                // Every successful Lock must be paired with Unlock.
+                let _ = buffer.Unlock();
             }
 
             Ok((Cow::from(data_slice), capture_ts))
