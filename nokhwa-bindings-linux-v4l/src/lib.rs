@@ -845,9 +845,16 @@ mod internal {
                 Some(sh) => match sh.next() {
                     Ok((data, meta)) => {
                         let wall_ts = monotonic_to_wallclock(meta.timestamp);
+                        // The mmap buffer is sized to the driver's maximum
+                        // image size; only the first `bytesused` bytes are
+                        // the current frame. Compressed formats (MJPEG) fill
+                        // far less than the allocation, so handing the full
+                        // slice downstream appends stale padding that corrupts
+                        // decoding. Clamp in case a driver over-reports.
+                        let used = (meta.bytesused as usize).min(data.len());
                         Ok(Buffer::with_timestamp(
                             cam_fmt.resolution(),
-                            data,
+                            &data[..used],
                             cam_fmt.format(),
                             wall_ts.map(|ts| (ts, TimestampKind::WallClock)),
                         ))
@@ -865,7 +872,12 @@ mod internal {
             let cam_fmt_format = self.camera_format.format();
             match &mut self.stream_handle {
                 Some(sh) => match sh.next() {
-                    Ok((data, _)) => Ok(Cow::Borrowed(data)),
+                    Ok((data, meta)) => {
+                        // See `frame()`: clamp to `bytesused` so compressed
+                        // frames don't carry the mmap buffer's stale padding.
+                        let used = (meta.bytesused as usize).min(data.len());
+                        Ok(Cow::Borrowed(&data[..used]))
+                    }
                     Err(why) => Err(NokhwaError::ReadFrameError {
                         message: why.to_string(),
                         format: Some(cam_fmt_format),
