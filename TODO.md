@@ -268,6 +268,24 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ### Backlog
 
+- [ ] **AVF `ExposureDuration` control assumes a uniform `CMTime` timescale.** In
+  `nokhwa-bindings-macos-avfoundation/src/device.rs`, the `ExposureDuration` control
+  (mapped to `KnownCameraControl::Gamma`) builds its `IntegerRange` from raw
+  `CMTime.value` ticks: `min`/`max` from `format.minExposureDuration()` /
+  `maxExposureDuration()` (lines ~933-934), `value`/`default` from
+  `device.exposureDuration()` / `AVCaptureExposureDurationCurrent` (lines ~935-937).
+  On `set_control` (lines ~1191-1196) the new `CMTime` reuses
+  `current_duration.timescale`. If the format-reported min/max `CMTime`s ever carry a
+  different `timescale` than the device's live `exposureDuration`, the tick counts are
+  not comparable and a write at the reported "min" would apply the wrong physical
+  duration. In practice Apple reports all of these for the same active format with a
+  uniform high timescale (typically 1e9), so this has not been observed to misbehave —
+  but the code does not normalize, so it is a latent unit-mixing hazard. Proper fix:
+  expose the range in a canonical unit (e.g. nanoseconds) or normalize all three
+  `CMTime`s to one timescale before ranging/writing. Deferred — needs hardware
+  inspection of the actual reported timescales across formats before changing behavior
+  (`cargo test --features device-test,input-avfoundation,runner`).
+
 - [ ] **V4L `controls()` drops WRITE_ONLY / INACTIVE controls.** In
   `nokhwa-bindings-linux-v4l/src/lib.rs::controls()`, each descriptor's current
   value is read via `device.control(desc.id)?` (line ~510) before the control is
@@ -368,6 +386,19 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   dispatches through `uridecodebin`.
 
 ## Shipped recently (for context)
+
+- **AVF `close()` brackets session input/output removal in a configuration block (fix/avf-close-session-config-bracket)** —
+  `AVFoundationCaptureDevice::close()` in `nokhwa-bindings-macos-avfoundation/src/capture.rs`
+  called `session_remove_output` / `session_remove_input` on a *running* `AVCaptureSession`
+  and only stopped it afterwards, with no `beginConfiguration`/`commitConfiguration` bracket.
+  AVFoundation requires mutations to a session's topology to be wrapped in begin/commit; removing
+  inputs/outputs from a still-running, unbracketed session is documented as producing undefined
+  results (the session can stall or log errors). `open()` already adds the input/output inside
+  such a bracket, so teardown was asymmetric. Now `close()` stops the session first, then wraps
+  the two removals in `session_begin_configuration` / `session_commit_configuration`, mirroring
+  `open()`. Verified on a real Mac webcam: the full `device-test` suite (37 tests, hotplug
+  skipped) — including `stream_camera_reopen_after_close`, `stream_camera_double_close_is_idempotent`,
+  and `set_format_while_streaming_reacquires_stream`, which all exercise this teardown path — passes.
 
 - **`verify_setter` integer step-alignment uses subtraction, not addition (fix/verify-setter-step-alignment)** —
   `ControlValueDescription::verify_setter` in `nokhwa-core/src/types.rs` tested integer

@@ -264,9 +264,18 @@ impl FrameSource for AVFoundationCaptureDevice {
             ));
         };
 
+        // Stop the running session before mutating its topology, then bracket
+        // the input/output removals in a begin/commit configuration block.
+        // AVFoundation requires mutations to an `AVCaptureSession` to be wrapped
+        // in `beginConfiguration`/`commitConfiguration`; removing inputs/outputs
+        // from a still-running, unbracketed session is documented as producing
+        // undefined results (the session can stall or log errors). `open()`
+        // already adds them inside such a bracket — teardown must mirror it.
+        session_stop(session);
+        session_begin_configuration(session);
         session_remove_output(session, output);
         session_remove_input(session, input);
-        session_stop(session);
+        session_commit_configuration(session);
 
         self.frame_buffer_receiver.try_iter().for_each(drop);
         self.dev_input = None;
