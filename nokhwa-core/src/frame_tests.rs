@@ -944,9 +944,9 @@ fn gray_into_luma_write_to_passthrough() {
 }
 
 #[test]
-fn rawbgr_into_luma_rejects_non_multiple_of_3_data() {
-    // 4-byte input: not a multiple of 3, so the RAWRGB|RAWBGR arm's
-    // length guard (`data.len() % 3 != 0`) must reject it. fcc must be
+fn rawbgr_into_luma_rejects_length_resolution_mismatch() {
+    // 4-byte input for a 1x1 frame: the RAWRGB|RAWBGR arm's length guard
+    // (`data.len() == width*height*3`) must reject it. fcc must be
     // RAWBGR — not RAWRGB — because the error reports the actual buffer
     // format, not a fallback.
     let data = vec![1, 2, 3, 4];
@@ -957,7 +957,7 @@ fn rawbgr_into_luma_rejects_non_multiple_of_3_data() {
         err,
         FrameFormat::RAWBGR,
         "Luma",
-        "RGB/BGR data length not a multiple of 3",
+        "RGB/BGR data length 4 does not match resolution 3",
     );
 }
 
@@ -1481,22 +1481,23 @@ fn convert_to_rgb_buffer_gray_rejects_mismatched_dest() {
 }
 
 #[test]
-fn rawrgb_into_rgb_rejects_non_multiple_of_3_data() {
-    // `convert_to_rgb`'s RAWRGB arm now guards `data.len() % 3 != 0`,
-    // matching the sibling guards in `convert_to_rgba` / `convert_to_luma`.
-    let data = vec![1, 2, 3, 4]; // length 4, not a multiple of 3
+fn rawrgb_into_rgb_rejects_length_resolution_mismatch() {
+    // `convert_to_rgb`'s RAWRGB arm guards `data.len() == width*height*3`,
+    // matching the GRAY arm and the `buf_bgr_to_rgb` RAWBGR path. A
+    // non-`w*h*3` length (here also not a multiple of 3) is rejected.
+    let data = vec![1, 2, 3, 4]; // 4 bytes, but 1x1 RAWRGB expects 3
     let err = convert_to_rgb(FrameFormat::RAWRGB, Resolution::new(1, 1), &data).unwrap_err();
     assert_process_frame_err(
         err,
         FrameFormat::RAWRGB,
         "RGB",
-        "RAWRGB data length not a multiple of 3",
+        "RAWRGB data length 4 does not match resolution 3",
     );
 }
 
 #[test]
-fn rawrgb_into_rgba_rejects_non_multiple_of_3_data() {
-    let data = vec![1, 2, 3, 4]; // length 4, not a multiple of 3
+fn rawrgb_into_rgba_rejects_length_resolution_mismatch() {
+    let data = vec![1, 2, 3, 4]; // 4 bytes, but 1x1 RAWRGB expects 3
     let buf = Buffer::new(Resolution::new(1, 1), &data, FrameFormat::RAWRGB);
     let frame: Frame<RawRgb> = Frame::new(buf);
     let err = frame.into_rgba().materialize().unwrap_err();
@@ -1504,13 +1505,13 @@ fn rawrgb_into_rgba_rejects_non_multiple_of_3_data() {
         err,
         FrameFormat::RAWRGB,
         "RGBA",
-        "RAWRGB data length not a multiple of 3",
+        "RAWRGB data length 4 does not match resolution 3",
     );
 }
 
 #[test]
-fn rawbgr_into_rgba_rejects_non_multiple_of_3_data() {
-    let data = vec![1, 2, 3, 4, 5];
+fn rawbgr_into_rgba_rejects_length_resolution_mismatch() {
+    let data = vec![1, 2, 3, 4, 5]; // 5 bytes, but 1x1 RAWBGR expects 3
     let buf = Buffer::new(Resolution::new(1, 1), &data, FrameFormat::RAWBGR);
     let frame: Frame<RawBgr> = Frame::new(buf);
     let err = frame.into_rgba().materialize().unwrap_err();
@@ -1518,13 +1519,13 @@ fn rawbgr_into_rgba_rejects_non_multiple_of_3_data() {
         err,
         FrameFormat::RAWBGR,
         "RGBA",
-        "RAWBGR data length not a multiple of 3",
+        "RAWBGR data length 5 does not match resolution 3",
     );
 }
 
 #[test]
-fn rawrgb_into_rgba_write_to_rejects_non_multiple_of_3_data() {
-    let data = vec![1, 2, 3, 4]; // length 4, not a multiple of 3
+fn rawrgb_into_rgba_write_to_rejects_length_resolution_mismatch() {
+    let data = vec![1, 2, 3, 4]; // 4 bytes, but 1x1 RAWRGB expects 3
     let buf = Buffer::new(Resolution::new(1, 1), &data, FrameFormat::RAWRGB);
     let frame: Frame<RawRgb> = Frame::new(buf);
     let mut dest = vec![0u8; 4];
@@ -1533,7 +1534,7 @@ fn rawrgb_into_rgba_write_to_rejects_non_multiple_of_3_data() {
         err,
         FrameFormat::RAWRGB,
         "RGBA",
-        "RAWRGB data length not a multiple of 3",
+        "RAWRGB data length 4 does not match resolution 3",
     );
 }
 
@@ -1661,7 +1662,7 @@ fn convert_to_rgba_buffer_gray_writes_luma_with_opaque_alpha() {
 }
 
 #[test]
-fn rawrgb_into_luma_rejects_non_multiple_of_3_data() {
+fn rawrgb_into_luma_rejects_length_resolution_mismatch() {
     let data = vec![1, 2, 3, 4];
     let buf = Buffer::new(Resolution::new(1, 1), &data, FrameFormat::RAWRGB);
     let frame: Frame<RawRgb> = Frame::new(buf);
@@ -1670,12 +1671,12 @@ fn rawrgb_into_luma_rejects_non_multiple_of_3_data() {
         err,
         FrameFormat::RAWRGB,
         "Luma",
-        "RGB/BGR data length not a multiple of 3",
+        "RGB/BGR data length 4 does not match resolution 3",
     );
 }
 
 #[test]
-fn rawrgb_into_luma_write_to_rejects_non_multiple_of_3_data() {
+fn rawrgb_into_luma_write_to_rejects_length_resolution_mismatch() {
     let data = vec![1, 2, 3, 4];
     let buf = Buffer::new(Resolution::new(1, 1), &data, FrameFormat::RAWRGB);
     let frame: Frame<RawRgb> = Frame::new(buf);
@@ -1685,7 +1686,7 @@ fn rawrgb_into_luma_write_to_rejects_non_multiple_of_3_data() {
         err,
         FrameFormat::RAWRGB,
         "Luma",
-        "RGB/BGR data length not a multiple of 3",
+        "RGB/BGR data length 4 does not match resolution 3",
     );
 }
 
@@ -1738,12 +1739,12 @@ fn convert_to_rgb_gray_rejects_resolution_mismatch() {
     );
 }
 
-// Gap B: convert_to_rgb_buffer RAWRGB arm was not checking data.len() % 3 == 0,
-// unlike the convert_to_rgba and convert_to_rgba_buffer RAWRGB arms which do.
-// A non-multiple-of-3 RAWRGB payload would be silently copied into dest.
+// convert_to_rgb_buffer's RAWRGB arm validates data.len() == width*height*3,
+// like the GRAY arm and the buf_bgr_to_rgb RAWBGR path. A payload whose length
+// does not match the resolution would otherwise be silently copied into dest.
 #[test]
-fn convert_to_rgb_buffer_rawrgb_rejects_non_multiple_of_3_data() {
-    // 7 bytes: not divisible by 3.
+fn convert_to_rgb_buffer_rawrgb_rejects_length_resolution_mismatch() {
+    // 7 bytes for a 1x1 frame, which expects 3.
     let data = vec![1u8, 2, 3, 4, 5, 6, 7];
     let mut dest = vec![0u8; 7]; // same length as data to avoid the dest-mismatch error
     let err = convert_to_rgb_buffer(FrameFormat::RAWRGB, Resolution::new(1, 1), &data, &mut dest)
@@ -1752,7 +1753,7 @@ fn convert_to_rgb_buffer_rawrgb_rejects_non_multiple_of_3_data() {
         err,
         FrameFormat::RAWRGB,
         "RGB",
-        "RAWRGB data length not a multiple of 3",
+        "RAWRGB data length 7 does not match resolution 3",
     );
 }
 
