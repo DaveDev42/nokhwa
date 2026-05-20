@@ -730,6 +730,10 @@ impl AVCaptureDeviceWrapper {
 
         let (Some(format), Some(min_duration)) = (selected_format, selected_min_frame_duration)
         else {
+            // Release the configuration lock acquired above; without this the
+            // device stays locked until Drop and subsequent lock() calls are
+            // silently skipped.
+            self.unlock();
             return Err(NokhwaError::set_property(
                 "CameraFormat",
                 descriptor.to_string(),
@@ -872,7 +876,7 @@ impl AVCaptureDeviceWrapper {
                 default: (0.5, 0.5),
             },
             disabled_if_unsupported(exposure_poi_supported),
-            focus_auto || focus_continuous,
+            exposure_auto || exposure_continuous,
         ));
 
         let exposure_face_driven_supported =
@@ -924,12 +928,12 @@ impl AVCaptureDeviceWrapper {
                 default: exposure_duration_current().value,
             },
             if exposure_custom {
+                vec![KnownCameraControlFlag::Volatile]
+            } else {
                 vec![
                     KnownCameraControlFlag::ReadOnly,
                     KnownCameraControlFlag::Volatile,
                 ]
-            } else {
-                vec![KnownCameraControlFlag::Volatile]
             },
             exposure_custom,
         ));
@@ -949,12 +953,12 @@ impl AVCaptureDeviceWrapper {
                 default: f64::from(iso_current()),
             },
             if exposure_custom {
+                vec![KnownCameraControlFlag::Volatile]
+            } else {
                 vec![
                     KnownCameraControlFlag::ReadOnly,
                     KnownCameraControlFlag::Volatile,
                 ]
-            } else {
-                vec![KnownCameraControlFlag::Volatile]
             },
             exposure_custom,
         ));
