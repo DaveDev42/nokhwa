@@ -133,6 +133,11 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **`CameraRunner` guard against double-open in `spawn_stream` / `spawn_hybrid` (fix/runner-guard-double-open)** —
+  Added `if !cam.is_open()` guard before `cam.open()?` in both spawn paths so that callers who
+  already opened the camera don't inadvertently create a second `AVCaptureSession` (resource leak /
+  undefined interaction on AVFoundation). Verified 2026-05-20 on macOS (FaceTime HD): 37/37 device-tests pass.
+
 - **AVF `compatible_formats()` max-fps-only fix** — `try_from_format` was pushing both
   `minFrameRate` and `maxFrameRate` endpoints of each `AVFrameRateRange` into `fps_list`,
   but `set_all()` matches solely against `maxFrameRate`. This caused formats like
