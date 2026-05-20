@@ -141,36 +141,57 @@ impl UriPipelineHandle {
         // Kick the pipeline into Playing. `uridecodebin` negotiates
         // asynchronously; we block on the state change and then the
         // first sample.
-        let state_change =
-            pipeline
-                .set_state(State::Playing)
-                .map_err(|e| NokhwaError::OpenStreamError {
+        //
+        // On any startup failure after `set_state(Playing)` the pipeline
+        // may already hold a network socket (RTSP/HTTP) or file handle
+        // open. Dropping the local `pipeline` binding does NOT release
+        // those — GStreamer only tears them down on the transition back
+        // to NULL — and `UriPipelineHandle::Drop` can't run because `Self`
+        // isn't constructed yet. Force NULL before returning so the
+        // resource isn't leaked. (Mirrors `pipeline.rs`.)
+        let state_change = match pipeline.set_state(State::Playing) {
+            Ok(sc) => sc,
+            Err(e) => {
+                let _ = pipeline.set_state(State::Null);
+                return Err(NokhwaError::OpenStreamError {
                     message: format!("set_state(Playing): {e}"),
                     backend: Some(nokhwa_core::types::ApiBackend::GStreamer),
-                })?;
+                });
+            }
+        };
         if state_change == gstreamer::StateChangeSuccess::Async {
             let (res, _, _) = pipeline.state(gstreamer::ClockTime::from_seconds(10));
-            res.map_err(|e| NokhwaError::OpenStreamError {
-                message: format!("async state wait: {e}"),
-                backend: Some(nokhwa_core::types::ApiBackend::GStreamer),
-            })?;
+            if let Err(e) = res {
+                let _ = pipeline.set_state(State::Null);
+                return Err(NokhwaError::OpenStreamError {
+                    message: format!("async state wait: {e}"),
+                    backend: Some(nokhwa_core::types::ApiBackend::GStreamer),
+                });
+            }
         }
 
         // Learn the actual format from the first sample. We can't
         // enumerate `compatible_formats()` from a URL (no probe API
         // short of fully connecting), so the first sample is
         // authoritative.
-        let first_sample = appsink
-            .try_pull_sample(gstreamer::ClockTime::from_nseconds(
-                u64::try_from(FIRST_SAMPLE_TIMEOUT.as_nanos()).unwrap_or(u64::MAX),
-            ))
-            .ok_or_else(|| NokhwaError::OpenStreamError {
+        let Some(first_sample) = appsink.try_pull_sample(gstreamer::ClockTime::from_nseconds(
+            u64::try_from(FIRST_SAMPLE_TIMEOUT.as_nanos()).unwrap_or(u64::MAX),
+        )) else {
+            let _ = pipeline.set_state(State::Null);
+            return Err(NokhwaError::OpenStreamError {
                 message: "timed out waiting for the first sample from the URI — \
                           the stream may be unreachable or produce only audio"
                     .to_string(),
                 backend: Some(nokhwa_core::types::ApiBackend::GStreamer),
-            })?;
-        let format = sample_format(&first_sample)?;
+            });
+        };
+        let format = match sample_format(&first_sample) {
+            Ok(f) => f,
+            Err(e) => {
+                let _ = pipeline.set_state(State::Null);
+                return Err(e);
+            }
+        };
 
         Ok(Self {
             pipeline,

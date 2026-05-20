@@ -254,6 +254,23 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
 
 ## Shipped recently (for context)
 
+- **GStreamer URI pipeline NULL-on-error teardown (fix/gstreamer-uri-null-on-startup-error)** —
+  `UriPipelineHandle::new` in `nokhwa-bindings-gstreamer/src/uri.rs` transitioned the
+  pipeline to `Playing` and then had four startup-failure `?`/early-return sites
+  (`set_state(Playing)` error, async state-wait error, first-sample timeout,
+  `sample_format` parse error) that dropped the local `pipeline` binding **without**
+  first transitioning it back to `State::Null`. For a URI source that means the
+  underlying RTSP/HTTP socket or `file://` handle stays open until GObject
+  finalization, and finalizing a still-Playing pipeline is undefined on some
+  GStreamer versions — `UriPipelineHandle::Drop` can't run because `Self` was never
+  constructed. The sibling local-capture path (`pipeline.rs`) already does
+  `let _ = pipeline.set_state(State::Null)` before each such return; this ports the
+  same teardown to the URI path. No behaviour change on success. Compile-verified
+  only via CI's `Build & test (input-gstreamer)` Linux/Windows jobs (no GStreamer dev
+  libs on the macOS dev box). Verify on a Linux box with libgstreamer installed that a
+  bad/unreachable URL (`rtsp://127.0.0.1:1/nope`) leaves no leaked socket/handle after
+  the open fails.
+
 - **V4L grayscale `GREY` wire token + `set_format`-while-streaming stale metadata (fix/v4l-grey-fourcc-and-streaming-format-refresh)** —
   Two V4L2 bugs found in a review pass over `nokhwa-bindings-linux-v4l/src/lib.rs`. (1)
   **Grayscale fourcc mismatch:** the V4L2 kernel wire token for grayscale is `GREY`
