@@ -40,8 +40,8 @@ pub mod wmf {
         cell::Cell,
         mem::{ManuallyDrop, MaybeUninit},
         sync::{
-            atomic::{AtomicBool, AtomicUsize, Ordering},
-            Arc, LazyLock,
+            atomic::{AtomicUsize, Ordering},
+            Arc, LazyLock, Mutex,
         },
         time::Duration,
     };
@@ -77,8 +77,7 @@ pub mod wmf {
         },
     };
 
-    static INITIALIZED: LazyLock<Arc<AtomicBool>> =
-        LazyLock::new(|| Arc::new(AtomicBool::new(false)));
+    static INITIALIZED: LazyLock<Arc<Mutex<bool>>> = LazyLock::new(|| Arc::new(Mutex::new(false)));
     static CAMERA_REFCNT: LazyLock<Arc<AtomicUsize>> =
         LazyLock::new(|| Arc::new(AtomicUsize::new(0)));
 
@@ -267,22 +266,28 @@ pub mod wmf {
     }
 
     pub fn initialize_mf() -> Result<(), NokhwaError> {
-        // Race-free toggle: only the CAS winner runs CoInitializeEx + MFStartup.
-        // Lost races see INITIALIZED == true and return Ok immediately, mirroring
-        // the prior "already initialised" branch. On init failure we roll the
-        // flag back so the next caller can retry rather than being permanently
-        // wedged at INITIALIZED == true with no MF runtime behind it.
-        if INITIALIZED
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_err()
-        {
+        // The init flag is a Mutex, not an atomic, so that a second caller which
+        // loses the race blocks until the winner has *finished* CoInitializeEx +
+        // MFStartup — not merely started them. A bare atomic CAS only guarantees a
+        // single startup; a lost-race caller would observe `true` and proceed to
+        // call MF APIs while the winner is still inside MFStartup, which is UB
+        // (MFStartup is not re-entrant and MF must be fully started before use).
+        // Holding the lock across MFStartup establishes the happens-before edge.
+        // On failure the flag stays `false`, so the next caller retries rather
+        // than being wedged at `true` with no MF runtime behind it.
+        let mut initialized = INITIALIZED
+            .lock()
+            .map_err(|why| NokhwaError::InitializeError {
+                backend: ApiBackend::MediaFoundation,
+                error: format!("initialization lock poisoned: {why}"),
+            })?;
+        if *initialized {
             return Ok(());
         }
 
         if let Err(why) =
             unsafe { CoInitializeEx(None, CO_INIT_MULTITHREADED | CO_INIT_DISABLE_OLE1DDE).ok() }
         {
-            INITIALIZED.store(false, Ordering::SeqCst);
             return Err(NokhwaError::InitializeError {
                 backend: ApiBackend::MediaFoundation,
                 error: why.to_string(),
@@ -291,26 +296,31 @@ pub mod wmf {
 
         if let Err(why) = unsafe { MFStartup(MF_API_VERSION, MFSTARTUP_NOSOCKET) } {
             unsafe { CoUninitialize() };
-            INITIALIZED.store(false, Ordering::SeqCst);
             return Err(NokhwaError::InitializeError {
                 backend: ApiBackend::MediaFoundation,
                 error: why.to_string(),
             });
         }
+        *initialized = true;
         Ok(())
     }
 
     pub fn de_initialize_mf() -> Result<(), NokhwaError> {
-        // Mirror of initialize_mf: only the CAS winner runs MFShutdown +
-        // CoUninitialize. Lost races see INITIALIZED == false and bail. If
-        // MFShutdown errors we leave the flag at false anyway — the runtime is
-        // in an unrecoverable state and we should not retry teardown.
-        if INITIALIZED
-            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
-            .is_err()
-        {
+        // Mirror of initialize_mf: hold the init lock across MFShutdown +
+        // CoUninitialize so teardown is serialized against any concurrent
+        // initialize_mf. If already de-initialised, bail. If MFShutdown errors we
+        // leave the flag at false anyway — the runtime is in an unrecoverable
+        // state and we should not retry teardown.
+        let mut initialized = INITIALIZED
+            .lock()
+            .map_err(|why| NokhwaError::ShutdownError {
+                backend: ApiBackend::MediaFoundation,
+                error: format!("initialization lock poisoned: {why}"),
+            })?;
+        if !*initialized {
             return Ok(());
         }
+        *initialized = false;
 
         unsafe {
             if let Err(why) = MFShutdown() {

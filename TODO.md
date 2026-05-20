@@ -90,14 +90,20 @@ in `CHANGELOG.md`, PR descriptions, and commit messages.
   refcount 정확성을 유지하는지 확인. 단일 스레드 동작은 변경 없음.
   `cargo test --features device-test,input-msmf,runner` on Windows hardware.
 
-- [ ] **MSMF INITIALIZED atomic CAS fix (fix/msmf-initialized-atomic-cas)** —
-  `load+store` → `compare_exchange` 전환 (#411과 동일 클래스). 두 스레드가
-  동시에 `initialize_mf`를 호출해도 `CoInitializeEx + MFStartup`이 한 번만
-  실행되고, 마찬가지로 `de_initialize_mf`도 한 번만 `MFShutdown +
-  CoUninitialize` 실행. 단일 스레드 흐름은 변경 없음. Init 실패 시
-  INITIALIZED를 false로 되돌려 다음 호출이 재시도 가능하도록 함.
-  Windows hardware에서 `cargo test --features device-test,input-msmf,runner`로
-  단일 스레드 open/close 시나리오가 여전히 동작하는지 확인.
+- [ ] **MSMF init completion-ordering fix (fix/msmf-init-completion-ordering)** —
+  `INITIALIZED` was an `AtomicBool` set via `compare_exchange`. The CAS
+  guaranteed a single `MFStartup`, but a lost-race caller observed `true` and
+  proceeded to call MF APIs while the CAS winner was *still inside* `MFStartup`
+  — UB, since MF must be fully started before use and `MFStartup` is not
+  re-entrant. Switched the flag to `Mutex<bool>` held across `CoInitializeEx +
+  MFStartup` (and mirrored across `MFShutdown + CoUninitialize`), so lost-race
+  callers block until init *completes*. Retry-on-failure preserved (flag stays
+  `false` on error); poisoned lock surfaces as `InitializeError`/`ShutdownError`.
+  Compile-checked in CI (Build/Clippy windows); the real module is
+  `cfg(target_os = "windows")` so it cannot be checked on the macOS dev box.
+  Verify on Windows hardware that concurrent `initialize_mf` from multiple
+  threads still starts MF exactly once and single-threaded open/close is
+  unaffected: `cargo test --features device-test,input-msmf,runner`.
 
 - [ ] **GStreamer restart-state fixes + controls() error variant (fix/gstreamer-pipeline-restart-state)** —
   Three bug fixes in `nokhwa-bindings-gstreamer/src/lib.rs`, compile-verified only on macOS
