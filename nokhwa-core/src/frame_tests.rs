@@ -600,7 +600,7 @@ fn nv12_into_rgb_write_to_neutral_chroma_produces_gray() {
         .into_rgb()
         .write_to(&mut dest)
         .expect("NV12 write_to RGB");
-    for px in dest.chunks_exact(3) {
+    for px in dest.as_chunks::<3>().0 {
         assert_eq!(
             px[0], px[1],
             "NV12 write_to RGB neutral-chroma R must equal G, got R={} G={}",
@@ -625,7 +625,7 @@ fn nv12_into_rgba_write_to_appends_opaque_alpha() {
         .into_rgba()
         .write_to(&mut dest)
         .expect("NV12 write_to RGBA");
-    for px in dest.chunks_exact(4) {
+    for px in dest.as_chunks::<4>().0 {
         assert_eq!(
             px[3], 255,
             "NV12 write_to RGBA alpha must be 255, got {}",
@@ -728,7 +728,7 @@ fn yuyv_into_rgb_write_to_neutral_chroma_produces_gray() {
         .into_rgb()
         .write_to(&mut dest)
         .expect("YUYV write_to RGB");
-    for px in dest.chunks_exact(3) {
+    for px in dest.as_chunks::<3>().0 {
         assert_eq!(
             px[0], px[1],
             "YUYV write_to RGB neutral-chroma R must equal G, got R={} G={}",
@@ -752,7 +752,7 @@ fn yuyv_into_rgba_write_to_appends_opaque_alpha() {
         .into_rgba()
         .write_to(&mut dest)
         .expect("YUYV write_to RGBA");
-    for px in dest.chunks_exact(4) {
+    for px in dest.as_chunks::<4>().0 {
         assert_eq!(
             px[3], 255,
             "YUYV write_to RGBA alpha must be 255, got {}",

@@ -400,7 +400,7 @@ pub(crate) fn convert_to_rgb(
                 ));
             }
             let mut rgb = vec![0u8; data.len() * 3];
-            for (dst, &pxv) in rgb.chunks_exact_mut(3).zip(data.iter()) {
+            for (dst, &pxv) in rgb.as_chunks_mut::<3>().0.iter_mut().zip(data.iter()) {
                 dst.copy_from_slice(&[pxv, pxv, pxv]);
             }
             Ok(rgb)
@@ -525,7 +525,7 @@ pub(crate) fn convert_to_rgba(
                 ));
             }
             let mut rgba = vec![0u8; data.len() * 4];
-            for (dst, &pxv) in rgba.chunks_exact_mut(4).zip(data.iter()) {
+            for (dst, &pxv) in rgba.as_chunks_mut::<4>().0.iter_mut().zip(data.iter()) {
                 dst.copy_from_slice(&[pxv, pxv, pxv, 255]);
             }
             Ok(rgba)
@@ -661,7 +661,9 @@ pub(crate) fn convert_to_luma(
         }
         // For MJPEG, decode to RGB first then average
         FrameFormat::MJPEG => Ok(mjpeg_to_rgb(data, false)?
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .map(|x| {
                 let sum = u16::from(x[0]) + u16::from(x[1]) + u16::from(x[2]);
                 (sum / 3) as u8

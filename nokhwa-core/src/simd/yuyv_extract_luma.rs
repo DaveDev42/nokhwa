@@ -41,7 +41,12 @@ pub(crate) fn yuyv_extract_luma_simd(src: &[u8], dst: &mut [u8]) {
 }
 
 pub(crate) fn yuyv_extract_luma_scalar(src: &[u8], dst: &mut [u8]) {
-    for (chunk, out) in src.chunks_exact(4).zip(dst.chunks_exact_mut(2)) {
+    for (chunk, out) in src
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(dst.as_chunks_mut::<2>().0)
+    {
         out[0] = chunk[0]; // Y0
         out[1] = chunk[2]; // Y1
     }

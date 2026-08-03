@@ -43,7 +43,12 @@ pub(crate) fn bgr_to_rgb_simd(src: &[u8], dst: &mut [u8]) {
 /// Scalar BGR-to-RGB fallback.
 #[inline]
 pub(crate) fn bgr_to_rgb_scalar(src: &[u8], dst: &mut [u8]) {
-    for (src_px, dst_px) in src.chunks_exact(3).zip(dst.chunks_exact_mut(3)) {
+    for (src_px, dst_px) in src
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .zip(dst.as_chunks_mut::<3>().0)
+    {
         dst_px[0] = src_px[2];
         dst_px[1] = src_px[1];
         dst_px[2] = src_px[0];
