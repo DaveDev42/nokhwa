@@ -63,7 +63,12 @@ pub(crate) fn bgr_to_rgba_simd(src: &[u8], dst: &mut [u8]) {
 // architectures we actually ship, hence the lint suppression.
 #[allow(dead_code)]
 fn rgb_to_rgba_scalar(src: &[u8], dst: &mut [u8]) {
-    for (rgb, rgba) in src.chunks_exact(3).zip(dst.chunks_exact_mut(4)) {
+    for (rgb, rgba) in src
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .zip(dst.as_chunks_mut::<4>().0)
+    {
         rgba[0] = rgb[0];
         rgba[1] = rgb[1];
         rgba[2] = rgb[2];
@@ -73,7 +78,12 @@ fn rgb_to_rgba_scalar(src: &[u8], dst: &mut [u8]) {
 
 #[allow(dead_code)]
 fn bgr_to_rgba_scalar(src: &[u8], dst: &mut [u8]) {
-    for (bgr, rgba) in src.chunks_exact(3).zip(dst.chunks_exact_mut(4)) {
+    for (bgr, rgba) in src
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .zip(dst.as_chunks_mut::<4>().0)
+    {
         rgba[0] = bgr[2];
         rgba[1] = bgr[1];
         rgba[2] = bgr[0];

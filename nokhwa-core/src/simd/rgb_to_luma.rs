@@ -42,7 +42,7 @@ pub(crate) fn rgb_to_luma_simd(src: &[u8], dst: &mut [u8]) {
 
 #[allow(dead_code, clippy::cast_possible_truncation)]
 pub(crate) fn rgb_to_luma_scalar(src: &[u8], dst: &mut [u8]) {
-    for (rgb, out) in src.chunks_exact(3).zip(dst.iter_mut()) {
+    for (rgb, out) in src.as_chunks::<3>().0.iter().zip(dst.iter_mut()) {
         *out = ((u16::from(rgb[0]) + u16::from(rgb[1]) + u16::from(rgb[2])) / 3) as u8;
     }
 }
